@@ -1,6 +1,6 @@
 {
-  "name": "group-purchase-api",
-  "version": "1.0.0",
+  "name": "buypower-shop-api",
+  "version": "2.0.1",
   "description": "Group Purchase App - API Server",
   "main": "dist/server.js",
   "scripts": {
