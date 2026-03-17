@@ -24,7 +24,7 @@ api.interceptors.response.use(
           return axios(error.config);
         } catch {
           localStorage.clear();
-          window.location.href = '/login';
+          window.location.href = '/shop/login';
         }
       }
     }
