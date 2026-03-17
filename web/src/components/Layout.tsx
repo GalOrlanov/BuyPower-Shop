@@ -15,13 +15,13 @@ export default function Layout() {
   const [appVersion, setAppVersion] = useState('');
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   useEffect(() => {
-    fetch('/api/versions/current').then(r => r.json()).then(d => setAppVersion(d.version?.version || '')).catch(() => {});
+    fetch('/shop/api/versions/current').then(r => r.json()).then(d => setAppVersion(d.version?.version || '')).catch(() => {});
   }, []);
   useEffect(() => {
     if (!user) return;
     const token = localStorage.getItem('token');
     if (!token) return;
-    fetch('/api/notifications?limit=1', { headers: { Authorization: `Bearer ${token}` } })
+    fetch('/shop/api/notifications?limit=1', { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(d => setUnreadNotifications(d.unreadCount || 0))
       .catch(() => {});
