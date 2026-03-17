@@ -43,7 +43,8 @@ function App() {
         <Toaster position="top-center" toastOptions={{ duration: 3000, style: { direction: 'rtl' } }} />
         <Routes>
           <Route element={<Layout />}>
-            <Route path="/" element={<HomePage />} />
+            <Route path="/" element={<ProductsPage />} />
+            <Route path="/shop" element={<ProductsPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/deals" element={<DealsPage />} />
