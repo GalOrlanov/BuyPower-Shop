@@ -37,7 +37,7 @@ function ProtectedRoute({ children, role }: { children: ReactNode; role?: string
 
 function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/shop">
       <AuthProvider>
       <CartProvider>
         <Toaster position="top-center" toastOptions={{ duration: 3000, style: { direction: 'rtl' } }} />
