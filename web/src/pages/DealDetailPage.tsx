@@ -186,7 +186,7 @@ export default function DealDetailPage() {
       // 1. Save pending order in system
       let orderId: string | null = null;
       try {
-        const orRes = await fetch('/shop/api/shop/orders', {
+        const orRes = await fetch('/api/shop/orders', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -206,7 +206,7 @@ export default function DealDetailPage() {
       const successUrl = `https://buypower.co.il/order/success${orderId ? `?orderId=${orderId}&name=${encodeURIComponent(fullName)}` : ''}`;
       const failUrl = `https://buypower.co.il/order/failed${orderId ? `?orderId=${orderId}` : ''}`;
 
-      const payRes = await fetch('/shop/api/shop/payment/create', {
+      const payRes = await fetch('/api/shop/payment/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: '/shop/api',
+  baseURL: '/api',
   headers: { 'Content-Type': 'application/json' },
 });
 
@@ -24,7 +24,7 @@ api.interceptors.response.use(
           return axios(error.config);
         } catch {
           localStorage.clear();
-          window.location.href = '/shop/login';
+          window.location.href = '/login';
         }
       }
     }
