@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>קניות קבוצתיות — BuyPower</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #f9fafb;
+      color: #1f2937;
+      direction: rtl;
+    }
+    .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    h1 { margin-bottom: 30px; color: #14532d; }
+
+    .campaign-card {
+      background: white;
+      border: 2px solid #d1fae5;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .campaign-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      margin-bottom: 16px;
+    }
+
+    .product-name {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: #14532d;
+    }
+
+    .campaign-badge {
+      background: #dcfce7;
+      color: #15803d;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .campaign-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .stat-box {
+      background: #f0fdf4;
+      border: 1px solid #d1fae5;
+      border-radius: 8px;
+      padding: 12px;
+      text-align: center;
+    }
+
+    .stat-number {
+      font-size: 1.8rem;
+      font-weight: 900;
+      color: #15803d;
+    }
+
+    .stat-label {
+      font-size: 0.85rem;
+      color: #6b7280;
+      margin-top: 4px;
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 24px;
+      background: #e5e7eb;
+      border-radius: 12px;
+      overflow: hidden;
+      margin: 16px 0;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #15803d, #22c55e);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 0.75rem;
+      font-weight: 700;
+      transition: width 0.3s ease;
+    }
+
+    .pricing {
+      display: flex;
+      gap: 20px;
+      align-items: center;
+      margin: 16px 0;
+      padding: 16px;
+      background: #fffbeb;
+      border-radius: 8px;
+    }
+
+    .price-box {
+      text-align: center;
+    }
+
+    .price-label {
+      font-size: 0.85rem;
+      color: #92400e;
+    }
+
+    .price {
+      font-size: 1.8rem;
+      font-weight: 900;
+      color: #b45309;
+    }
+
+    .original-price {
+      text-decoration: line-through;
+      color: #d97706;
+      font-size: 0.9rem;
+    }
+
+    .save {
+      color: #15803d;
+      font-weight: 700;
+    }
+
+    .timer {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin: 12px 0;
+      padding: 12px;
+      background: #fef3c7;
+      border-radius: 8px;
+      font-size: 0.95rem;
+    }
+
+    .timer-icon {
+      font-size: 1.2rem;
+    }
+
+    .time-left {
+      color: #92400e;
+      font-weight: 600;
+    }
+
+    button {
+      background: #15803d;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    button:hover {
+      background: #166534;
+    }
+
+    button:disabled {
+      background: #cbd5e1;
+      cursor: not-allowed;
+    }
+
+    .target-met {
+      border-color: #86efac;
+      background: #f0fdf4;
+    }
+
+    .target-met .campaign-badge {
+      background: #dcfce7;
+      color: #15803d;
+    }
+
+    .target-not-met {
+      border-color: #fecaca;
+    }
+
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 40px 20px;
+    }
+
+    .loading.show {
+      display: block;
+    }
+
+    .spinner {
+      border: 4px solid #f3f4f6;
+      border-top: 4px solid #15803d;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 16px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🛍️ קניות קבוצתיות</h1>
+    <div id="campaignsContainer" class="loading show">
+      <div class="spinner"></div>
+      <p>טוען קמפיינים...</p>
+    </div>
+  </div>
+
+  <script>
+    async function loadCampaigns() {
+      try {
+        // Get products that are group purchases
+        const response = await fetch('/api/shop/products?isGroupPurchase=true');
+        const products = await response.json();
+
+        const container = document.getElementById('campaignsContainer');
+        container.innerHTML = '';
+
+        if (!products || products.length === 0) {
+          container.innerHTML = '<p style="text-align:center;color:#9ca3af">אין קמפיינים פעילים כרגע</p>';
+          return;
+        }
+
+        for (const product of products) {
+          // Get campaign status
+          const campaignRes = await fetch(`/api/shop/group-campaigns/${product._id}`);
+          let campaign = null;
+          
+          if (campaignRes.ok) {
+            campaign = await campaignRes.json();
+          }
+
+          const card = createCampaignCard(product, campaign);
+          container.appendChild(card);
+        }
+
+        // Update timers every second
+        setInterval(updateAllTimers, 1000);
+      } catch (e) {
+        console.error('Load error:', e);
+        document.getElementById('campaignsContainer').innerHTML = '<p style="color:red">שגיאה בטעינה</p>';
+      }
+    }
+
+    function createCampaignCard(product, campaign) {
+      const card = document.createElement('div');
+      card.className = `campaign-card ${campaign && campaign.targetMet ? 'target-met' : 'target-not-met'}`;
+      
+      if (!campaign) {
+        card.innerHTML = `<p style="color:#9ca3af">טוען...</p>`;
+        return card;
+      }
+
+      const progress = Math.min(100, (campaign.participants / campaign.target) * 100);
+      const savings = ((campaign.regularPrice - campaign.currentPrice) * campaign.participants).toFixed(0);
+
+      card.innerHTML = `
+        <div class="campaign-header">
+          <div class="product-name">${product.name}</div>
+          <div class="campaign-badge">${campaign.targetMet ? '✅ יעד הצליח!' : '⏳ בתהליך'}</div>
+        </div>
+
+        <div class="campaign-stats">
+          <div class="stat-box">
+            <div class="stat-number">${campaign.participants}</div>
+            <div class="stat-label">קוניים כרגע</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-number">${campaign.target}</div>
+            <div class="stat-label">יעד</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-number">${campaign.remainingUntilTarget}</div>
+            <div class="stat-label">עוד דרוש</div>
+          </div>
+        </div>
+
+        <div class="progress-bar">
+          <div class="progress-fill" style="width: ${progress}%">
+            ${Math.round(progress)}%
+          </div>
+        </div>
+
+        <div class="pricing">
+          <div class="price-box">
+            <div class="price-label">מחיר כעת:</div>
+            <div class="price">₪${campaign.currentPrice}</div>
+            <div class="original-price">מחיר בודד: ₪${campaign.regularPrice}</div>
+          </div>
+          ${campaign.targetMet ? `<div class="save">חסכון: ₪${savings} 🎉</div>` : ''}
+        </div>
+
+        <div class="timer" data-deadline="${campaign.deadlineAt}">
+          <span class="timer-icon">⏱️</span>
+          <span class="time-left"></span>
+        </div>
+
+        <button onclick="addToCart('${product._id}')">הוסף לעגלה — ₪${campaign.currentPrice}</button>
+      `;
+
+      return card;
+    }
+
+    function updateAllTimers() {
+      document.querySelectorAll('.timer').forEach(timer => {
+        const deadline = new Date(timer.dataset.deadline);
+        const now = new Date();
+        const diff = deadline - now;
+
+        if (diff <= 0) {
+          timer.querySelector('.time-left').textContent = 'הקמפיין הסתיים';
+          return;
+        }
+
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+        let timeStr = '';
+        if (days > 0) timeStr = `${days} ימים`;
+        else if (hours > 0) timeStr = `${hours} שעות`;
+        else timeStr = `${minutes} דקות`;
+
+        timer.querySelector('.time-left').textContent = `${timeStr} עד סיום`;
+      });
+    }
+
+    function addToCart(productId) {
+      // TODO: Add to cart logic
+      alert(`הוסף ${productId} לעגלה`);
+    }
+
+    // Load on page load
+    window.addEventListener('load', loadCampaigns);
+  </script>
+</body>
+</html>

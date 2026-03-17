@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>נלחמים ביוקר המחיה — כניסה</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+.skip-link { position:absolute; top:-40px; left:0; background:#15803d; color:white; padding:8px 16px; z-index:9999; border-radius:0 0 8px 0; text-decoration:none; font-weight:700; }
+.skip-link:focus { top:0; }
+*:focus { outline: 3px solid #15803d; outline-offset: 2px; }
+body {
+  font-family: 'Segoe UI', Arial, sans-serif;
+  background: linear-gradient(135deg, #f0fdf4, #dcfce7, #f0fdf4);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.card {
+  background: white;
+  border-radius: 28px;
+  padding: 40px 32px;
+  width: 100%;
+  max-width: 440px;
+  box-shadow: 0 8px 40px rgba(21,128,61,0.13);
+  text-align: center;
+}
+.logo-img { width: 110px; height: 110px; object-fit: contain; border-radius: 20px; margin-bottom: 12px; }
+h1 { font-size: 2rem; font-weight: 900; color: #15803d; margin-bottom: 6px; }
+.sub { font-size: 1.2rem; color: #6b7280; margin-bottom: 28px; line-height: 1.7; }
+.tabs { display: flex; gap: 6px; margin-bottom: 24px; background: #f3f4f6; border-radius: 14px; padding: 5px; }
+.tab { flex: 1; padding: 12px; border-radius: 10px; font-size: 20px; font-weight: 700; cursor: pointer; border: none; background: transparent; color: #6b7280; transition: all 0.2s; }
+.tab.active { background: white; color: #15803d; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+.field { margin-bottom: 16px; text-align: right; }
+.field label { display: block; font-size: 18px; font-weight: 700; color: #374151; margin-bottom: 7px; }
+.field input { width: 100%; border: 2px solid #e8ecf5; border-radius: 14px; padding: 18px 16px; font-size: 20px; font-family: inherit; outline: none; transition: border-color 0.2s; color: #111; }
+.field input:focus { border-color: #15803d; }
+.btn { width: 100%; background: linear-gradient(135deg, #15803d, #16a34a); color: white; border: none; padding: 20px; border-radius: 14px; font-size: 22px; font-weight: 900; cursor: pointer; margin-top: 6px; transition: opacity 0.2s; }
+.btn:hover { opacity: 0.9; }
+.error { background: #fef2f2; color: #dc2626; border-radius: 10px; padding: 12px 16px; font-size: 17px; margin-top: 14px; display: none; text-align: center; }
+@media (min-width: 900px) {
+  .card { max-width: 520px; padding: 52px 48px; }
+  h1 { font-size: 2.4rem; }
+  .sub { font-size: 1.3rem; }
+  .field input { font-size: 22px; padding: 18px; }
+  .btn { font-size: 24px; padding: 22px; }
+  .tab { font-size: 20px; }
+  .logo-img { width: 150px; height: 150px; }
+}
+
+      .pw-wrap { position: relative; }
+      .pw-wrap input { width: 100%; padding-left: 48px; }
+      .eye-btn { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; font-size: 20px; color: #9ca3af; padding: 4px; }
+</style>
+</head>
+<body>
+<a href="#main-content" class="skip-link">דלג לתוכן הראשי</a>
+<main id="main-content">
+<div class="card">
+  <img src="logo.jpg?v=3" class="logo-img" alt="לוגו — נלחמים ביוקר המחיה">
+  <h1>נלחמים ביוקר המחיה</h1>
+  <p class="sub">יוצרים כוח קנייה גדול<br>ומורידים למחירים נמוכים</p>
+
+  <div class="tabs" role="tablist">
+    <button class="tab active" role="tab" aria-selected="true" aria-controls="loginForm" onclick="showTab('login')">כניסה</button>
+    <button class="tab" role="tab" aria-selected="false" aria-controls="registerForm" onclick="showTab('register')">הרשמה</button>
+    <button class="tab" role="tab" aria-selected="false" aria-controls="otpForm" onclick="showTab('otp')" style="display:none">📱 קוד SMS</button>
+  </div>
+
+  <div id="loginForm" role="tabpanel">
+    <div class="field">
+      <label for="loginPhone">מספר טלפון</label>
+      <input type="tel" id="loginPhone" name="phone" placeholder="050-0000000" dir="ltr" autocomplete="tel" aria-required="true" aria-describedby="errMsg">
+    </div>
+    <div class="field">
+      <label for="loginPassword">סיסמה</label>
+      <div style="position:relative">
+        <input type="password" id="loginPassword" name="password" placeholder="הסיסמה שלך" autocomplete="current-password" aria-required="true" aria-describedby="errMsg" style="padding-left:42px">
+        <button type="button" onclick="togglePwd('loginPassword',this)" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:18px;color:#6b7280;padding:0;line-height:1" aria-label="הצג סיסמה">👁</button>
+      </div>
+    </div>
+    <button class="btn" onclick="doLogin()">כניסה ←</button>
+    <div style="text-align:center;margin-top:14px">
+      <a href="/shop/forgot-password.html" style="color:#15803d;font-size:15px;text-decoration:none">שכחתי סיסמה →</a>
+    </div>
+    <div style="text-align:center;margin-top:12px">
+      <button onclick="document.getElementById('helpModal').style.display='flex'" style="background:none;border:2px solid #15803d;color:#15803d;padding:10px 20px;border-radius:50px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit">❓ הוראות כניסה למתחילים</button>
+    </div>
+  </div>
+
+  <div id="registerForm" style="display:none" role="tabpanel">
+    <div class="field">
+      <label for="regName">שם מלא</label>
+      <input type="text" id="regName" name="name" placeholder="ישראל ישראלי" autocomplete="name" aria-required="true" aria-describedby="errMsg">
+    </div>
+    <div class="field">
+      <label for="regPhone">מספר טלפון</label>
+      <input type="tel" id="regPhone" name="phone" placeholder="050-0000000" dir="ltr" autocomplete="tel" aria-required="true" aria-describedby="errMsg">
+    </div>
+    <div class="field">
+      <label for="regPassword">סיסמה</label>
+      <div style="position:relative">
+        <input type="password" id="regPassword" name="password" placeholder="לפחות 6 תווים" autocomplete="new-password" aria-required="true" aria-describedby="errMsg" style="padding-left:42px">
+        <button type="button" onclick="togglePwd('regPassword',this)" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:18px;color:#6b7280;padding:0;line-height:1" aria-label="הצג סיסמה">👁</button>
+      </div>
+    </div>
+    <div class="field">
+      <label for="regEmail">אימייל</label>
+      <input type="email" id="regEmail" name="email" placeholder="name@email.com" dir="ltr" autocomplete="email" aria-required="true" required>
+    </div>
+    <div class="field">
+      <label>📍 נקודת האיסוף שלך <span style="color:#dc2626">*</span></label>
+      <div id="pickupPointCards" style="display:flex;flex-direction:column;gap:10px">
+        <div style="color:#9ca3af;font-size:.85rem">טוען נקודות...</div>
+      </div>
+      <input type="hidden" id="regPickupPoint" name="pickupPoint">
+    </div>
+    <button class="btn" onclick="doRegister()">הרשמה ←</button>
+  </div>
+
+  <div id="otpForm" style="display:none" role="tabpanel">
+    <div class="field">
+      <label for="otpPhone">מספר טלפון</label>
+      <input type="tel" id="otpPhone" name="phone" placeholder="050-0000000" dir="ltr" autocomplete="tel" aria-required="true">
+    </div>
+    <button class="btn" id="otpSendBtn" onclick="doQueryOtp()">שלח קוד ←</button>
+    <div id="otpMethodPicker" style="display:none;margin-top:14px;display:none">
+      <p style="font-size:17px;color:#374151;margin-bottom:12px;text-align:center">כיצד לשלוח את הקוד?</p>
+      <button class="btn" id="otpSmsBtnMethod" onclick="doSendOtp('sms')" style="margin-bottom:10px">📱 שלח SMS לטלפון</button>
+      <button class="btn" id="otpEmailBtnMethod" onclick="doSendOtp('email')" style="background:linear-gradient(135deg,#1d4ed8,#2563eb);display:none">📧 שלח למייל</button>
+    </div>
+    <div id="otpStep2" style="display:none;margin-top:16px">
+      <div id="otpTimer" style="text-align:center;font-size:18px;color:#15803d;font-weight:700;margin-bottom:12px"></div>
+      <div class="field">
+        <label for="otpCode">קוד אימות</label>
+        <input type="text" id="otpCode" placeholder="הזן קוד 6 ספרות" dir="ltr" inputmode="numeric" maxlength="6" autocomplete="one-time-code">
+      </div>
+      <button class="btn" onclick="doVerifyOtp()">אמת קוד ←</button>
+      <div id="otpResendWrap" style="display:none;text-align:center;margin-top:12px">
+        <a href="#" style="color:#15803d;font-size:16px;text-decoration:underline" onclick="doQueryOtp();return false">שלח קוד חדש</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="error" id="errMsg" role="alert" aria-live="assertive"></div>
+
+  <div style="margin-top:20px;padding-top:20px;border-top:1px solid #f3f4f6;text-align:center">
+    <a href="https://wa.me/972538286227?text=%D7%A9%D7%9C%D7%95%D7%9D%20%D7%99%D7%93%D7%99%D7%93%D7%99%D7%94%2C%20%D7%90%D7%A0%D7%99%20%D7%A6%D7%A8%D7%99%D7%9A%20%D7%A2%D7%96%D7%A8%D7%94%20%D7%91%D7%94%D7%A8%D7%A9%D7%9E%D7%94%20%F0%9F%99%8F" target="_blank" rel="noopener"
+      style="display:inline-flex;align-items:center;gap:8px;background:#25d366;color:white;text-decoration:none;padding:12px 22px;border-radius:12px;font-size:16px;font-weight:700"
+      aria-label="שלח הודעה בוואטסאפ לקבלת עזרה בהרשמה">
+      💬 צריך עזרה בהרשמה?
+    </a>
+  </div>
+
+  <div style="margin-top:16px;text-align:center">
+    <a href="/shop/accessibility.html" style="font-size:14px;color:#6b7280;text-decoration:underline">הצהרת נגישות</a>
+  </div>
+</div>
+</main>
+
+<script>
+function showTab(t) {
+  var tabs = document.querySelectorAll('.tab');
+  var names = ['login','register','otp'];
+  var forms = ['loginForm','registerForm','otpForm'];
+  tabs.forEach(function(tab, i) {
+    tab.classList.toggle('active', t===names[i]);
+    tab.setAttribute('aria-selected', t===names[i] ? 'true' : 'false');
+  });
+  forms.forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+  var active = document.getElementById(t+'Form');
+  if (active) active.style.display = 'block';
+  document.getElementById('errMsg').style.display = 'none';
+}
+function showError(msg) { var el=document.getElementById('errMsg'); el.textContent=msg; el.style.display='block'; }
+
+
+function togglePw(id, btn) {
+  var inp = document.getElementById(id);
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+  btn.textContent = inp.type === 'password' ? '👁' : '🙈';
+}
+async function doLogin() {
+  var phone = document.getElementById('loginPhone').value.trim().replace(/\D/g,'');
+  var password = document.getElementById('loginPassword') ? document.getElementById('loginPassword').value : '';
+  if (phone.length < 9) return showError('נא להזין מספר טלפון תקין');
+  if (!password) return showError('נא להזין סיסמה');
+  try {
+    var res = await fetch('/api/shop/users/login', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ phone: phone, password: password })
+    });
+    var d = await res.json();
+    if (!d.user) return showError(d.error || 'טלפון או סיסמה שגויים');
+    localStorage.setItem('shopUser', JSON.stringify(d.user));
+    if (d.token) localStorage.setItem('shopToken', d.token);
+    var next = new URLSearchParams(location.search).get('next') || localStorage.getItem('afterLoginRedirect') || '/shop/';
+    localStorage.removeItem('afterLoginRedirect');
+    window.location.href = next;
+  } catch(e) { showError('שגיאה — נסה שוב'); }
+}
+
+async function loadPickupPoints() {
+  const container = document.getElementById('pickupPointCards');
+  if (!container) return;
+  try {
+    const res = await fetch('/api/shop/pickup-points');
+    if (!res.ok) throw new Error('status ' + res.status);
+    const pts = await res.json();
+    if (!Array.isArray(pts) || !pts.length) throw new Error('empty');
+    container.innerHTML = pts.map(p => {
+      const pname = p.name || p;
+      const addr = p.address || '';
+      const days = p.days || '';
+      const hours = p.hours || '';
+      return '<div class="pickup-card" data-name="'+pname+'" onclick="selectPickupCard(this)" style="border:2px solid #d1fae5;border-radius:12px;padding:14px 16px;cursor:pointer;transition:all .2s;background:#fff">' +
+        '<div style="font-weight:800;font-size:.95rem;color:#15803d">📍 '+pname+'</div>' +
+        (addr && addr !== pname ? '<div style="font-size:.82rem;color:#6b7280;margin-top:3px">'+addr+'</div>' : '') +
+        (days ? '<div style="font-size:.82rem;color:#374151;margin-top:4px">🗓️ '+days+(hours?' &nbsp;⏰ '+hours:'')+'</div>' : '') +
+        '</div>';
+    }).join('');
+    // Auto-select if only one option or if prefill from URL param
+    const urlPt = new URLSearchParams(location.search).get('pickup');
+    if (urlPt) {
+      let card = container.querySelector('[data-name="'+urlPt+'"]');
+      if (!card) {
+        const kws = urlPt.replace(/[^\u05d0-\u05ea\s]/g,'').trim().split(/\s+/).filter(k=>k.length>2);
+        container.querySelectorAll('[data-name]').forEach(c => {
+          if (!card && kws.some(k => c.dataset.name.includes(k))) card = c;
+        });
+      }
+      if (card) selectPickupCard(card);
+    } else if (pts.length === 1) {
+      selectPickupCard(container.firstElementChild);
+    }
+    // Auto-switch to register tab if ?tab=register in URL
+    const tab = new URLSearchParams(location.search).get('tab');
+    if (tab === 'register') showTab('register');
+    // Show message from redirect (e.g. "must register to add to cart")
+    const msg = new URLSearchParams(location.search).get('msg');
+    if (msg) {
+      const errEl = document.getElementById('errMsg');
+      if (errEl) { errEl.textContent = '👋 ' + decodeURIComponent(msg); errEl.style.display = 'block'; errEl.style.color = '#15803d'; errEl.style.background = '#f0fdf4'; errEl.style.borderRadius = '8px'; errEl.style.padding = '10px'; }
+    }
+  } catch(e) {
+    container.innerHTML = '<div style="color:#dc2626;font-size:.85rem">שגיאה בטעינת נקודות האיסוף. <button onclick="loadPickupPoints()" style="background:none;border:none;color:#15803d;cursor:pointer;font-weight:700;text-decoration:underline">נסה שוב</button></div>';
+    console.error('loadPickupPoints error:', e);
+  }
+}
+function selectPickupCard(el) {
+  document.querySelectorAll('.pickup-card').forEach(c => {
+    c.style.borderColor = '#d1fae5';
+    c.style.background = '#fff';
+  });
+  el.style.borderColor = '#16a34a';
+  el.style.background = '#f0fdf4';
+  document.getElementById('regPickupPoint').value = el.dataset.name;
+}
+loadPickupPoints();
+
+async function doRegister() {
+  var name = document.getElementById('regName').value.trim();
+  var phone = document.getElementById('regPhone').value.trim().replace(/\D/g,'');
+  var email = document.getElementById('regEmail').value.trim();
+  var password = document.getElementById('regPassword') ? document.getElementById('regPassword').value : '';
+  if (!name) return showError('נא להזין שם מלא');
+  if (!password || password.length < 6) return showError('הסיסמה חייבת להכיל לפחות 6 תווים');
+  var email = document.getElementById('regEmail').value.trim();
+  if (!email || !email.includes('@')) return showError('נא להזין כתובת מייל תקינה');
+  if (phone.length < 9) return showError('נא להזין מספר טלפון תקין');
+  try {
+    var regPP = document.getElementById('regPickupPoint').value;
+    if (!regPP) return showError('נא לבחור נקודת איסוף');
+    var res = await fetch('/api/shop/users/register', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ name: name, phone: phone, email: email, createdAt: new Date().toISOString(), pickupPoint: regPP })
+    });
+    var d = await res.json();
+    if (d.error) return showError(d.error);
+    var user = d.user || { name: name, phone: phone, email: email };
+    if (regPP && !user.pickupPoint) user.pickupPoint = regPP;
+    localStorage.setItem('shopUser', JSON.stringify(user));
+    var next = new URLSearchParams(location.search).get('next') || localStorage.getItem('afterLoginRedirect') || '/shop/';
+    localStorage.removeItem('afterLoginRedirect');
+    window.location.href = next;
+  } catch(e) { showError('שגיאה — נסה שוב'); }
+}
+
+
+var _otpTimer = null;
+var _otpResendTimer = null;
+
+function doQueryOtp() {
+  var phone = document.getElementById('otpPhone').value.trim().replace(/\D/g,'');
+  if (phone.length < 9) return showError('נא להזין מספר טלפון תקין');
+  document.getElementById('otpSendBtn').disabled = true;
+  fetch('/api/shop/users/send-otp', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ phone: phone, method: 'query' })
+  }).then(function(r){ return r.json(); }).then(function(d) {
+    document.getElementById('otpSendBtn').disabled = false;
+    if (d.error) return showError(d.error);
+    document.getElementById('errMsg').style.display = 'none';
+    // Show method picker
+    document.getElementById('otpSendBtn').style.display = 'none';
+    document.getElementById('otpMethodPicker').style.display = 'block';
+    var emailBtn = document.getElementById('otpEmailBtnMethod');
+    if (d.hasEmail) {
+      emailBtn.style.display = 'block';
+    } else {
+      emailBtn.style.display = 'none';
+    }
+  }).catch(function(){ document.getElementById('otpSendBtn').disabled = false; showError('שגיאה — נסה שוב'); });
+}
+
+function doSendOtp(method) {
+  var phone = document.getElementById('otpPhone').value.trim().replace(/\D/g,'');
+  document.getElementById('otpMethodPicker').style.display = 'none';
+  fetch('/api/shop/users/send-otp', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ phone: phone, method: method || 'sms' })
+  }).then(function(r){ return r.json(); }).then(function(d) {
+    if (d.error) return showError(d.error);
+    document.getElementById('otpStep2').style.display = 'block';
+    document.getElementById('errMsg').style.display = 'none';
+    document.getElementById('otpResendWrap').style.display = 'none';
+    startOtpCountdown(10 * 60);
+    setTimeout(function(){ document.getElementById('otpResendWrap').style.display = 'block'; }, 60000);
+  }).catch(function(){ showError('שגיאה — נסה שוב'); });
+}
+
+function startOtpCountdown(seconds) {
+  if (_otpTimer) clearInterval(_otpTimer);
+  var el = document.getElementById('otpTimer');
+  function update() {
+    if (seconds <= 0) { clearInterval(_otpTimer); el.textContent = 'הקוד פג תוקף'; return; }
+    var m = Math.floor(seconds / 60);
+    var s = seconds % 60;
+    el.textContent = 'הקוד תקף עוד ' + m + ':' + (s < 10 ? '0' : '') + s;
+    seconds--;
+  }
+  update();
+  _otpTimer = setInterval(update, 1000);
+}
+
+async function doVerifyOtp() {
+  var phone = document.getElementById('otpPhone').value.trim().replace(/\D/g,'');
+  var otp = document.getElementById('otpCode').value.trim();
+  if (!otp || otp.length !== 6) return showError('נא להזין קוד 6 ספרות');
+  try {
+    var res = await fetch('/api/shop/users/verify-otp', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ phone: phone, otp: otp })
+    });
+    var d = await res.json();
+    if (d.error) return showError(d.error);
+    if (_otpTimer) clearInterval(_otpTimer);
+    localStorage.setItem('shopUser', JSON.stringify(d.user));
+    if (d.token) localStorage.setItem('shopToken', d.token);
+    var next = new URLSearchParams(location.search).get('next') || '/shop/';
+    window.location.href = next;
+  } catch(e) { showError('שגיאה — נסה שוב'); }
+}
+
+var _su = localStorage.getItem('shopUser');
+if (_su) { try { if (!JSON.parse(_su).isGuest) { const nextUrl = new URLSearchParams(location.search).get('next'); window.location.href = nextUrl || '/shop/'; } } catch(e){} }
+
+function togglePwd(id, btn) {
+  var inp = document.getElementById(id);
+  if (!inp) return;
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+  btn.textContent = inp.type === 'password' ? '👁' : '🙈';
+}
+</script>
+
+<!-- Help Modal -->
+<div id="helpModal" onclick="if(event.target===this)this.style.display='none'" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;align-items:center;justify-content:center;padding:16px">
+  <div style="background:white;border-radius:20px;max-width:420px;width:100%;max-height:85vh;overflow-y:auto;padding:24px;direction:rtl;position:relative">
+    <button onclick="document.getElementById('helpModal').style.display='none'" style="position:absolute;top:14px;left:14px;background:#f3f4f6;border:none;border-radius:50%;width:32px;height:32px;font-size:18px;cursor:pointer;line-height:1">×</button>
+    <div style="text-align:center;margin-bottom:16px">
+      <div style="font-size:2rem">🛍️</div>
+      <div style="font-size:1.15rem;font-weight:900;color:#15803d">כיצד קונים באתר?</div>
+      <div style="font-size:0.85rem;color:#6b7280">שלב אחרי שלב — פשוט וקל</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div style="background:#f0fdf4;border-radius:12px;padding:14px">
+        <div style="font-weight:800;color:#15803d;margin-bottom:4px">שלב 1 — כניסה לאתר</div>
+        <div style="font-size:0.9rem;color:#374151">פתחו את הקישור: <strong>buypower.co.il/shop</strong></div>
+      </div>
+      <div style="background:#f0fdf4;border-radius:12px;padding:14px">
+        <div style="font-weight:800;color:#15803d;margin-bottom:6px">שלב 2 — הרשמה (פעם אחת בלבד)</div>
+        <div style="font-size:0.9rem;color:#374151;line-height:1.7">
+          • לחצו על <strong>״הרשמה״</strong><br>
+          • הזינו שם, טלפון וסיסמה<br>
+          • לחצו <strong>״הרשמה״</strong> — וזהו!<br>
+          <span style="color:#6b7280;font-size:0.82rem">בפעם הבאה — רק טלפון וסיסמה</span>
+        </div>
+      </div>
+      <div style="background:#f0fdf4;border-radius:12px;padding:14px">
+        <div style="font-weight:800;color:#15803d;margin-bottom:6px">שלב 3 — בחירת מוצר</div>
+        <div style="font-size:0.9rem;color:#374151;line-height:1.7">
+          • גללו למטה ותראו את המוצרים<br>
+          • בחרו כמות ולחצו <strong>״הוסף לעגלה 🛒״</strong>
+        </div>
+      </div>
+      <div style="background:#f0fdf4;border-radius:12px;padding:14px">
+        <div style="font-weight:800;color:#15803d;margin-bottom:6px">שלב 4 — תשלום</div>
+        <div style="font-size:0.9rem;color:#374151;line-height:1.7">
+          • לחצו על סמל העגלה למעלה<br>
+          • הזינו שם וטלפון<br>
+          • לחצו <strong>״שלם עם כרטיס אשראי״</strong><br>
+          • התשלום מאובטח לחלוטין 🔒
+        </div>
+      </div>
+      <div style="background:#f0fdf4;border-radius:12px;padding:14px">
+        <div style="font-weight:800;color:#15803d;margin-bottom:4px">שלב 5 — אישור ✅</div>
+        <div style="font-size:0.9rem;color:#374151">תקבלו הודעת וואטסאפ עם פרטי ההזמנה</div>
+      </div>
+      <div style="text-align:center;padding:12px;background:#fff7ed;border-radius:12px">
+        <div style="font-size:0.9rem;color:#92400e">שאלות? פנו לידידיה ישירות 📱</div>
+        <a href="https://wa.me/972538286227" target="_blank" style="display:inline-block;margin-top:8px;background:#25D366;color:white;padding:8px 20px;border-radius:50px;text-decoration:none;font-weight:700;font-size:0.9rem">פתח וואטסאפ</a>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

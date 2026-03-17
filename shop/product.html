@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>פרטי מוצר | קונים יחד</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, 'Segoe UI', Arial, sans-serif;
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  min-height: 100vh;
+  direction: rtl;
+  color: #1a1a1a;
+}
+.container { max-width: 480px; margin: 0 auto; padding: 0 16px 32px; }
+header {
+  background: #15803d;
+  color: white;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 12px rgba(21,128,61,0.3);
+}
+.header-inner {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.back-btn {
+  background: rgba(255,255,255,0.15);
+  border: none;
+  color: white;
+  padding: 8px 14px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.2s;
+  font-family: inherit;
+}
+.back-btn:hover { background: rgba(255,255,255,0.25); }
+.header-title { font-size: 1.1rem; font-weight: 700; }
+.cart-btn {
+  position: relative;
+  background: rgba(255,255,255,0.15);
+  border: none;
+  color: white;
+  padding: 8px 14px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 1.2rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+  transition: background 0.2s;
+}
+.cart-btn:hover { background: rgba(255,255,255,0.25); }
+.cart-badge {
+  background: #f97316;
+  color: white;
+  border-radius: 50%;
+  width: 20px; height: 20px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  top: -4px;
+  left: -4px;
+}
+.cart-badge.show { display: flex; }
+.product-main-img {
+  width: 100%;
+  max-height: 280px;
+  object-fit: cover;
+  display: block;
+}
+.product-img-placeholder {
+  width: 100%;
+  height: 220px;
+  background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 4rem;
+}
+.product-info { padding: 20px 0 12px; }
+.product-name { font-size: 1.4rem; font-weight: 800; margin-bottom: 6px; color: #14532d; }
+.product-desc { font-size: 0.92rem; color: #4b5563; line-height: 1.6; margin-bottom: 12px; }
+.price-info {
+  background: #f0fdf4;
+  border: 1.5px solid #86efac;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 0.9rem;
+  color: #15803d;
+  font-weight: 600;
+  margin-bottom: 18px;
+}
+.variants-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #15803d;
+  margin-bottom: 10px;
+}
+.variant-row {
+  background: white;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+  transition: border-color 0.2s, background 0.2s;
+}
+.variant-row.has-qty { border-color: #86efac; background: #f0fdf4; }
+.variant-img {
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.variant-img-placeholder {
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
+  background: #d1fae5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  flex-shrink: 0;
+}
+.variant-name {
+  flex: 1;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+.qty-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.qty-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid #15803d;
+  background: white;
+  color: #15803d;
+  font-size: 1.2rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: background 0.15s, color 0.15s;
+  font-family: inherit;
+}
+.qty-btn:hover { background: #15803d; color: white; }
+.qty-btn:disabled { border-color: #d1d5db; color: #9ca3af; cursor: not-allowed; }
+.qty-btn:disabled:hover { background: white; color: #9ca3af; }
+.qty-display {
+  font-size: 1.1rem;
+  font-weight: 700;
+  min-width: 28px;
+  text-align: center;
+  color: #1a1a1a;
+}
+.summary-bar {
+  background: white;
+  border: 2px solid #86efac;
+  border-radius: 16px;
+  padding: 14px 16px;
+  margin-top: 20px;
+  margin-bottom: 14px;
+}
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 0.95rem;
+  color: #374151;
+}
+.summary-row:last-child { margin-bottom: 0; }
+.summary-label { font-weight: 500; }
+.summary-value { font-weight: 700; color: #15803d; font-size: 1.05rem; }
+.min-order-msg {
+  font-size: 0.85rem;
+  color: #92400e;
+  background: #fef3c7;
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  font-weight: 500;
+}
+.add-all-btn {
+  width: 100%;
+  background: #f97316;
+  color: white;
+  border: none;
+  padding: 16px;
+  border-radius: 14px;
+  cursor: pointer;
+  font-size: 1.05rem;
+  font-weight: 700;
+  font-family: inherit;
+  transition: background 0.2s, transform 0.1s;
+}
+.add-all-btn:hover { background: #ea6c10; }
+.add-all-btn:active { transform: scale(0.98); }
+.add-all-btn:disabled { background: #d1d5db; color: #6b7280; cursor: not-allowed; }
+.no-variants-add-btn {
+  width: 100%;
+  background: #f97316;
+  color: white;
+  border: none;
+  padding: 16px;
+  border-radius: 14px;
+  cursor: pointer;
+  font-size: 1.05rem;
+  font-weight: 700;
+  font-family: inherit;
+  margin-top: 20px;
+  transition: background 0.2s;
+}
+.no-variants-add-btn:hover { background: #ea6c10; }
+.loading { text-align: center; padding: 60px 20px; color: #15803d; font-size: 1.5rem; }
+.error-state { text-align: center; padding: 60px 20px; color: #6b7280; }
+.toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%) translateY(80px);
+  background: #15803d;
+  color: white;
+  padding: 12px 24px;
+  border-radius: 24px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: transform 0.3s;
+  z-index: 999;
+  white-space: nowrap;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+}
+.toast.show { transform: translateX(-50%) translateY(0); }
+@media (max-width: 480px) {
+  .variant-row { padding: 12px 10px; gap: 6px; }
+  .vr-name { font-size: 0.85rem; }
+  .qty-btn { width: 40px; height: 40px; font-size: 16px; }
+  .product-main-img { max-height: 200px; }
+  h1 { font-size: 1.2rem; }
+  .price-info { font-size: 0.85rem; }
+  #goCartBtn, a[href="index.html"] { font-size: 0.95rem; padding: 13px; }
+}
+
+@media (min-width: 768px) {
+  .container { max-width: 800px; }
+  .header-inner { max-width: 800px; }
+  /* Image right, variants left — side-by-side */
+  #productContent { max-width: 800px; margin: 0 auto; }
+  .product-layout-desktop {
+    display: flex;
+    gap: 28px;
+    align-items: flex-start;
+    padding: 24px 16px 0;
+  }
+  .product-img-col { flex: 0 0 340px; }
+  .product-detail-col { flex: 1; }
+  .product-main-img { border-radius: 16px; max-height: 340px; }
+}
+.skip-link { position:absolute; top:-40px; left:0; background:#15803d; color:white; padding:8px 16px; z-index:9999; border-radius:0 0 8px 0; text-decoration:none; font-weight:700; }
+.skip-link:focus { top:0; }
+*:focus { outline: 3px solid #15803d; outline-offset: 2px; }
+</style>
+</head>
+<body>
+<a href="#main-content" class="skip-link">דלג לתוכן הראשי</a>
+<header>
+  <div class="header-inner">
+    <a href="index.html" class="back-btn" aria-label="חזרה לחנות">&#8592; חזרה</a>
+    <span class="header-title">פרטי מוצר</span>
+    <a href="cart.html" class="cart-btn" id="cartBtn">
+      🛒
+      <span id="cartBadge" class="cart-badge">0</span>
+    </a>
+  </div>
+</header>
+<main id="main-content">
+<div id="productContent">
+  <div class="loading">⏳ טוען...</div>
+</div>
+
+<div class="toast" id="toast"></div>
+</main>
+<script>
+if (!localStorage.getItem('shopUser')) {
+  window.location.href = '/shop/login.html';
+}
+
+var API = '/api/shop';
+var cart = JSON.parse(localStorage.getItem('yedidya_cart') || '[]');
+var currentProduct = null;
+var variantQtys = {};
+
+function saveCart() { localStorage.setItem('yedidya_cart', JSON.stringify(cart)); updateBadge(); }
+function updateBadge() {
+  var total = cart.reduce(function(s,i){ return s + i.qty; }, 0);
+  var b = document.getElementById('cartBadge');
+  b.textContent = total;
+  b.classList.toggle('show', total > 0);
+}
+updateBadge();
+
+function showToast(msg) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(function(){ t.classList.remove('show'); }, 2200);
+}
+
+function getTotalQty() {
+  return Object.values(variantQtys).reduce(function(s,q){ return s+q; }, 0);
+}
+
+function sanitizeId(name) {
+  // Use index-based ID by hashing the name to avoid Hebrew char issues
+  var hash = 0;
+  for (var i = 0; i < name.length; i++) {
+    hash = ((hash << 5) - hash) + name.charCodeAt(i);
+    hash |= 0;
+  }
+  return 'v' + Math.abs(hash).toString(16);
+}
+
+function calcTotal(product, totalQty) {
+  // Check quantity deals for best price
+  if (product.quantityDeals && product.quantityDeals.length > 0) {
+    var sorted = product.quantityDeals.slice().sort(function(a,b){ return b.qty - a.qty; });
+    for (var di = 0; di < sorted.length; di++) {
+      if (totalQty >= sorted[di].qty) {
+        // Apply deal: use deal price for full sets, regular price for remainder
+        var dealQty = sorted[di].qty;
+        var dealPrice = sorted[di].price;
+        var sets = Math.floor(totalQty / dealQty);
+        var remainder = totalQty % dealQty;
+        return sets * dealPrice + remainder * (product.shopPrice || 0);
+      }
+    }
+  }
+  if (product.packSize && product.packSize > 1) {
+    var packs = Math.floor(totalQty / product.packSize);
+    var extra = totalQty % product.packSize;
+    var perBottle = Math.round(product.shopPrice / product.packSize);
+    return packs * product.shopPrice + extra * perBottle;
+  }
+  return totalQty * (product.shopPrice || 0);
+}
+
+function updateSummary() {
+  var totalQty = getTotalQty();
+  var totalPrice = currentProduct ? calcTotal(currentProduct, totalQty) : 0;
+  var minQty = (currentProduct && currentProduct.minQuantity) ? currentProduct.minQuantity : 1;
+
+  var qtyEl = document.getElementById('totalQtyDisplay');
+  var priceEl = document.getElementById('totalPriceDisplay');
+  var addBtn = document.getElementById('addAllBtn');
+  var minMsg = document.getElementById('minOrderMsg');
+
+  if (qtyEl) qtyEl.textContent = totalQty + ' יח\'';
+  if (priceEl) priceEl.textContent = totalPrice + ' \u20aa';
+
+  if (minMsg) {
+    minMsg.textContent = '\u05de\u05d9\u05e0\u05d9\u05de\u05d5\u05dd \u05d4\u05d6\u05de\u05e0\u05d4: ' + minQty + ' \u05d1\u05e7\u05d1\u05d5\u05e7\u05d9\u05dd (\u05db\u05e8\u05d2\u05e2 \u05d1\u05d7\u05e8\u05ea ' + totalQty + ')';
+  }
+
+  if (addBtn) {
+    if (totalQty === 0) {
+      addBtn.disabled = true;
+      addBtn.textContent = '\u05d1\u05d7\u05e8 \u05db\u05de\u05d5\u05ea';
+    } else if (totalQty < minQty) {
+      addBtn.disabled = true;
+      addBtn.textContent = '\u05d9\u05e9 \u05dc\u05d1\u05d7\u05d5\u05e8 \u05dc\u05e4\u05d7\u05d5\u05ea ' + minQty + ' \u05d1\u05e7\u05d1\u05d5\u05e7\u05d9\u05dd';
+    } else {
+      addBtn.disabled = false;
+      addBtn.textContent = '\u05d4\u05d5\u05e1\u05e3 \u05dc\u05e2\u05d2\u05dc\u05d4 \uD83D\uDED2';
+    }
+  }
+
+  if (currentProduct && currentProduct.variants) {
+    currentProduct.variants.forEach(function(v) {
+      var row = document.getElementById('vrow_' + sanitizeId(v.name));
+      if (row) row.classList.toggle('has-qty', (variantQtys[v.name] || 0) > 0);
+    });
+  }
+}
+
+function switchMainImage(url) {
+  var imgEl = document.querySelector('.product-main-img');
+  if (imgEl && url) imgEl.src = url;
+}
+
+function changeQty(variantName, delta) {
+  var current = variantQtys[variantName] || 0;
+  var next = Math.max(0, Math.min(99, current + delta));
+  variantQtys[variantName] = next;
+  var sid = sanitizeId(variantName);
+  var dispEl = document.getElementById('qty_' + sid);
+  var minusBtn = document.getElementById('minus_' + sid);
+  if (dispEl) dispEl.textContent = next;
+  if (minusBtn) minusBtn.disabled = (next === 0);
+  // Switch main image to this variant's image if it has one
+  if (next > 0 && currentProduct && currentProduct.variants) {
+    var v = currentProduct.variants.find(function(x){ return x.name === variantName; });
+    if (v && v.imageUrl) {
+      var imgEl = document.querySelector('.product-main-img');
+      if (imgEl) imgEl.src = v.imageUrl;
+    }
+  }
+  updateSummary();
+  // Instantly sync cart on every change
+  saveVariantsToCart();
+}
+
+function saveVariantsToCart() {
+  if (!currentProduct) return;
+  var mainImg = (currentProduct.imageUrls && currentProduct.imageUrls.length)
+    ? currentProduct.imageUrls[0] : (currentProduct.imageUrl || '');
+  if (currentProduct.variants && currentProduct.variants.length) {
+    // Calculate effective per-unit price using deal logic across total quantity
+    var totalQtyAll = getTotalQty();
+    var totalPriceAll = calcTotal(currentProduct, totalQtyAll);
+    var effectivePerUnit = totalQtyAll > 0 ? totalPriceAll / totalQtyAll : currentProduct.shopPrice;
+
+    currentProduct.variants.forEach(function(v) {
+      var qty = variantQtys[v.name] || 0;
+      var cartKey = currentProduct._id + '_' + v.name;
+      var existing = cart.find(function(i){ return i.cartKey === cartKey; });
+      if (qty > 0) {
+        if (existing) { existing.qty = qty; existing.price = effectivePerUnit; existing.quantityDeals = currentProduct.quantityDeals || []; }
+        else cart.push({ cartKey: cartKey, productId: currentProduct._id, name: currentProduct.name,
+          price: effectivePerUnit, imageUrl: mainImg, qty: qty, variant: v.name, vatType: currentProduct.vatType || 'excluded',
+          quantityDeals: currentProduct.quantityDeals || [] });
+      } else {
+        // Remove if qty is 0
+        cart = cart.filter(function(i){ return i.cartKey !== cartKey; });
+      }
+    });
+  }
+  saveCart();
+  // Show/hide go-to-cart button
+  var total = getTotalQty();
+  var goCart = document.getElementById('goCartBtn');
+  if (goCart) goCart.style.display = total > 0 ? 'block' : 'none';
+}
+
+function addAllToCart() {
+  if (!currentProduct) return;
+  var minQty = (currentProduct.minQuantity) ? currentProduct.minQuantity : 1;
+  var totalQty = getTotalQty();
+  if (totalQty < minQty) {
+    showToast('⚠️ יש לבחור לפחות ' + minQty + ' בקבוקים');
+    return;
+  }
+  var mainImg = (currentProduct.imageUrls && currentProduct.imageUrls.length)
+    ? currentProduct.imageUrls[0] : (currentProduct.imageUrl || '');
+  var added = 0;
+  if (currentProduct.variants && currentProduct.variants.length) {
+    currentProduct.variants.forEach(function(v) {
+      var qty = variantQtys[v.name] || 0;
+      if (qty === 0) return;
+      var cartKey = currentProduct._id + '_' + v.name;
+      var existing = cart.find(function(i){ return i.cartKey === cartKey; });
+      if (existing) existing.qty += qty;
+      else { var perBottle = (currentProduct.packSize > 1) ? (currentProduct.shopPrice / currentProduct.packSize) : currentProduct.shopPrice; cart.push({ cartKey: cartKey, productId: currentProduct._id, name: currentProduct.name, price: perBottle, imageUrl: mainImg, qty: qty, variant: v.name, vatType: currentProduct.vatType || 'excluded' }); }
+      added += qty;
+    });
+  }
+  saveCart();
+  showToast('\u2705 ' + currentProduct.name + ' \u05e0\u05d5\u05e1\u05e3 \u05dc\u05e2\u05d2\u05dc\u05d4 (' + added + ' \u05d9\u05d7\')');
+  setTimeout(function(){ window.location.href = 'cart.html'; }, 1000);
+}
+
+function addSingleToCart() {
+  if (!currentProduct) return;
+  var mainImg = (currentProduct.imageUrls && currentProduct.imageUrls.length)
+    ? currentProduct.imageUrls[0] : (currentProduct.imageUrl || '');
+  var cartKey = currentProduct._id;
+  var existing = cart.find(function(i){ return i.cartKey === cartKey; });
+  if (existing) existing.qty++;
+  else cart.push({ cartKey: cartKey, productId: currentProduct._id, name: currentProduct.name,
+    price: currentProduct.shopPrice, imageUrl: mainImg, qty: 1, variant: null, vatType: currentProduct.vatType || 'excluded' });
+  saveCart();
+  showToast('\u2705 ' + currentProduct.name + ' \u05e0\u05d5\u05e1\u05e3 \u05dc\u05e2\u05d2\u05dc\u05d4');
+  setTimeout(function(){ window.location.href = 'cart.html'; }, 1000);
+}
+
+function renderProduct(p) {
+  currentProduct = p;
+  variantQtys = {};
+  if (p.variants) p.variants.forEach(function(v){ variantQtys[v.name] = 0; });
+
+  var mainImg = (p.imageUrls && p.imageUrls.length) ? p.imageUrls[0] : (p.imageUrl || '');
+  var imgHtml = mainImg
+    ? '<img src="' + mainImg + '" class="product-main-img" alt="">'
+    : '<div class="product-img-placeholder">\uD83C\uDF3F</div>';
+
+  var hasVariants = p.variants && p.variants.length > 0;
+  var minQty = p.minQuantity || 1;
+
+  var priceInfoHtml;
+  if (hasVariants && minQty > 1) {
+    var basePrice = (p.vatType === 'excluded') ? parseFloat((p.shopPrice * 1.18).toFixed(2)) : p.shopPrice;
+    var minQty2 = p.minQuantity || 1;
+    var _minQ = p.minQuantity || 1;
+    var _displayMp = (p.marketPrice || 0) * (_minQ > 1 ? _minQ : 1);
+    var _compareTo = (p.shopPrice || 0) * (_minQ > 1 ? _minQ : 1);
+    var _mpRounded = Math.abs(_displayMp - Math.round(_displayMp)) < 0.05 ? Math.round(_displayMp) : Math.round(_displayMp * 100) / 100;
+    var mkt = (p.marketPrice && _displayMp > _compareTo) ? ' <span style="text-decoration:line-through;color:#9ca3af;font-weight:400">₪' + _mpRounded + '</span>' : '';
+    if (minQty2 > 1) {
+      var bundleRaw2 = basePrice * minQty2;
+      var bundleTotal = Math.abs(bundleRaw2 - Math.round(bundleRaw2)) < 0.05 ? Math.round(bundleRaw2) : Math.round(bundleRaw2 * 100) / 100;
+      var bpStr2 = bundleTotal % 1 === 0 ? bundleTotal.toFixed(0) : bundleTotal.toFixed(2);
+      priceInfoHtml = '<div class="price-info">💰 ' + minQty2 + ' ב-₪' + bpStr2 + mkt + '</div>';
+    } else {
+      priceInfoHtml = '<div class="price-info">💰 מחיר: ₪' + basePrice + mkt + '</div>';
+    }
+  } else {
+    var mkt = (p.marketPrice > p.shopPrice) ? ' <span style="text-decoration:line-through;color:#9ca3af;font-weight:400">' + p.marketPrice + ' \u20aa</span>' : '';
+    priceInfoHtml = '<div class="price-info">\uD83D\uDCB0 \u05de\u05d7\u05d9\u05e8: ' + p.shopPrice + ' \u20aa' + mkt + '</div>';
+  }
+
+  var variantsHtml = '';
+  if (hasVariants) {
+    variantsHtml = '<div class="variants-title">\uD83C\uDF77 \u05d1\u05d7\u05e8 \u05e1\u05d5\u05d2\u05d9\u05dd \u05d5\u05db\u05de\u05d5\u05d9\u05d5\u05ea</div>';
+    variantsHtml += p.variants.map(function(v) {
+      var sid = sanitizeId(v.name);
+      var variantImg = v.imageUrl || mainImg;
+      var vImgHtml = variantImg
+        ? '<img src="' + variantImg + '" class="variant-img" alt="" onclick="switchMainImage(this.src)" style="cursor:pointer" onerror="this.onerror=null;this.src=\"' + (mainImg||'') + '\"">'
+        : '<div class="variant-img-placeholder">\uD83C\uDF3F</div>';
+      return '<div class="variant-row" id="vrow_' + sid + '">' +
+        vImgHtml +
+        '<div class="variant-name">' + v.name + '</div>' +
+        '<div class="qty-control">' +
+        '<button class="qty-btn" id="minus_' + sid + '" onclick="changeQty(this.dataset.v,-1)" data-v="' + v.name.replace(/"/g,'&quot;').replace(/'/g,'&#39;') + '" disabled>\u2212</button>' +
+        '<span class="qty-display" id="qty_' + sid + '">0</span>' +
+        '<button class="qty-btn" onclick="changeQty(this.dataset.v,1)" data-v="' + v.name.replace(/"/g,'&quot;').replace(/'/g,'&#39;') + '">+</button>' +
+        '</div></div>';
+    }).join('');
+
+    var minMsgHtml = minQty > 1
+      ? '<div class="min-order-msg" id="minOrderMsg">\u05de\u05d9\u05e0\u05d9\u05de\u05d5\u05dd \u05d4\u05d6\u05de\u05e0\u05d4: ' + minQty + ' \u05d1\u05e7\u05d1\u05d5\u05e7\u05d9\u05dd (\u05db\u05e8\u05d2\u05e2 \u05d1\u05d7\u05e8\u05ea 0)</div>'
+      : '';
+
+    variantsHtml += '<div class="summary-bar">' +
+      '<div class="summary-row"><span class="summary-label">\u05e1\u05d4"\u05db \u05db\u05de\u05d5\u05ea:</span><span class="summary-value" id="totalQtyDisplay">0 \u05d9\u05d7\'</span></div>' +
+      '<div class="summary-row"><span class="summary-label">\u05e1\u05d4"\u05db \u05dc\u05ea\u05e9\u05dc\u05d5\u05dd:</span><span class="summary-value" id="totalPriceDisplay">0 \u20aa</span></div>' +
+      '</div>' + minMsgHtml +
+      '<div style="display:flex;flex-direction:column;gap:10px;margin-top:8px">' +
+      '<a href="index.html" style="display:block;width:100%;padding:15px;background:#15803d;color:white;border:none;border-radius:14px;font-size:1rem;font-weight:800;cursor:pointer;font-family:inherit;text-align:center;text-decoration:none;box-sizing:border-box">← חזרה לדף הבית</a>' +
+      '<button id="goCartBtn" onclick="window.location.href=\'cart.html\'" style="display:none;width:100%;padding:15px;background:#f97316;color:white;border:none;border-radius:14px;font-size:1rem;font-weight:800;cursor:pointer;font-family:inherit">🛒 עבור לעגלה</button>' +
+      '</div>';
+  } else {
+    variantsHtml = '<button class="no-variants-add-btn" onclick="addSingleToCart()">\u05d4\u05d5\u05e1\u05e3 \u05dc\u05e2\u05d2\u05dc\u05d4 \uD83D\uDED2</button>';
+  }
+
+  document.getElementById('productContent').innerHTML =
+    imgHtml +
+    '<div class="container">' +
+    '<div class="product-info">' +
+    '<div class="product-name">' + p.name + '</div>' +
+    (p.description ? '<div class="product-desc">' + p.description + '</div>' : '') +
+    priceInfoHtml +
+    (p.quantityDeals && p.quantityDeals.length > 1 ? '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">' +
+      p.quantityDeals.map(function(d) {
+        return '<div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:5px 12px;font-size:.82rem;font-weight:800;color:#15803d">' +
+          d.qty + ' יח\' = ₪' + d.price + '</div>';
+      }).join('') + '</div>' : '') +
+    '</div>' +
+    variantsHtml +
+    '</div>';
+}
+
+async function loadProduct() {
+  var params = new URLSearchParams(window.location.search);
+  var pid = params.get('id');
+  if (!pid) {
+    document.getElementById('productContent').innerHTML = '<div class="error-state"><div style="font-size:3rem">⚠️</div><div>מוצר לא נמצא</div></div>';
+    return;
+  }
+  try {
+    var res = await fetch(API + '/products');
+    var products = await res.json();
+    var product = products.find(function(p){ return p._id === pid; });
+    if (!product) {
+      document.getElementById('productContent').innerHTML = '<div class="error-state"><div style="font-size:3rem">⚠️</div><div>מוצר לא נמצא</div></div>';
+      return;
+    }
+    document.title = product.name + ' | קונים יחד';
+    renderProduct(product);
+  } catch(e) {
+    document.getElementById('productContent').innerHTML = '<div class="error-state"><div style="font-size:3rem">⚠️</div><div>שגיאה בטעינה</div></div>';
+  }
+}
+
+loadProduct();
+</script>
+</body>
+</html>

@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta property="og:title" content="עגלת קניות — נלחמים ביוקר המחיה">
+<meta property="og:description" content="מחזירים את הכוח לצרכן — מחירים שלא תמצאו בשום מקום אחר">
+<meta property="og:image" content="https://buypower.co.il/shop/logo.jpg">
+<meta property="og:url" content="https://buypower.co.il/shop/cart.html">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<title>עגלת קניות — נלחמים ביוקר המחיה</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, 'Segoe UI', Arial, sans-serif;
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  min-height: 100vh;
+  direction: rtl;
+  color: #1a1a1a;
+}
+header {
+  background: #15803d;
+  color: white;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 12px rgba(21,128,61,0.3);
+}
+.header-inner {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.back-btn {
+  background: rgba(255,255,255,0.15);
+  border: none;
+  color: white;
+  padding: 8px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 1.1rem;
+  text-decoration: none;
+}
+header h1 { font-size: 1.15rem; font-weight: 700; }
+.container { max-width: 480px; margin: 0 auto; padding: 16px; }
+.section-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #15803d;
+  margin: 0 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cart-item {
+  background: white;
+  border-radius: 14px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.07);
+  padding: 12px;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.cart-item-img {
+  width: 60px;
+  height: 60px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: #d1fae5;
+  flex-shrink: 0;
+}
+.cart-item-img-placeholder {
+  width: 60px; height: 60px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+.cart-item-info { flex: 1; }
+.cart-item-name { font-weight: 700; font-size: 0.95rem; margin-bottom: 4px; }
+.cart-item-price { color: #15803d; font-weight: 600; font-size: 0.9rem; }
+.qty-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.qty-btn {
+  background: #f0fdf4;
+  border: 1.5px solid #86efac;
+  color: #15803d;
+  width: 30px; height: 30px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1.1rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.qty-btn:hover { background: #dcfce7; }
+.qty-val { font-weight: 700; min-width: 20px; text-align: center; }
+.remove-btn {
+  background: none;
+  border: none;
+  color: #ef4444;
+  cursor: pointer;
+  font-size: 1.1rem;
+  padding: 4px;
+}
+.form-section {
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.07);
+  padding: 16px;
+  margin-top: 16px;
+}
+.form-group { margin-bottom: 14px; }
+label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 6px;
+}
+input[type="text"], input[type="tel"], input[type="datetime-local"], select {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1.5px solid #d1d5db;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  transition: border-color 0.2s;
+  direction: rtl;
+}
+input:focus, select:focus { outline: none; border-color: #15803d; }
+.pickup-radio {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pickup-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1.5px solid #d1d5db;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+.pickup-option:hover { background: #f0fdf4; border-color: #86efac; }
+.pickup-option input { width: auto; }
+.pickup-option.selected { border-color: #15803d; background: #f0fdf4; }
+.total-section {
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.07);
+  padding: 16px;
+  margin-top: 16px;
+}
+.total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  font-size: 0.95rem;
+}
+.total-row.grand {
+  border-top: 2px solid #e5e7eb;
+  margin-top: 8px;
+  padding-top: 12px;
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: #15803d;
+}
+.checkout-btn {
+  width: 100%;
+  background: #f97316;
+  color: white;
+  border: none;
+  padding: 16px;
+  border-radius: 14px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  margin-top: 16px;
+  transition: background 0.2s, transform 0.1s;
+}
+.checkout-btn:hover { background: #ea6c10; }
+.checkout-btn:active { transform: scale(0.98); }
+.checkout-btn:disabled { background: #d1d5db; cursor: not-allowed; }
+.empty-cart {
+  text-align: center;
+  padding: 60px 20px;
+  color: #6b7280;
+}
+.empty-cart .icon { font-size: 4rem; margin-bottom: 16px; }
+.back-shop {
+  display: inline-block;
+  margin-top: 16px;
+  background: #15803d;
+  color: white;
+  padding: 12px 24px;
+  border-radius: 12px;
+  text-decoration: none;
+  font-weight: 700;
+}
+.success-screen {
+  text-align: center;
+  padding: 60px 20px;
+  display: none;
+}
+.success-screen .icon { font-size: 4rem; margin-bottom: 16px; }
+.success-screen h2 { color: #15803d; margin-bottom: 8px; font-size: 1.4rem; }
+.success-screen p { color: #6b7280; margin-bottom: 20px; }
+.error-banner {
+  background: #fee2e2;
+  color: #dc2626;
+  padding: 10px 14px;
+  border-radius: 10px;
+  margin-bottom: 12px;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+.min-order-banner {
+  background: #fff7ed;
+  color: #c2410c;
+  border: 2px solid #fed7aa;
+  padding: 12px 14px;
+  border-radius: 12px;
+  margin-bottom: 12px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .header-inner { max-width: 700px; margin: 0 auto; }
+  .container { max-width: 700px; }
+  /* Two-column for order summary + form */
+  #checkoutForm { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  #checkoutForm .form-section:first-child { grid-column: 1 / -1; }
+  #checkoutForm .total-section { grid-column: 1; }
+  #checkoutForm .form-section:nth-child(2) { grid-row: 2; grid-column: 2; }
+  #checkoutForm .form-section:nth-child(3) { grid-row: 2; grid-column: 1; }
+  #checkoutForm #pickupInfoSection { grid-column: 1 / -1; }
+  .checkout-btn { grid-column: 1 / -1; }
+}
+.skip-link { position:absolute; top:-40px; left:0; background:#15803d; color:white; padding:8px 16px; z-index:9999; border-radius:0 0 8px 0; text-decoration:none; font-weight:700; }
+.skip-link:focus { top:0; }
+*:focus { outline: 3px solid #15803d; outline-offset: 2px; }
+
+/* Responsive modal */
+@media (max-width: 599px) {
+  #growFormModal > div {
+    width: 100% !important;
+    border-radius: 20px 20px 0 0 !important;
+    max-height: 92vh;
+    overflow-y: auto;
+  }
+}
+@media (min-width: 600px) {
+  #growFormModal > div {
+    border-radius: 20px !important;
+    margin-bottom: 40px;
+  }
+}
+
+    .time-slot-btn:has(input:checked) {
+      border-color: #16a34a !important;
+      background: #f0fdf4;
+      color: #15803d;
+    }
+</style>
+</head>
+<body>
+<a href="#main-content" class="skip-link">דלג לתוכן הראשי</a>
+<header>
+  <div class="header-inner">
+    <a href="index.html" class="back-btn" aria-label="חזרה לחנות">→</a>
+    <h1>🛒 עגלת קניות</h1>
+  </div>
+</header>
+<main id="main-content">
+<div class="container">
+  <div id="successScreen" class="success-screen">
+    <div class="icon">✅</div>
+    <h2>ההזמנה התקבלה!</h2>
+    <p>תודה רבה! נצור איתך קשר לתיאום האיסוף.</p>
+    <div id="successPickupInfo" style="background:#f0fdf4;border:2px solid #86efac;border-radius:12px;padding:12px;margin:12px 0;font-weight:600;color:#15803d"></div>
+    <a href="index.html" class="back-shop">חזרה לחנות</a>
+  </div>
+
+  <div id="cartContent">
+    <div id="errorBanner" style="display:none" class="error-banner">⚠️ אירעה שגיאה, נסה שנית</div>
+    <div id="minOrderBanner" class="min-order-banner"></div>
+
+    <div id="emptyCart" class="empty-cart" style="display:none">
+      <div class="icon">🛒</div>
+      <div>העגלה ריקה</div>
+      <a href="index.html" class="back-shop">לחנות</a>
+    </div>
+
+    <div id="cartItems"></div>
+
+    <div id="checkoutForm" style="display:none">
+      <div class="form-section" id="contactSection">
+        <div class="section-title">📋 פרטי הזמנה</div>
+        <div class="form-group">
+          <label for="customerName">שם מלא</label>
+          <input type="text" id="customerName" placeholder="ישראל ישראלי">
+        </div>
+        <div class="form-group">
+          <label for="customerPhone">טלפון</label>
+          <input type="tel" id="customerPhone" placeholder="050-0000000">
+        </div>
+      </div>
+
+      <div class="form-section">
+        <div class="section-title">📍 נקודת איסוף <span id="pickupInfoText" style="font-size:0.8rem;font-weight:600;color:#6b7280;margin-right:6px"></span></div>
+        <div class="pickup-radio" id="pickupLocations">
+          <div style="color:#9ca3af;font-size:.9rem">טוען...</div>
+        </div>
+      </div>
+
+
+
+      <div class="total-section">
+        <div class="section-title">💳 סיכום</div>
+        <div id="totalRows"></div>
+        <div class="total-row grand">
+          <span>סה"כ לתשלום</span>
+          <span id="grandTotal">0 ₪</span>
+        </div>
+      </div>
+
+      <!-- Payment buttons -->
+      <div id="paymentButtons" style="display:flex;flex-direction:column;gap:12px;margin-top:4px">
+        <button class="checkout-btn" id="growBtn" onclick="openGrowForm()" style="background:#1d4ed8">💳 שלם עם כרטיס אשראי (Grow)</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- GROW PAYMENT IFRAME PANEL -->
+<script>
+var shopUser = JSON.parse(localStorage.getItem('shopUser') || 'null');
+if (!shopUser || shopUser.isGuest) {
+  alert('יש להירשם כדי לבצע הזמנה');
+  window.location.href = '/shop/login.html';
+}
+const API = '/api/shop';
+// Check if shop is closed
+fetch(API + '/settings').then(r=>r.json()).then(function(settings){
+  if (settings.isClosed) {
+    var msg = settings.closedMessage || '🚫 האתר סגור להזמנות כרגע — נפתח ביום שלישי 17.3 בשעה 10:00';
+    var banner = document.createElement('div');
+    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(135deg,#991b1b,#7f1d1d);color:white;text-align:center;padding:16px 20px;font-size:1rem;font-weight:800;direction:rtl;box-shadow:0 4px 20px rgba(0,0,0,0.4)';
+    banner.textContent = msg;
+    document.body.insertAdjacentElement('afterbegin', banner);
+    var btn = document.getElementById('checkoutBtn');
+    if (btn) { btn.disabled = true; btn.textContent = '🚫 האתר סגור להזמנות'; btn.style.opacity='0.5'; }
+  }
+}).catch(function(){});
+let cart = JSON.parse(localStorage.getItem('yedidya_cart') || '[]');
+let shopProducts = []; // loaded by fixAndRender
+function getBasePid(item) {
+  var pid = item.productId || item.id || "";
+  if (!pid && item.cartKey) pid = item.cartKey.split("_")[0];
+  return pid;
+}
+function calcItemTotal(item) {
+  var basePid = getBasePid(item);
+  var prod = shopProducts.find(function(p){ return p._id === basePid; });
+  var deals = (prod && prod.quantityDeals) ? prod.quantityDeals : (item.quantityDeals || []);
+  var unitPrice = item.price;
+  if (!deals || !deals.length) return Math.round(unitPrice * item.qty * 100) / 100;
+  // Sum qty across ALL cart items with same base product (for cross-variant deals)
+  var totalGroupQty = cart.filter(function(i){ return getBasePid(i) === basePid; })
+    .reduce(function(s,i){ return s + i.qty; }, 0);
+  var sorted = deals.slice().sort(function(a,b){ return b.qty - a.qty; });
+  var groupTotal = 0, rem = totalGroupQty;
+  for (var di = 0; di < sorted.length; di++) {
+    var d = sorted[di];
+    if (d.qty <= rem) { var sets = Math.floor(rem / d.qty); groupTotal += sets * d.price; rem -= sets * d.qty; }
+  }
+  groupTotal += rem * unitPrice;
+  return Math.round((item.qty / totalGroupQty) * groupTotal * 100) / 100;
+}
+
+// Fix pack-priced items before first render
+async function fixAndRender() {
+  try {
+    const products = await fetch('/api/shop/products').then(function(r){return r.json();});
+    shopProducts = Array.isArray(products) ? products : [];
+    // Enrich existing cart items with quantityDeals from shopProducts (fixes old localStorage items)
+    cart.forEach(function(item) {
+      var pid = item.productId || item.id || '';
+      if (!pid && item.cartKey) pid = item.cartKey.split('_')[0];
+      if (!pid) return;
+      var prod = shopProducts.find(function(p){ return p._id === pid; });
+      if (prod && prod.quantityDeals && prod.quantityDeals.length) {
+        item.quantityDeals = prod.quantityDeals;
+      }
+    });
+    localStorage.setItem('yedidya_cart', JSON.stringify(cart));
+    const packProds = products.filter(function(p){ return p.packSize && p.packSize > 1; });
+    if (packProds.length) {
+      cart.forEach(function(item) {
+        var prod = packProds.find(function(p){ return p._id === item.productId; });
+        if (!prod) return;
+        var correctPrice = prod.shopPrice / prod.packSize;
+        if (Math.abs(item.price - correctPrice) > 1) {
+          item.price = correctPrice;
+        }
+      });
+      localStorage.setItem('yedidya_cart', JSON.stringify(cart));
+    }
+  } catch(e) {}
+  renderCart();
+}
+let pickupLocations = [];
+let selectedPickup = '';
+let pickupInfoText = '';
+let minOrderAmount = 0;
+
+function saveCart() { localStorage.setItem('yedidya_cart', JSON.stringify(cart)); }
+
+function renderCart() {
+  const itemsEl = document.getElementById('cartItems');
+  const emptyEl = document.getElementById('emptyCart');
+  const formEl = document.getElementById('checkoutForm');
+
+  if (!cart.length) {
+    emptyEl.style.display = 'block';
+    itemsEl.style.display = 'none';
+    formEl.style.display = 'none';
+    return;
+  }
+  emptyEl.style.display = 'none';
+  itemsEl.style.display = 'block';
+  formEl.style.display = 'block';
+
+  itemsEl.innerHTML = '<div class="section-title" style="margin-bottom:12px">🛍️ הפריטים שלך</div>' +
+    cart.map((item, idx) => {
+      const img = item.imageUrl
+        ? '<img src="' + item.imageUrl + '" class="cart-item-img">'
+        : '<div class="cart-item-img-placeholder">🌿</div>';
+      const variantTag = item.variant ? '<span style="font-size:0.78rem;background:#e0f2fe;color:#0369a1;padding:2px 7px;border-radius:10px;margin-right:4px">' + item.variant + '</span>' : '';
+      return '<div class="cart-item">' + img +
+        '<div class="cart-item-info">' +
+        '<div class="cart-item-name">' + item.name + variantTag + '</div>' +
+        (function(it){
+        var lineTotal = calcItemTotal(it);
+        var regularTotal = Math.round(it.price * it.qty * 100) / 100;
+        var hasDealDiscount = it.qty > 1 && lineTotal < regularTotal;
+        var unitStr = hasDealDiscount
+          ? (' <span style="color:#15803d;font-size:.8rem;font-weight:600">במקום ' + regularTotal + ' ₪ 🏷️</span>')
+          : (it.qty > 1 ? (' <span style="color:#9ca3af;font-size:.8rem">(' + it.price + ' ₪ ליח\')</span>') : '');
+        return '<div class="cart-item-price">' + lineTotal + ' ₪' + unitStr + '</div>';
+      })(item) +
+        '</div>' +
+        '<div class="qty-control">' +
+        '<button class="qty-btn" onclick="changeQty(' + idx + ',-1)">−</button>' +
+        '<span class="qty-val">' + item.qty + '</span>' +
+        '<button class="qty-btn" onclick="changeQty(' + idx + ',1)">+</button>' +
+        '</div>' +
+        '<button class="remove-btn" onclick="removeItem(' + idx + ')">🗑️</button>' +
+        '</div>';
+    }).join('');
+
+  renderTotal();
+}
+
+function changeQty(idx, delta) {
+  cart[idx].qty += delta;
+  if (cart[idx].qty <= 0) cart.splice(idx, 1);
+  saveCart();
+  
+fixAndRender();
+}
+function removeItem(idx) {
+  cart.splice(idx, 1);
+  saveCart();
+  renderCart();
+}
+function renderTotal() {
+  const rows = document.getElementById('totalRows');
+  const grand = document.getElementById('grandTotal');
+  const summaryItems = document.getElementById('orderSummaryItems');
+  const btn = document.getElementById('checkoutBtn');
+  const banner = document.getElementById('minOrderBanner');
+  let total = 0;
+  const rowsHtml = cart.map(i => {
+    const sub = calcItemTotal(i);
+    total += sub;
+    const variantTag = i.variant ? ' (' + i.variant + ')' : '';
+    return '<div class="total-row"><span>' + i.name + variantTag + ' x' + i.qty + '</span><span>' + sub + ' ₪</span></div>';
+  }).join('');
+  rows.innerHTML = rowsHtml;
+  // Order summary box above total
+  if (summaryItems) {
+    summaryItems.innerHTML = cart.map(i => {
+      const variantTag = i.variant ? '<span style="font-size:.75rem;color:#0369a1;background:#e0f2fe;padding:1px 7px;border-radius:8px;margin-right:4px"> ' + i.variant + '</span>' : '';
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f0fdf4;font-size:.88rem">' +
+        '<span>' + (i.imageUrl ? '<img src="'+i.imageUrl+'" style="width:28px;height:28px;border-radius:6px;object-fit:cover;margin-left:6px;vertical-align:middle">' : '') +
+        variantTag + '<strong>' + i.name + '</strong> × ' + i.qty + '</span>' +
+        '<span style="font-weight:700;color:#15803d">₪' + calcItemTotal(i).toFixed(2) + '</span>' +
+        '</div>';
+    }).join('');
+  }
+  grand.textContent = '₪' + total.toFixed(2);
+  if (minOrderAmount > 0 && total < minOrderAmount) {
+    var missing = (minOrderAmount - total).toFixed(2);
+    banner.style.display = 'block';
+    banner.textContent = '⚠️ הזמנה מינימלית היא ₪' + minOrderAmount + ' — חסר לך ₪' + missing;
+    if (btn) { btn.disabled = true; }
+  } else {
+    banner.style.display = 'none';
+    if (btn) { btn.disabled = false; }
+  }
+}
+
+async function loadPickupInfo() {
+  try {
+    const res = await fetch(API + '/settings');
+    const settings = await res.json();
+    pickupLocations = settings.pickupLocations || [];
+    pickupInfoText = settings.pickupInfo || '';
+    minOrderAmount = parseFloat(settings.minOrderAmount) || 0;
+
+    // Pickup info is now per-location (shown inline in each radio option)
+    const textEl = document.getElementById('pickupInfoText');
+    if (textEl) textEl.textContent = '';
+
+    // Populate pickup location radio
+    const el = document.getElementById('pickupLocations');
+    if (!pickupLocations.length) {
+      if (el) el.innerHTML = '<div style="color:#9ca3af;font-size:.9rem">אין נקודות איסוף מוגדרות</div>';
+      return;
+    }
+    // Pre-select user's saved pickup point
+    const userPickup = (JSON.parse(localStorage.getItem('shopUser') || '{}').pickupPoint || '').trim();
+    // If user has a saved pickup point, lock to it — don't show other options
+    if (userPickup) {
+      const matchedPt = pickupLocations.find(l => l.name === userPickup) || { name: userPickup };
+      selectedPickup = matchedPt.name;
+      if (el) el.innerHTML =
+        (function() {
+        var dayNames2 = ['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'];
+        var dtStr = '';
+        if (matchedPt.collectionDate) {
+          var d2 = new Date(matchedPt.collectionDate);
+          var ts2 = (matchedPt.collectionTimeFrom && matchedPt.collectionTimeTo) ? ' בין ' + matchedPt.collectionTimeFrom + '–' + matchedPt.collectionTimeTo : '';
+          dtStr = '<span style="display:block;font-size:.78rem;color:#15803d;font-weight:700;margin-top:2px">📅 יום ' + dayNames2[d2.getDay()] + ' ' + d2.getDate() + '/' + (d2.getMonth()+1) + ts2 + '</span>';
+        }
+        return '<label class="pickup-option selected" style="pointer-events:none;opacity:.9">' +
+          '<input type="radio" name="pickup" value="' + matchedPt.name + '" checked>' +
+          '<span>' + matchedPt.name + ' ✓' + dtStr + '</span>' +
+          '</label>';
+      })();
+    } else {
+      // No saved pickup point — show all options but DON'T pre-select any
+      // Force user to actively pick their location
+      selectedPickup = '';
+      var dayNames = ['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'];
+      function fmtLocDate(loc) {
+        if (!loc.collectionDate) return '';
+        var d = new Date(loc.collectionDate);
+        var ts = (loc.collectionTimeFrom && loc.collectionTimeTo) ? ' בין ' + loc.collectionTimeFrom + '–' + loc.collectionTimeTo : (loc.collectionTimeFrom ? ' משעה ' + loc.collectionTimeFrom : '');
+        return '<span style="display:block;font-size:.78rem;color:#15803d;font-weight:700;margin-top:2px">📅 יום ' + dayNames[d.getDay()] + ' ' + d.getDate() + '/' + (d.getMonth()+1) + ts + '</span>';
+      }
+      if (el) el.innerHTML =
+        '<div style="background:#fef3c7;border:1.5px solid #f59e0b;border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:.88rem;font-weight:700;color:#92400e">⚠️ נא לבחור נקודת איסוף</div>' +
+        pickupLocations.map((loc, i) =>
+          '<label class="pickup-option" id="pickup_' + i + '" onclick="selectPickup(' + i + ')">' +
+          '<input type="radio" name="pickup" value="' + loc.name + '">' +
+          '<span>' + loc.name + fmtLocDate(loc) + '</span>' +
+          '</label>'
+        ).join('');
+    }
+  } catch(e) {}
+}
+
+function selectPickup(idx) {
+  document.querySelectorAll('.pickup-option').forEach((el,i) => el.classList.toggle('selected', i===idx));
+  selectedPickup = pickupLocations[idx].name;
+}
+
+async function sendOrder() {
+  const cart = JSON.parse(localStorage.getItem('yedidya_cart') || localStorage.getItem('shopCart') || '[]');
+  if (!cart.length) return alert('העגלה ריקה');
+  var _loggedUser = JSON.parse(localStorage.getItem('shopUser') || 'null');
+  var name, phone;
+  if (_loggedUser && !_loggedUser.isGuest && _loggedUser.name && _loggedUser.phone) {
+    // Logged in: use stored data directly
+    name = _loggedUser.name;
+    phone = _loggedUser.phone;
+  } else {
+    // Guest or no user: require form fields
+    const nameEl = document.getElementById('customerName');
+    const phoneEl = document.getElementById('customerPhone');
+    name = nameEl ? nameEl.value.trim() : '';
+    phone = phoneEl ? phoneEl.value.trim() : '';
+    if (!name || !phone) return alert('נא למלא שם וטלפון');
+  }
+  
+  const btn = document.getElementById('checkoutBtn');
+  btn.disabled = true;
+  btn.textContent = 'שולח...';
+  
+  // Validate pickup location before submitting
+  const _pickupVal = selectedPickup || document.querySelector('input[name="pickup"]:checked')?.value || _loggedUser?.pickupPoint || _loggedUser?.pickupLocation || '';
+  if (!_pickupVal) {
+    btn.disabled = false;
+    btn.textContent = 'שלח הזמנה ✓';
+    alert('⚠️ נא לבחור נקודת איסוף לפני שליחת ההזמנה');
+    document.getElementById('pickupLocations')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/shop/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        customerName: name,
+        phone: (function(p){ p=p.replace(/[^0-9]/g,''); return p.startsWith('972') ? ('0'+p.slice(3)) : p; })(phone),
+        items: cart,
+        pickupLocation: _pickupVal,
+        totalAmount: Math.round(cart.reduce((s,i) => s + calcItemTotal(i), 0) * 100) / 100,
+        paymentMethod: 'pending'
+      })
+    });
+    const d = await res.json();
+    if (d.orderId || d._id) {
+      localStorage.removeItem('shopCart'); localStorage.removeItem('yedidya_cart');
+      window.location.href = '/shop/success.html?orderId=' + (d.orderId || d._id) + '&name=' + encodeURIComponent(name);
+    } else {
+      throw new Error('no order id');
+    }
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = 'שלח הזמנה ✓';
+    alert('שגיאה בשליחת ההזמנה, נסה שוב');
+  }
+}
+
+function openGrowForm() {
+  const cart = JSON.parse(localStorage.getItem('yedidya_cart') || '[]');
+  if (!cart.length) return alert('העגלה ריקה');
+
+  // Pre-fill from logged-in user
+  const su = localStorage.getItem('shopUser');
+  if (su) {
+    try {
+      const u = JSON.parse(su);
+      if (u.name) {
+        const parts = u.name.trim().split(' ');
+        document.getElementById('gf-fname').value = parts[0] || '';
+        document.getElementById('gf-lname').value = parts.slice(1).join(' ') || '';
+      }
+      if (u.phone) document.getElementById('gf-phone').value = u.phone;
+      if (u.email) document.getElementById('gf-email').value = u.email;
+    } catch(e) {}
+  }
+
+  // Fill summary
+  // Recalculate prices using pack pricing for items with packSize
+const total = Math.round(cart.reduce((s,i) => s + calcItemTotal(i), 0) * 100) / 100;
+  document.getElementById('growTotal').textContent = total.toLocaleString('he-IL') + ' ₪';
+  document.getElementById('growSummaryItems').innerHTML = cart.map(i =>
+    `<div style="display:flex;gap:10px;align-items:center;margin-bottom:12px">
+      ${i.imageUrl ? `<img src="${i.imageUrl}" style="width:50px;height:50px;object-fit:cover;border-radius:8px;border:1px solid #e2e8f0">` : ''}
+      <div style="flex:1">
+        <div style="font-weight:700;font-size:0.88rem;color:#1e293b">${i.name}</div>
+        ${i.variant ? `<div style="font-size:0.78rem;color:#64748b">${i.variant}</div>` : ''}
+        <div style="color:#15803d;font-weight:600;font-size:0.88rem">${i.price} ₪ × ${i.qty}</div>
+      </div>
+    </div>`
+  ).join('');
+
+  document.getElementById('growFormModal').style.display = 'flex';
+}
+
+function closeGrowForm() {
+  document.getElementById('growFormModal').style.display = 'none';
+}
+
+async function submitGrowForm() {
+  const fname = document.getElementById('gf-fname').value.trim();
+  const lname = document.getElementById('gf-lname').value.trim();
+  const phone = document.getElementById('gf-phone').value.trim();
+  const email = document.getElementById('gf-email').value.trim();
+  const errEl = document.getElementById('gf-error');
+  errEl.style.display = 'none';
+
+  const missingFields = [];
+  if (!fname) missingFields.push('שם פרטי');
+  if (!lname) missingFields.push('שם משפחה');
+  if (!phone) missingFields.push('טלפון');
+  if (!email) missingFields.push('אימייל');
+  else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) missingFields.push('אימייל תקין');
+  if (missingFields.length) {
+    errEl.style.display = 'block';
+    errEl.textContent = 'נא למלא שדות חובה: ' + missingFields.join(', ');
+    // Highlight missing fields
+    if (!fname) document.getElementById('gf-fname').style.borderColor = '#ef4444';
+    if (!lname) document.getElementById('gf-lname').style.borderColor = '#ef4444';
+    if (!phone) document.getElementById('gf-phone').style.borderColor = '#ef4444';
+    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) document.getElementById('gf-email').style.borderColor = '#ef4444';
+    return;
+  }
+  // Reset borders
+  ['gf-fname','gf-lname','gf-phone','gf-email'].forEach(id => {
+    document.getElementById(id).style.borderColor = '#d1d5db';
+  });
+
+  const btn = document.getElementById('gf-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ יוצר קישור תשלום...';
+
+  const cart = JSON.parse(localStorage.getItem('yedidya_cart') || '[]');
+  const _su2 = JSON.parse(localStorage.getItem('shopUser') || '{}');
+  const _pLoc = selectedPickup || (document.querySelector('input[name="pickup"]:checked') && document.querySelector('input[name="pickup"]:checked').value) || _su2.pickupPoint || _su2.pickupLocation || '';
+  if (!_pLoc) {
+    btn.disabled = false;
+    btn.textContent = '💳 לתשלום';
+    errEl.style.display = 'block';
+    errEl.textContent = '⚠️ נא לבחור נקודת איסוף לפני התשלום';
+    closeGrowForm();
+    document.getElementById('pickupLocations')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+  const _gfPhone = (function(p){ p=p.replace(/[^0-9]/g,''); return p.startsWith('972') ? ('0'+p.slice(3)) : p; })(phone);
+  const _gfTotal = Math.round(cart.reduce(function(s,i){ return s + calcItemTotal(i); }, 0) * 100) / 100;
+  // Step 1: Save order first to get orderId (for Grow success URL)
+  var _orderId = null;
+  try {
+    var _orRes = await fetch('/api/shop/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        customerName: fname + ' ' + lname,
+        phone: _gfPhone,
+        email: email,
+        items: cart,
+        pickupLocation: _pLoc,
+        totalAmount: _gfTotal,
+        paymentMethod: 'grow',
+        status: 'pending_payment'
+      })
+    });
+    var _orData = await _orRes.json();
+    _orderId = _orData.orderId || _orData._id || null;
+  } catch(e2) {}
+  var _successUrl = 'https://buypower.co.il/shop/success.html' +
+    (_orderId ? ('?orderId=' + _orderId + '&name=' + encodeURIComponent(fname + ' ' + lname)) : '');
+  try {
+    const res = await fetch('/api/shop/payment/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'הזמנה — נלחמים ביוקר המחיה',
+        full_name: fname + ' ' + lname,
+        phone: _gfPhone,
+        email,
+        invoice_name: fname + ' ' + lname,
+        chargeType: 1,
+        payment_type: 'Payments',
+        max_or_custom: 'Max Payments',
+        products: cart.map(item => ({
+          catalog_number: item._id || item.id || item.productId || (item.cartKey ? item.cartKey.split('_')[0] : '1'),
+          name: item.name + (item.variant ? ' - ' + item.variant : '') + (item.qty > 1 ? ' ×' + item.qty : ''),
+          price: calcItemTotal(item),
+          quantity: 1,
+          minimum_quantity: 1,
+          productUrl: item.imageUrl || '',
+          vatType: 1,
+          description: item.variant || ''
+        })),
+        success_url: _successUrl,
+        fail_url: 'https://buypower.co.il/shop/cart.html?error=1' + (_orderId ? '&orderId=' + _orderId : '')
+      })
+    });
+    const data = await res.json();
+    if (data.paymentUrl) {
+      sessionStorage.setItem('pendingCustomer', JSON.stringify({ fname, lname, phone, email }));
+      localStorage.setItem('yedidya_customer_name', fname + ' ' + lname);
+      // Clear cart before going to Grow payment
+      localStorage.removeItem('yedidya_cart');
+      localStorage.removeItem('shopCart');
+      window.location.href = data.paymentUrl;
+    } else {
+      errEl.style.display = 'block';
+      errEl.textContent = 'שגיאה: ' + (data.error || 'לא התקבל קישור תשלום');
+    }
+  } catch(e) {
+    errEl.style.display = 'block';
+    errEl.textContent = 'שגיאת רשת: ' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '💳 המשך לתשלום מאובטח';
+  }
+}
+
+document.getElementById('growFormModal')?.addEventListener('click', function(e) {
+  if (e.target === this) closeGrowForm();
+});
+
+// Check success param
+if (new URLSearchParams(location.search).get('success')) {
+  localStorage.removeItem('yedidya_cart');
+  document.getElementById('cartContent').style.display = 'none';
+  document.getElementById('successScreen').style.display = 'block';
+}
+if (new URLSearchParams(location.search).get('error')) {
+  document.getElementById('errorBanner').style.display = 'block';
+}
+
+loadPickupInfo();
+fixAndRender();
+</script>
+<script>
+// Hide contact form if logged in
+(function() {
+  var su = localStorage.getItem('shopUser');
+  if (!su) return;
+  var u = JSON.parse(su);
+  if (u && !u.isGuest && u.name) {
+    var sec = document.getElementById('contactSection');
+    if (sec) {
+      sec.innerHTML = '<div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:12px;padding:14px 18px;display:flex;align-items:center;gap:12px">' +
+        '<span style="font-size:2rem">👤</span>' +
+        '<div><div style="font-weight:800;font-size:1.1rem;color:#15803d">' + u.name + '</div>' +
+        '<div style="font-size:14px;color:#6b7280;margin-top:2px">' + (u.phone||'') + '</div></div>' +
+        '</div>';
+    }
+  }
+})();
+</script>
+
+</main>
+
+<!-- Grow Payment Form Modal -->
+<div id="growFormModal" id="growModalOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:flex-end;justify-content:center;direction:rtl">
+  <div style="background:white;overflow:hidden;width:100%;max-width:500px;max-height:92vh;display:flex;flex-direction:column;box-shadow:0 -8px 40px rgba(0,0,0,0.2);border-radius:20px 20px 0 0">
+    <!-- Left: summary -->
+    <div id="growSidebar" style="display:none">
+      <h3 style="margin:0 0 16px;font-size:1rem;font-weight:800;color:#1e293b">🛒 סיכום הזמנה</h3>
+      <div id="growSummaryItems"></div>
+      <div style="border-top:2px solid #e2e8f0;margin-top:16px;padding-top:12px;display:flex;justify-content:space-between;font-weight:800;font-size:1.1rem">
+        <span>סה"כ</span><span id="growTotal" style="color:#15803d"></span>
+      </div>
+    </div>
+    <!-- Right: form -->
+    <div style="flex:1;padding:16px 16px 24px;overflow-y:auto">
+      <button onclick="closeGrowForm()" style="float:left;background:none;border:none;font-size:1.4rem;cursor:pointer;color:#94a3b8;line-height:1">✕</button>
+      <h2 style="margin:0 0 6px;font-size:1.3rem;font-weight:800;color:#1e293b">פרטי הזמנה</h2>
+      <p style="margin:0 0 20px;color:#64748b;font-size:0.9rem">מלא את הפרטים לפני המעבר לתשלום</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <div>
+          <label style="display:block;font-size:0.85rem;font-weight:600;color:#374151;margin-bottom:4px">שם פרטי <span style="color:#ef4444">*</span></label>
+          <input id="gf-fname" required placeholder="ישראל" style="width:100%;padding:10px 12px;border:1.5px solid #d1d5db;border-radius:10px;font-size:1rem;font-family:inherit;direction:rtl;box-sizing:border-box">
+        </div>
+        <div>
+          <label style="display:block;font-size:0.85rem;font-weight:600;color:#374151;margin-bottom:4px">שם משפחה <span style="color:#ef4444">*</span></label>
+          <input id="gf-lname" required placeholder="ישראלי" style="width:100%;padding:10px 12px;border:1.5px solid #d1d5db;border-radius:10px;font-size:1rem;font-family:inherit;direction:rtl;box-sizing:border-box">
+        </div>
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="display:block;font-size:0.85rem;font-weight:600;color:#374151;margin-bottom:4px">אימייל <span style="color:#ef4444">*</span></label>
+        <input id="gf-email" type="email" placeholder="israel@example.com" style="width:100%;padding:10px 12px;border:1.5px solid #d1d5db;border-radius:10px;font-size:1rem;font-family:inherit;direction:ltr;box-sizing:border-box">
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="display:block;font-size:0.85rem;font-weight:600;color:#374151;margin-bottom:4px">טלפון <span style="color:#ef4444">*</span></label>
+        <input id="gf-phone" type="tel" placeholder="050-0000000" style="width:100%;padding:10px 12px;border:1.5px solid #d1d5db;border-radius:10px;font-size:1rem;font-family:inherit;direction:ltr;box-sizing:border-box">
+      </div>
+
+      <div id="gf-error" style="display:none;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:10px;color:#dc2626;font-size:0.875rem;margin-bottom:12px"></div>
+      <div style="padding-bottom:80px"></div><button onclick="submitGrowForm()" id="gf-btn" style="width:100%;padding:14px;background:linear-gradient(135deg,#1d4ed8,#2563eb);color:white;border:none;border-radius:12px;font-size:1.05rem;font-weight:700;cursor:pointer;font-family:inherit">
+        💳 המשך לתשלום מאובטח
+      </button>
+    </div>
+  </div>
+</div>
+
+<a href="https://wa.me/972538286227" target="_blank" class="wa-float" aria-label="WhatsApp">
+  <svg viewBox="0 0 24 24" fill="currentColor" style="width:28px;height:28px"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+</a>
+<style>
+.wa-float { position: fixed; bottom: 90px; right: 16px; background: #25D366; color: white; border-radius: 50%; width: 52px; height: 52px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.25); z-index: 900; text-decoration: none; }
+</style>
+</body>
+</html>

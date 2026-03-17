@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>מעקב איסוף — עובד</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0fdf4; min-height: 100vh; direction: rtl; color: #1a1a1a; }
+
+    /* LOGIN */
+    #loginScreen { display:flex; align-items:center; justify-content:center; min-height:100vh; padding:24px; }
+    .login-card { background:white; border-radius:20px; padding:36px 28px; max-width:380px; width:100%; box-shadow:0 4px 24px rgba(0,0,0,.08); }
+    .login-logo { text-align:center; font-size:2.5rem; margin-bottom:8px; }
+    .login-title { text-align:center; font-size:1.3rem; font-weight:800; color:#15803d; margin-bottom:4px; }
+    .login-sub { text-align:center; font-size:0.88rem; color:#6b7280; margin-bottom:28px; }
+    .field { margin-bottom:16px; }
+    .field label { display:block; font-size:0.85rem; color:#374151; font-weight:600; margin-bottom:6px; }
+    .field input { width:100%; padding:12px 14px; border:2px solid #e5e7eb; border-radius:10px; font-size:1rem; font-family:inherit; outline:none; transition:border .2s; }
+    .field input:focus { border-color:#15803d; }
+    .btn-login { width:100%; padding:13px; background:#15803d; color:white; border:none; border-radius:12px; font-size:1rem; font-weight:700; font-family:inherit; cursor:pointer; margin-top:8px; }
+    .btn-login:hover { background:#166534; }
+    #loginError { color:#dc2626; font-size:0.88rem; margin-top:10px; text-align:center; min-height:20px; }
+
+    /* APP */
+    #appScreen { display:none; }
+    .topbar { background:#15803d; color:white; padding:14px 20px; display:flex; justify-content:space-between; align-items:center; position:sticky; top:0; z-index:10; }
+    .topbar-title { font-size:1.1rem; font-weight:800; }
+    .topbar-user { font-size:0.85rem; opacity:.85; }
+    .logout-btn { background:rgba(255,255,255,.2); border:none; color:white; padding:7px 14px; border-radius:8px; cursor:pointer; font-size:0.85rem; font-family:inherit; font-weight:600; }
+
+    .main { padding:16px; max-width:680px; margin:0 auto; }
+
+    /* Filters */
+    .filters { background:white; border-radius:14px; padding:16px; margin-bottom:14px; box-shadow:0 1px 4px rgba(0,0,0,.06); }
+    .filters-row { display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; }
+    .fgroup { display:flex; flex-direction:column; gap:4px; flex:1; min-width:130px; }
+    .fgroup label { font-size:0.8rem; color:#6b7280; font-weight:600; }
+    .fgroup input, .fgroup select { padding:9px 12px; border:2px solid #e5e7eb; border-radius:9px; font-size:0.9rem; font-family:inherit; outline:none; }
+    .fgroup input:focus, .fgroup select:focus { border-color:#15803d; }
+    .btn-green { background:#15803d; color:white; border:none; border-radius:9px; padding:10px 18px; font-size:0.9rem; font-weight:700; font-family:inherit; cursor:pointer; white-space:nowrap; }
+    .btn-blue { background:#0369a1; color:white; border:none; border-radius:9px; padding:10px 18px; font-size:0.9rem; font-weight:700; font-family:inherit; cursor:pointer; white-space:nowrap; }
+
+    .search-box { width:100%; padding:10px 14px; border:2px solid #e5e7eb; border-radius:10px; font-size:.9rem; font-family:inherit; outline:none; margin-top:10px; }
+    .search-box:focus { border-color:#15803d; }
+
+    /* Stats bar */
+    #statsBar { background:white; border-radius:14px; padding:16px; margin-bottom:14px; text-align:center; box-shadow:0 1px 4px rgba(0,0,0,.06); }
+    .stats-num { font-size:2rem; font-weight:900; color:#15803d; }
+    .stats-label { color:#6b7280; font-size:0.9rem; margin-top:2px; }
+    .progress-bg { background:#e5e7eb; border-radius:99px; height:10px; margin-top:10px; overflow:hidden; }
+    .progress-fill { background:#15803d; height:100%; border-radius:99px; transition:width .4s; }
+
+    /* Section header */
+    .section-header { font-weight:700; font-size:0.88rem; padding:7px 12px; border-radius:9px; margin-bottom:8px; }
+    .section-pending { color:#dc2626; background:#fef2f2; }
+    .section-done { color:#15803d; background:#f0fdf4; margin-top:16px; }
+
+    /* Order card */
+    .order-card { background:white; border:2px solid #e5e7eb; border-radius:14px; padding:14px; margin-bottom:10px; }
+    .order-card.picked { border-color:#15803d; background:#f0fdf4; opacity:.8; }
+    .order-info { flex:1; min-width:0; }
+    .order-name { font-weight:700; font-size:1rem; }
+    .order-phone { color:#6b7280; font-size:0.85rem; margin-top:2px; }
+    .order-items { font-size:0.85rem; color:#374151; margin-top:4px; }
+    .order-picked-time { font-size:0.82rem; color:#15803d; font-weight:600; margin-top:4px; }
+    .order-actions { display:flex; flex-direction:column; gap:8px; align-items:stretch; min-width:160px; }
+    .btn-pickup { padding:11px 16px; border:none; border-radius:10px; cursor:pointer; font-size:0.9rem; font-family:inherit; font-weight:700; text-align:center; }
+    .btn-pickup.pending { background:#f3f4f6; color:#374151; }
+    .btn-pickup.done { background:#15803d; color:white; }
+    .btn-email { padding:8px 12px; background:#dbeafe; border:none; border-radius:8px; cursor:pointer; font-size:0.8rem; font-family:inherit; font-weight:600; color:#1e40af; text-align:center; }
+    .btn-sms { padding:8px 12px; background:#fef9c3; border:none; border-radius:8px; cursor:pointer; font-size:0.8rem; font-family:inherit; font-weight:600; color:#92400e; text-align:center; }
+
+    .order-row { display:flex; gap:12px; align-items:flex-start; }
+
+    .empty { text-align:center; padding:40px; color:#9ca3af; }
+
+    /* Modal */
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:999; display:flex; align-items:center; justify-content:center; padding:16px; }
+    .modal-box { background:white; border-radius:16px; padding:24px; max-width:500px; width:100%; max-height:80vh; overflow-y:auto; }
+    .modal-title { font-size:1.1rem; font-weight:800; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; }
+    .modal-close { background:none; border:none; font-size:1.4rem; cursor:pointer; color:#6b7280; }
+  </style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo">📍</div>
+    <div class="login-title">מעקב איסוף</div>
+    <div class="login-sub">כניסת עובד — נלחמים ביוקר המחיה</div>
+    <div class="field">
+      <label>מספר טלפון</label>
+      <input type="tel" id="empPhone" placeholder="05X-XXXXXXX" dir="ltr" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <div class="field">
+      <label>סיסמה</label>
+      <input type="password" id="empPass" placeholder="••••••" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="btn-login" onclick="doLogin()">כניסה →</button>
+    <div id="loginError"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="appScreen">
+  <div class="topbar">
+    <div>
+      <div class="topbar-title">📍 מעקב איסוף</div>
+      <div id="topbarPoint" style="font-size:0.82rem;opacity:.9;margin-top:2px"></div>
+      <div class="topbar-user" id="topbarUser"></div>
+    </div>
+    <button class="logout-btn" onclick="doLogout()">יציאה</button>
+  </div>
+
+  <div class="main">
+    <!-- Filters -->
+    <div class="filters">
+      <div class="filters-row">
+        <div class="fgroup">
+          <label>מתאריך</label>
+          <input type="date" id="dateFrom">
+        </div>
+        <div class="fgroup">
+          <label>עד תאריך</label>
+          <input type="date" id="dateTo">
+        </div>
+        <div class="fgroup" style="min-width:150px">
+          <label>נקודת איסוף</label>
+          <select id="pointFilter"><option value="">כל הנקודות</option></select>
+        </div>
+        <button class="btn-green" onclick="loadData()">🔄 רענן</button>
+        <button class="btn-blue" onclick="showSummary()">📊 סיכום</button>
+      </div>
+      <input type="text" class="search-box" id="searchBox" placeholder="חיפוש שם / טלפון..." oninput="renderList()">
+    </div>
+
+    <!-- Stats -->
+    <div id="statsBar"><div class="empty">טוען...</div></div>
+
+    <!-- List -->
+    <div id="ordersList"></div>
+  </div>
+</div>
+
+<script>
+const API = '/api/shop';
+let _token = '';
+let _data = null;
+
+function getMonday() {
+  const d = new Date();
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  return d.toISOString().split('T')[0];
+}
+function getSunday() {
+  const m = new Date(getMonday());
+  m.setDate(m.getDate() + 6);
+  return m.toISOString().split('T')[0];
+}
+
+// ── LOGIN ──
+async function doLogin() {
+  const phone = document.getElementById('empPhone').value.replace(/[^0-9]/g,'');
+  const pass = document.getElementById('empPass').value;
+  const errEl = document.getElementById('loginError');
+  errEl.textContent = '';
+  if (!phone || !pass) { errEl.textContent = 'נא למלא טלפון וסיסמה'; return; }
+  try {
+    const res = await fetch(API + '/users/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, password: pass })
+    });
+    const d = await res.json();
+    if (!d.token) { errEl.textContent = '❌ ' + (d.error || 'סיסמה שגויה'); return; }
+    const payload = JSON.parse(atob(d.token.split('.')[1]));
+    if (!payload.isEmployee && !payload.isAdmin) {
+      errEl.textContent = '❌ אין הרשאת גישה לאיזור זה'; return;
+    }
+    _token = d.token;
+    sessionStorage.setItem('empToken', _token);
+    showApp(payload);
+  } catch(e) { errEl.textContent = '❌ שגיאת רשת'; }
+}
+
+function showApp(payload) {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appScreen').style.display = 'block';
+  document.getElementById('topbarUser').textContent = payload.name || '';
+  // Init dates
+  document.getElementById('dateFrom').value = getMonday();
+  document.getElementById('dateTo').value = getSunday();
+  // If employee has assigned pickup point — lock filter
+  const empPoint = payload.pickupPoint || '';
+  if (empPoint && !payload.isAdmin) {
+    const sel = document.getElementById('pointFilter');
+    // Will be set after loadPickupPoints loads options, so store it
+    window._empPickupPoint = empPoint;
+    // Hide filter row for non-admin employees
+    sel.parentElement.style.display = 'none';
+    // Show it in topbar immediately
+    const topbarPoint = document.getElementById('topbarPoint');
+    if (topbarPoint) topbarPoint.textContent = '📌 ' + empPoint;
+  }
+  loadPickupPoints();
+  loadData();
+}
+
+function doLogout() {
+  sessionStorage.removeItem('empToken');
+  _token = '';
+  _data = null;
+  document.getElementById('appScreen').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('empPass').value = '';
+  document.getElementById('loginError').textContent = '';
+}
+
+// ── DATA ──
+async function loadPickupPoints() {
+  try {
+    const res = await fetch(API + '/pickup-points');
+    const pts = await res.json();
+    const sel = document.getElementById('pointFilter');
+    sel.innerHTML = '<option value="">כל הנקודות</option>';
+    (pts || []).forEach(p => {
+      const name = p.name || p;
+      const opt = document.createElement('option');
+      opt.value = name; opt.textContent = name;
+      sel.appendChild(opt);
+    });
+    // Auto-select employee's assigned point and lock
+    if (window._empPickupPoint) {
+      sel.value = window._empPickupPoint;
+    }
+  } catch(e) {}
+}
+
+async function loadData() {
+  const from = document.getElementById('dateFrom').value || getMonday();
+  const to = document.getElementById('dateTo').value || getSunday();
+  // Use locked point for employees, or selected filter
+  const point = window._empPickupPoint || document.getElementById('pointFilter').value || '';
+  // Update topbar
+  const topbarPoint = document.getElementById('topbarPoint');
+  if (topbarPoint && point) topbarPoint.textContent = '📌 ' + point;
+  document.getElementById('statsBar').innerHTML = '<div class="empty">⏳ טוען...</div>';
+  document.getElementById('ordersList').innerHTML = '';
+  try {
+    let url = API + '/admin/pickup-tracking?weekStart=' + encodeURIComponent(from);
+    if (to) url += '&weekEnd=' + encodeURIComponent(to + 'T23:59:59');
+    if (point) url += '&pickupPoint=' + encodeURIComponent(point);
+    const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + _token } });
+    const data = await res.json();
+    if (data.error) { document.getElementById('statsBar').innerHTML = '<div class="empty" style="color:red">❌ ' + data.error + '</div>'; return; }
+    _data = data;
+    renderStats(data.stats);
+    renderList();
+  } catch(e) {
+    document.getElementById('statsBar').innerHTML = '<div class="empty" style="color:red">❌ שגיאת רשת</div>';
+  }
+}
+
+function renderStats(stats) {
+  const total = stats.totalOrders || 0;
+  const picked = stats.pickedUpCount || 0;
+  const pct = total > 0 ? Math.round(picked / total * 100) : 0;
+  document.getElementById('statsBar').innerHTML = `
+    <div class="stats-num">✅ ${picked} מתוך ${total}</div>
+    <div class="stats-label">לקוחות אספו את ההזמנה</div>
+    <div class="progress-bg"><div class="progress-fill" style="width:${pct}%"></div></div>
+    <div style="font-size:0.82rem;color:#6b7280;margin-top:4px">${pct}%</div>`;
+}
+
+function renderList() {
+  if (!_data) return;
+  const q = (document.getElementById('searchBox').value || '').toLowerCase();
+  let orders = _data.orders.filter(o => {
+    if (!q) return true;
+    return (o.customerName||'').toLowerCase().includes(q) || (o.customerPhone||'').toLowerCase().includes(q);
+  });
+  const pending = orders.filter(o => !o.pickedUp).sort((a,b) => (a.customerName||'').localeCompare(b.customerName||'', 'he'));
+  const done = orders.filter(o => o.pickedUp).sort((a,b) => (a.customerName||'').localeCompare(b.customerName||'', 'he'));
+  const listEl = document.getElementById('ordersList');
+  if (!orders.length) { listEl.innerHTML = '<div class="empty">אין הזמנות בטווח זה</div>'; return; }
+  let html = '';
+  if (pending.length) {
+    html += `<div class="section-header section-pending">⏳ טרם נאספו — ${pending.length}</div>`;
+    html += pending.map(cardHtml).join('');
+  }
+  if (done.length) {
+    html += `<div class="section-header section-done">✅ נאספו — ${done.length}</div>`;
+    html += done.map(cardHtml).join('');
+  }
+  listEl.innerHTML = html;
+}
+
+function cardHtml(order) {
+  const items = (order.items || order.cart || []).map(i => (i.name||i.productName||'') + ' x' + (i.quantity||i.qty||1)).join(', ');
+  const pickedTime = order.pickedUpAt ? new Date(order.pickedUpAt).toLocaleString('he-IL',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
+  return `<div class="order-card ${order.pickedUp ? 'picked' : ''}">
+    <div class="order-row">
+      <div class="order-info">
+        <div class="order-name">${order.customerName || 'לא ידוע'}</div>
+        <div class="order-phone">${order.customerPhone || ''}</div>
+        <div class="order-items">${items}</div>
+        ${order.pickedUp ? `<div class="order-picked-time">✅ נאסף ב-${pickedTime}</div>` : ''}
+      </div>
+      <div class="order-actions">
+        <button class="btn-pickup ${order.pickedUp ? 'done' : 'pending'}" onclick="togglePickup('${order._id}', ${!!order.pickedUp})">
+          ${order.pickedUp ? '✅ נאסף' : '⬜ סמן איסוף'}
+        </button>
+        <button class="btn-email" onclick="sendEmail('${order._id}')">📧 פירוט הזמנה במייל</button>
+        <button class="btn-sms" onclick="sendSMS('${order._id}')">📱 SMS תזכורת לאיסוף</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ── ACTIONS ──
+async function togglePickup(orderId, current) {
+  try {
+    const res = await fetch(API + '/admin/pickup-tracking/' + orderId + '/mark', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + _token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pickedUp: !current })
+    });
+    const d = await res.json();
+    if (d.error) { alert('❌ ' + d.error); return; }
+    const idx = _data.orders.findIndex(o => o._id == orderId);
+    if (idx !== -1) {
+      _data.orders[idx].pickedUp = !current;
+      _data.orders[idx].pickedUpAt = !current ? new Date().toISOString() : null;
+      _data.stats.pickedUpCount = _data.orders.filter(o => o.pickedUp).length;
+    }
+    renderStats(_data.stats);
+    renderList();
+  } catch(e) { alert('שגיאת רשת'); }
+}
+
+async function sendEmail(orderId) {
+  if (!confirm('לשלוח פירוט הזמנה במייל?')) return;
+  try {
+    const res = await fetch(API + '/admin/pickup-tracking/' + orderId + '/send-email', {
+      method: 'POST', headers: { 'Authorization': 'Bearer ' + _token }
+    });
+    const d = await res.json();
+    d.ok ? alert('✅ מייל נשלח!') : alert('❌ ' + (d.error || 'שגיאה'));
+  } catch(e) { alert('שגיאת רשת'); }
+}
+
+async function sendSMS(orderId) {
+  if (!confirm('לשלוח SMS תזכורת לאיסוף?')) return;
+  try {
+    const res = await fetch(API + '/admin/pickup-tracking/' + orderId + '/send-sms', {
+      method: 'POST', headers: { 'Authorization': 'Bearer ' + _token }
+    });
+    const d = await res.json();
+    d.ok ? alert('✅ SMS נשלח!') : alert('❌ ' + (d.error || 'שגיאה'));
+  } catch(e) { alert('שגיאת רשת'); }
+}
+
+// ── SUMMARY ──
+function showSummary() {
+  if (!_data || !_data.orders) { alert('טען נתונים קודם'); return; }
+  const productMap = {};
+  _data.orders.forEach(o => {
+    (o.items || o.cart || []).forEach(item => {
+      const key = (item.name||item.productName||'לא ידוע') + (item.variant ? ' — ' + item.variant : '');
+      if (!productMap[key]) productMap[key] = { ordered:0, pickedUp:0 };
+      const qty = item.quantity || item.qty || 1;
+      productMap[key].ordered += qty;
+      if (o.pickedUp) productMap[key].pickedUp += qty;
+    });
+  });
+  const rows = Object.entries(productMap).sort((a,b) => b[1].ordered - a[1].ordered);
+  const total = _data.orders.length;
+  const picked = _data.orders.filter(o => o.pickedUp).length;
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-box">
+      <div class="modal-title">
+        📊 סיכום כללי
+        <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">✕</button>
+      </div>
+      <div style="background:#f0fdf4;border-radius:10px;padding:12px;text-align:center;margin-bottom:16px">
+        <span style="font-size:1.5rem;font-weight:900;color:#15803d">✅ ${picked} / ${total}</span>
+        <span style="color:#6b7280;margin-right:8px">הזמנות נאספו</span>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:.88rem">
+        <thead>
+          <tr style="background:#f9fafb">
+            <th style="padding:9px;text-align:right;border-bottom:2px solid #e5e7eb">מוצר</th>
+            <th style="padding:9px;text-align:center;border-bottom:2px solid #e5e7eb">הוזמן</th>
+            <th style="padding:9px;text-align:center;border-bottom:2px solid #e5e7eb">נאסף</th>
+            <th style="padding:9px;text-align:center;border-bottom:2px solid #e5e7eb">נותר</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(([name, v]) => `
+            <tr style="border-bottom:1px solid #f3f4f6">
+              <td style="padding:9px;font-weight:600">${name}</td>
+              <td style="padding:9px;text-align:center">${v.ordered}</td>
+              <td style="padding:9px;text-align:center;color:#15803d;font-weight:700">${v.pickedUp}</td>
+              <td style="padding:9px;text-align:center;color:${v.ordered-v.pickedUp>0?'#dc2626':'#15803d'};font-weight:700">${v.ordered-v.pickedUp}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+}
+
+// ── AUTO LOGIN ──
+(function() {
+  const t = sessionStorage.getItem('empToken');
+  if (t) {
+    try {
+      const payload = JSON.parse(atob(t.split('.')[1]));
+      if (payload.exp * 1000 > Date.now() && (payload.isEmployee || payload.isAdmin)) {
+        _token = t;
+        showApp(payload);
+        return;
+      }
+    } catch(e) {}
+    sessionStorage.removeItem('empToken');
+  }
+})();
+</script>
+</body>
+</html>

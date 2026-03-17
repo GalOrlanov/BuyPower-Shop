@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ההזמנה אושרה — נלחמים ביוקר המחיה</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, Arial, sans-serif;
+  background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+  min-height: 100vh;
+  direction: rtl;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.card {
+  background: white;
+  border-radius: 20px;
+  padding: 40px 24px;
+  text-align: center;
+  max-width: 380px;
+  width: 100%;
+  box-shadow: 0 4px 30px rgba(0,0,0,0.1);
+}
+.icon { font-size: 4rem; margin-bottom: 16px; }
+h1 { color: #15803d; font-size: 1.5rem; margin-bottom: 10px; }
+p { color: #6b7280; margin-bottom: 24px; line-height: 1.5; }
+.btn-back {
+  display: inline-block;
+  background: #15803d;
+  color: white;
+  padding: 12px 28px;
+  border-radius: 12px;
+  text-decoration: none;
+  font-weight: 700;
+  margin-bottom: 14px;
+}
+.btn-whatsapp {
+  display: block;
+  background: #25D366;
+  color: white;
+  padding: 14px 28px;
+  border-radius: 14px;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 1.05rem;
+  margin-top: 12px;
+  box-shadow: 0 4px 14px rgba(37,211,102,0.35);
+  transition: background 0.2s, transform 0.1s;
+}
+.btn-whatsapp:hover { background: #1ebc59; transform: scale(1.02); }
+
+@media (min-width: 768px) {
+  .card { max-width: 500px; }
+}
+.skip-link { position:absolute; top:-40px; left:0; background:#15803d; color:white; padding:8px 16px; z-index:9999; border-radius:0 0 8px 0; text-decoration:none; font-weight:700; }
+.skip-link:focus { top:0; }
+*:focus { outline: 3px solid #15803d; outline-offset: 2px; }
+</style>
+</head>
+<body>
+<a href="#main-content" class="skip-link">דלג לתוכן הראשי</a>
+<main id="main-content">
+<div class="card">
+  <div class="icon">✅</div>
+  <h1>ההזמנה אושרה!</h1>
+  <p>תשלומך התקבל בהצלחה. תודה רבה! נצור איתך קשר לתיאום האיסוף.</p>
+  <a href="index.html" class="btn-back">חזרה לחנות</a>
+  <a id="waBtn" onclick="sendWAOrder(); return false;" href="#" class="btn-whatsapp">📱 שלח לי אישור בוואטסאפ</a>
+</div>
+<script>
+localStorage.removeItem('yedidya_cart');
+const orderId = new URLSearchParams(location.search).get('orderId');
+if (orderId) {
+  fetch('/api/shop/orders/' + orderId + '/confirm', { method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}' }).catch(() => {});
+} else {
+
+}
+</script>
+
+<script>
+async function sendWAOrder() {
+  var params = new URLSearchParams(location.search);
+  var orderId = params.get('orderId');
+  var name = params.get('name') || '';
+  var msg = 'שלום ידידיה! 👋\n';
+  msg += 'שם: ' + decodeURIComponent(name) + '\n';
+  if (orderId) {
+    try {
+      var res = await fetch('/api/shop/orders/' + orderId);
+      var order = await res.json();
+      msg += '\n📦 ההזמנה שלי:\n';
+      if (order.items) {
+        order.items.forEach(function(item) {
+          msg += '• ' + item.name;
+          if (item.variant) msg += ' (' + item.variant + ')';
+          msg += ' × ' + item.qty + '\n';
+        });
+      }
+      msg += '\n💰 סה"כ: ₪' + (order.totalAmount || '') + '\n';
+      msg += '📍 ' + (order.pickupLocation || '') + '\n';
+    } catch(e) {
+      msg += 'מספר הזמנה: ' + orderId;
+    }
+  }
+  var a = document.getElementById('waBtn');
+  a.href = 'https://wa.me/972538286227?text=' + encodeURIComponent(msg);
+  a.target = '_blank';
+  a.removeAttribute('onclick');
+  a.click();
+}
+</script>
+
+</main>
+</body>
+</html>
