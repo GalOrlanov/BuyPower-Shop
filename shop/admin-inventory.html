@@ -278,8 +278,19 @@
         <input type="text" id="fSerial" placeholder="SKU / ברקוד">
       </div>
       <div class="form-row full">
-        <label>כתובת תמונה (URL)</label>
-        <input type="text" id="fImage" placeholder="https://...">
+        <label>תמונת מוצר</label>
+        <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap">
+          <div style="flex:1;min-width:200px">
+            <input type="text" id="fImage" placeholder="https://... (או העלה תמונה 👇)" oninput="previewImageUrl()">
+          </div>
+          <div>
+            <label for="fImageFile" style="display:inline-block;padding:9px 16px;background:#eff6ff;color:#1d4ed8;border:2px solid #93c5fd;border-radius:10px;cursor:pointer;font-size:.84rem;font-weight:700;white-space:nowrap">
+              📁 העלה תמונה
+            </label>
+            <input type="file" id="fImageFile" accept="image/*" style="display:none" onchange="uploadImageFile(this)">
+          </div>
+        </div>
+        <div id="fImageUploadStatus" style="margin-top:6px;font-size:.8rem"></div>
         <div id="fImagePreview" style="margin-top:8px"></div>
       </div>
       <div class="form-row full" style="border:2px solid #fef9c3;border-radius:12px;padding:14px;background:#fffbeb;margin-bottom:4px">
@@ -711,6 +722,7 @@ function clearForm() {
   setVat('exempt');
   document.getElementById('fUnit').value = "יח'";
   document.getElementById('fImagePreview').innerHTML = '';
+  document.getElementById('fImageUploadStatus').innerHTML = '';
   document.getElementById('fUnlimited').checked = false;
   document.getElementById('fPackSize').value = '1';
   document.getElementById('fFeatured').checked = false;
@@ -725,11 +737,46 @@ function populateModalCats() {
 }
 
 function updateImgPreview() {
-  const url = document.getElementById('fImage').value.trim();
-  const prev = document.getElementById('fImagePreview');
-  prev.innerHTML = url ? `<img src="${url}" class="img-preview" onerror="this.style.display='none'">` : '';
+  previewImageUrl();
 }
 document.getElementById('fImage').addEventListener('input', updateImgPreview);
+
+async function uploadImageFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const status = document.getElementById('fImageUploadStatus');
+  status.innerHTML = '⏳ מעלה תמונה...';
+  status.style.color = '#6b7280';
+  const formData = new FormData();
+  formData.append('image', file);
+  try {
+    const res = await fetch(API + '/upload-image', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (data.ok && data.imageUrl) {
+      document.getElementById('fImage').value = data.imageUrl;
+      status.innerHTML = '✅ תמונה הועלתה בהצלחה!';
+      status.style.color = '#15803d';
+      previewImageUrl();
+    } else {
+      status.innerHTML = '❌ שגיאה: ' + (data.error || 'העלאה נכשלה');
+      status.style.color = '#dc2626';
+    }
+  } catch(e) {
+    status.innerHTML = '❌ שגיאת רשת: ' + e.message;
+    status.style.color = '#dc2626';
+  }
+  input.value = '';
+}
+
+function previewImageUrl() {
+  const url = document.getElementById('fImage').value.trim();
+  const preview = document.getElementById('fImagePreview');
+  if (url) {
+    preview.innerHTML = '<img src="' + url + '" style="max-width:120px;max-height:120px;border-radius:10px;border:2px solid #d1fae5;object-fit:cover" onerror="this.style.display=\'none\'">';
+  } else {
+    preview.innerHTML = '';
+  }
+}
 
 async function saveItem() {
   const name = document.getElementById('fName').value.trim();

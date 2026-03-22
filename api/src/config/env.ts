@@ -22,5 +22,9 @@ export const env = {
     apiKey: process.env.GROW_API_KEY || '',
     secretKey: process.env.GROW_SECRET_KEY || '',
   },
+  tranzila: {
+    terminalName: process.env.TRANZILA_TERMINAL || '',
+    password: process.env.TRANZILA_PASSWORD || '', // TranzilaPW
+  },
   clientUrl: process.env.CLIENT_URL || 'http://localhost:8081',
 };

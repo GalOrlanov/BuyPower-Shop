@@ -7,6 +7,40 @@ const jwt = require('jsonwebtoken');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'shop_secret_2026';
 
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+const UPLOADS_DIR = process.env.UPLOADS_DIR || '/var/www/grouppurchase/uploads';
+const UPLOADS_URL_BASE = process.env.UPLOADS_URL_BASE || 'https://buypower.co.il/uploads';
+
+// Ensure uploads dir exists
+try { if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true }); } catch(e) {}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, UPLOADS_DIR),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || '.jpg';
+    const unique = Date.now() + '-' + Math.round(Math.random() * 1e6);
+    cb(null, 'prod-' + unique + ext);
+  }
+});
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) cb(null, true);
+    else cb(new Error('Only images allowed'));
+  }
+});
+
+// POST /api/shop/upload-image — upload product image
+router.post('/upload-image', upload.single('image'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+  const imageUrl = UPLOADS_URL_BASE + '/' + req.file.filename;
+  res.json({ ok: true, imageUrl, filename: req.file.filename });
+});
+
 function verifyShopToken(req, res, next) {
   let token = null;
   const auth = req.headers['authorization'] || req.headers['Authorization'];

@@ -1,4 +1,5 @@
 import { MongoClient } from 'mongodb';
+import { captureGroupPayment, releaseGroupPayment } from '../services/tranzila.service';
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://gal:12321@cluster0-7hpz1.gcp.mongodb.net/groupPurchase';
 
@@ -57,6 +58,49 @@ export async function checkGroupPurchaseDeadlines() {
           },
           { arrayFilters: [{ 'elem.campaignId': campaign._id }] }
         );
+
+        // ── TRANZILA: Capture or Release credit hold ──────────────────
+        if (order.tranzilaTK && order.tranzilaExpdate) {
+          if (targetMet) {
+            // Campaign succeeded → capture (charge) the card
+            const captureResult = await captureGroupPayment({
+              token: order.tranzilaTK,
+              expdate: order.tranzilaExpdate,
+              amount: newTotal,
+              orderId: `CAPTURE_${order._id}_${Date.now()}`,
+            });
+            if (captureResult.success) {
+              await db.collection('shop_orders').updateOne(
+                { _id: order._id },
+                { $set: { paymentStatus: 'charged', chargeConfirmCode: captureResult.confirmationCode } }
+              );
+            } else {
+              console.error(`[Group Purchase] Capture FAILED for order ${order._id}:`, captureResult.error);
+              await db.collection('shop_orders').updateOne(
+                { _id: order._id },
+                { $set: { paymentStatus: 'capture_failed' } }
+              );
+            }
+          } else {
+            // Campaign failed → void the hold, don't charge
+            const voidResult = await releaseGroupPayment({
+              token: order.tranzilaTK,
+              expdate: order.tranzilaExpdate,
+              amount: order.tranzilaHoldAmount || newTotal,
+              confirmationCode: order.tranzilaConfirmCode || '',
+              orderId: `VOID_${order._id}_${Date.now()}`,
+            });
+            if (voidResult.success) {
+              await db.collection('shop_orders').updateOne(
+                { _id: order._id },
+                { $set: { paymentStatus: 'voided' } }
+              );
+            } else {
+              console.error(`[Group Purchase] Void FAILED for order ${order._id}:`, voidResult.error);
+            }
+          }
+        }
+        // ─────────────────────────────────────────────────────────────
 
         // Send notification to customer
         try {
