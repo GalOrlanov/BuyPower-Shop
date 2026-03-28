@@ -195,7 +195,14 @@
 
       <div class="form-row">
         <label>🏷️ מחיר מכירה (₪) *</label>
-        <input type="number" id="fSellPrice" min="0" step="0.01" placeholder="0">
+        <input type="number" id="fSellPrice" min="0" step="0.01" placeholder="0" oninput="updateVatCalc()">
+        <div id="vatCalcDisplay" style="margin-top:6px;padding:8px 10px;background:#f0fdf4;border-radius:8px;font-size:13px;display:none">
+          <div id="vatCalcText" style="color:#374151;margin-bottom:6px"></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button type="button" onclick="roundSellPrice('up')" style="padding:4px 12px;background:#15803d;color:white;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">עגל מעלה ▲</button>
+            <button type="button" onclick="roundSellPrice('down')" style="padding:4px 12px;background:#6b7280;color:white;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">עגל מטה ▼</button>
+          </div>
+        </div>
       </div>
 
       <div class="form-row">
@@ -327,7 +334,9 @@ document.addEventListener('DOMContentLoaded', function() {
       display.style.color = vat === 'exempt' ? '#15803d' : '#2563eb';
     }
     setVat(vat);
-  });
+  
+  updateVatCalc();
+});
 });
 
 function calcPriceWidget() { /* simplified */ }
@@ -959,6 +968,39 @@ document.getElementById('itemModal').addEventListener('click', function(e) { if(
 document.getElementById('catModal').addEventListener('click', function(e) { if(e.target===this) e.target.classList.remove('open'); });
 
 // loadInventory called by initAdmin above
+
+function updateVatCalc() {
+  var price = parseFloat(document.getElementById('fSellPrice').value) || 0;
+  var vatType = (document.getElementById('fVatType') || {}).value || 'exempt';
+  var display = document.getElementById('vatCalcDisplay');
+  var text = document.getElementById('vatCalcText');
+  if (!display || !text || price <= 0) {
+    if (display) display.style.display = 'none';
+    return;
+  }
+  display.style.display = 'block';
+  if (vatType === 'exempt') {
+    text.innerHTML = '<span style="color:#15803d;font-weight:700">פטור ממע\"מ</span> — המחיר ללקוח: <strong>₪' + price.toFixed(2) + '</strong>';
+  } else {
+    var withVat = price * 1.18;
+    text.innerHTML = 'מחיר לפני מע\"מ: <strong>₪' + price.toFixed(2) + '</strong><br>כולל מע\"מ 18%: <strong style="color:#15803d">₪' + withVat.toFixed(2) + '</strong>';
+  }
+}
+
+function roundSellPrice(dir) {
+  var el = document.getElementById('fSellPrice');
+  var vatType = (document.getElementById('fVatType') || {}).value || 'exempt';
+  var price = parseFloat(el.value) || 0;
+  var base = vatType === 'exempt' ? price : price * 1.18;
+  var rounded = dir === 'up' ? Math.ceil(base) : Math.floor(base);
+  // אם vatType included — שומרים מחיר לפני מע"מ
+  if (vatType === 'included') {
+    el.value = (rounded / 1.18).toFixed(2);
+  } else {
+    el.value = rounded;
+  }
+  updateVatCalc();
+}
 </script>
 <!-- Pickup points bottom sheet -->
 <div id="pickupSheetOverlay" onclick="closePickupDropdown()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9998"></div>
