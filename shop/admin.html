@@ -310,6 +310,7 @@ input:checked + .slider::before { transform: translateX(20px); }
       <button class="tab-btn" onclick="showTab('payment')">💳 תשלום Grow</button>
       <button class="tab-btn" onclick="showTab('pricing');loadPricing()">📊 מחירון שבועי</button>
       <button class="tab-btn" onclick="showTab('expenses');loadExpenses()">💸 הוצאות</button>
+        <button class="tab-btn" onclick="showTab('profit-analysis');loadProfitAnalysis()">📊 ניתוח רווח</button>
       <button class="tab-btn" onclick="showTab('pnl');loadPnl()">📈 P&L</button>
       <button class="tab-btn" onclick="showTab('crm');loadCrm()">👥 לקוחות</button>
     </div>
@@ -881,6 +882,48 @@ input:checked + .slider::before { transform: translateX(20px); }
       <div id="pnlSummary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px"></div>
       <div id="pnlChart" style="margin-bottom:20px"></div>
       <div id="pnlTable"></div>
+    </div>
+
+
+    <!-- PROFIT ANALYSIS TAB -->
+    <div id="tab-profit-analysis" class="tab-panel">
+      <div class="card" style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+          <div class="card-title" style="margin:0">📊 ניתוח רווח גולמי</div>
+          <div style="display:flex;gap:8px">
+            <button onclick="setProfitPeriod('week')" id="pBtn_week" style="padding:6px 14px;border-radius:20px;border:2px solid #15803d;background:#f0fdf4;color:#15803d;font-weight:700;cursor:pointer;font-family:inherit;font-size:13px">שבוע</button>
+            <button onclick="setProfitPeriod('month')" id="pBtn_month" style="padding:6px 14px;border-radius:20px;border:2px solid #d1d5db;background:white;color:#6b7280;font-weight:600;cursor:pointer;font-family:inherit;font-size:13px">חודש</button>
+            <button onclick="setProfitPeriod('all')" id="pBtn_all" style="padding:6px 14px;border-radius:20px;border:2px solid #d1d5db;background:white;color:#6b7280;font-weight:600;cursor:pointer;font-family:inherit;font-size:13px">הכל</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+          <div>
+            <label style="font-size:12px;color:#6b7280;display:block;margin-bottom:3px">מתאריך</label>
+            <input type="date" id="profitFrom" onchange="loadProfitAnalysis()" style="padding:8px;border:2px solid #e5e7eb;border-radius:8px;font-family:inherit">
+          </div>
+          <div>
+            <label style="font-size:12px;color:#6b7280;display:block;margin-bottom:3px">עד תאריך</label>
+            <input type="date" id="profitTo" onchange="loadProfitAnalysis()" style="padding:8px;border:2px solid #e5e7eb;border-radius:8px;font-family:inherit">
+          </div>
+          <div>
+            <label style="font-size:12px;color:#6b7280;display:block;margin-bottom:3px">קטגוריה</label>
+            <select id="profitCategory" onchange="loadProfitAnalysis()" style="padding:8px;border:2px solid #e5e7eb;border-radius:8px;font-family:inherit">
+              <option value="">כל הקטגוריות</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:12px;color:#6b7280;display:block;margin-bottom:3px">תצוגה</label>
+            <select id="profitView" onchange="renderProfitView()" style="padding:8px;border:2px solid #e5e7eb;border-radius:8px;font-family:inherit">
+              <option value="table">📋 טבלה</option>
+              <option value="chart">📊 גרף</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <!-- Summary cards -->
+      <div id="profitSummary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px"></div>
+      <!-- Chart/Table -->
+      <div id="profitView" style="background:white;border-radius:16px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,.06)"></div>
     </div>
 
     <!-- CRM TAB -->
@@ -4275,6 +4318,163 @@ async function saveUserNotes(){if(!_currentProfileUserId)return;var notes=docume
 document.addEventListener("DOMContentLoaded",function(){var m=document.getElementById("userProfileModal");if(m)m.addEventListener("click",function(e){if(e.target===this)closeUserProfile();});});
 
 function toggleOrderDetail(id){var el=document.getElementById(id);if(el)el.style.display=el.style.display==='none'?'block':'none';}
+
+// ============ PROFIT ANALYSIS ============
+var _profitData = null;
+
+function setProfitPeriod(p) {
+  const now = new Date();
+  const from = document.getElementById('profitFrom');
+  const to = document.getElementById('profitTo');
+  document.querySelectorAll('[id^="pBtn_"]').forEach(b => {
+    b.style.background = 'white'; b.style.color = '#6b7280'; b.style.borderColor = '#d1d5db';
+  });
+  const active = document.getElementById('pBtn_' + p);
+  if (active) { active.style.background = '#f0fdf4'; active.style.color = '#15803d'; active.style.borderColor = '#15803d'; }
+  if (p === 'week') {
+    const mon = new Date(now); mon.setDate(now.getDate() - ((now.getDay()+6)%7)); 
+    from.value = mon.toISOString().split('T')[0];
+    to.value = now.toISOString().split('T')[0];
+  } else if (p === 'month') {
+    from.value = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+    to.value = now.toISOString().split('T')[0];
+  } else {
+    from.value = '2024-01-01';
+    to.value = now.toISOString().split('T')[0];
+  }
+  loadProfitAnalysis();
+}
+
+async function loadProfitAnalysis() {
+  const from = document.getElementById('profitFrom').value;
+  const to = document.getElementById('profitTo').value;
+  const catFilter = document.getElementById('profitCategory').value;
+  const token = localStorage.getItem('shopAdminToken') || localStorage.getItem('shopToken') || '';
+  const headers = { 'Authorization': 'Bearer ' + token };
+
+  try {
+    // Load orders + inventory in parallel
+    let url = '/api/shop/orders?since=2024-01-01';
+    if (from) url = '/api/shop/orders?since=' + from;
+    if (to) url += '&until=' + to + 'T23:59:59';
+
+    const [ordersRes, invRes] = await Promise.all([
+      fetch(url, { headers }),
+      fetch('/api/shop/inventory', { headers })
+    ]);
+    const orders = await ordersRes.json();
+    const inventory = await invRes.json();
+
+    // Build inventory map by name (normalized)
+    const invMap = {};
+    inventory.forEach(i => { invMap[(i.name||'').trim().toLowerCase()] = i; });
+
+    // Populate category filter
+    const catSel = document.getElementById('profitCategory');
+    const cats = [...new Set(inventory.map(i => i.category).filter(Boolean))];
+    catSel.innerHTML = '<option value="">כל הקטגוריות</option>' + cats.map(c => '<option value="'+c+'"'+(c===catFilter?' selected':'')+'>'+c+'</option>').join('');
+
+    // Aggregate by product
+    const productMap = {};
+    (Array.isArray(orders) ? orders : []).forEach(o => {
+      (o.items || []).forEach(item => {
+        const inv = invMap[(item.name||'').trim().toLowerCase()];
+        const cat = inv ? (inv.category||'כללי') : 'כללי';
+        if (catFilter && cat !== catFilter) return;
+        const key = item.name;
+        if (!productMap[key]) productMap[key] = { name: key, category: cat, qty: 0, revenue: 0, cost: 0 };
+        const qty = item.qty || 1;
+        const price = item.price || 0;
+        const costPerUnit = inv ? (inv.purchasePrice || 0) : 0;
+        productMap[key].qty += qty;
+        productMap[key].revenue += price * qty;
+        productMap[key].cost += costPerUnit * qty;
+      });
+    });
+
+    _profitData = Object.values(productMap).sort((a,b) => (b.revenue - b.cost) - (a.revenue - a.cost));
+
+    // Summary
+    const totalRevenue = _profitData.reduce((s,p) => s + p.revenue, 0);
+    const totalCost = _profitData.reduce((s,p) => s + p.cost, 0);
+    const totalProfit = totalRevenue - totalCost;
+    const margin = totalRevenue > 0 ? (totalProfit / totalRevenue * 100) : 0;
+
+    document.getElementById('profitSummary').innerHTML =
+      '<div class="summary-card"><div class="summary-num">₪' + totalRevenue.toFixed(0) + '</div><div class="summary-label">הכנסות</div></div>' +
+      '<div class="summary-card"><div class="summary-num" style="color:#dc2626">₪' + totalCost.toFixed(0) + '</div><div class="summary-label">עלות מלאי</div></div>' +
+      '<div class="summary-card"><div class="summary-num" style="color:#15803d">₪' + totalProfit.toFixed(0) + '</div><div class="summary-label">רווח גולמי</div></div>' +
+      '<div class="summary-card"><div class="summary-num" style="color:#7c3aed">' + margin.toFixed(1) + '%</div><div class="summary-label">מרווח</div></div>';
+
+    renderProfitView();
+  } catch(e) {
+    document.getElementById('profitView').innerHTML = '<div style="color:#ef4444;padding:20px">שגיאה: ' + e.message + '</div>';
+  }
+}
+
+function renderProfitView() {
+  if (!_profitData) return;
+  const mode = document.getElementById('profitView').value || 'table';
+  const container = document.getElementById('profitView');
+
+  if (mode === 'chart') {
+    const max = Math.max(..._profitData.map(p => p.revenue), 1);
+    container.innerHTML = '<div style="overflow-x:auto"><div style="display:flex;gap:8px;align-items:flex-end;min-height:200px;padding:10px 0">' +
+      _profitData.slice(0,15).map(p => {
+        const rH = Math.round((p.revenue/max)*180);
+        const cH = Math.round((p.cost/max)*180);
+        const profit = p.revenue - p.cost;
+        return '<div style="display:flex;flex-direction:column;align-items:center;gap:4px;min-width:60px">' +
+          '<span style="font-size:10px;font-weight:700;color:#15803d">₪'+profit.toFixed(0)+'</span>' +
+          '<div style="display:flex;gap:2px;align-items:flex-end">' +
+          '<div style="width:20px;background:#86efac;border-radius:4px 4px 0 0;height:'+rH+'px" title="הכנסה ₪'+p.revenue.toFixed(0)+'"></div>' +
+          '<div style="width:20px;background:#fca5a5;border-radius:4px 4px 0 0;height:'+cH+'px" title="עלות ₪'+p.cost.toFixed(0)+'"></div>' +
+          '</div>' +
+          '<span style="font-size:9px;color:#6b7280;text-align:center;max-width:60px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">'+p.name+'</span>' +
+          '</div>';
+      }).join('') + '</div>' +
+      '<div style="display:flex;gap:16px;margin-top:8px">' +
+      '<span style="display:flex;align-items:center;gap:4px;font-size:12px"><span style="width:12px;height:12px;background:#86efac;border-radius:3px;display:inline-block"></span>הכנסות</span>' +
+      '<span style="display:flex;align-items:center;gap:4px;font-size:12px"><span style="width:12px;height:12px;background:#fca5a5;border-radius:3px;display:inline-block"></span>עלות</span>' +
+      '</div></div>';
+  } else {
+    container.innerHTML = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:14px">' +
+      '<thead><tr style="background:#f0fdf4">' +
+      '<th style="padding:10px;text-align:right;font-size:12px">מוצר</th>' +
+      '<th style="padding:10px;text-align:center;font-size:12px">קטגוריה</th>' +
+      '<th style="padding:10px;text-align:center;font-size:12px">כמות</th>' +
+      '<th style="padding:10px;text-align:center;font-size:12px;color:#15803d">הכנסות</th>' +
+      '<th style="padding:10px;text-align:center;font-size:12px;color:#dc2626">עלות</th>' +
+      '<th style="padding:10px;text-align:center;font-size:12px;color:#7c3aed">רווח</th>' +
+      '<th style="padding:10px;text-align:center;font-size:12px">%</th>' +
+      '</tr></thead><tbody>' +
+      _profitData.map(p => {
+        const profit = p.revenue - p.cost;
+        const margin = p.revenue > 0 ? (profit/p.revenue*100).toFixed(0) : '—';
+        const hasCost = p.cost > 0;
+        return '<tr style="border-bottom:1px solid #f3f4f6">' +
+          '<td style="padding:9px 10px;font-weight:700">' + p.name + '</td>' +
+          '<td style="padding:9px 10px;text-align:center;font-size:12px"><span style="background:#f0fdf4;color:#15803d;padding:2px 8px;border-radius:20px">' + (p.category||'—') + '</span></td>' +
+          '<td style="padding:9px 10px;text-align:center">' + p.qty + '</td>' +
+          '<td style="padding:9px 10px;text-align:center;font-weight:700;color:#15803d">₪' + p.revenue.toFixed(0) + '</td>' +
+          '<td style="padding:9px 10px;text-align:center;color:' + (hasCost ? '#dc2626' : '#9ca3af') + '">' + (hasCost ? '₪'+p.cost.toFixed(0) : '—') + '</td>' +
+          '<td style="padding:9px 10px;text-align:center;font-weight:700;color:' + (profit>0?'#15803d':profit<0?'#dc2626':'#6b7280') + '">₪' + profit.toFixed(0) + '</td>' +
+          '<td style="padding:9px 10px;text-align:center;font-size:12px;color:#6b7280">' + (hasCost ? margin+'%' : '—') + '</td>' +
+          '</tr>';
+      }).join('') +
+      '</tbody></table></div>';
+  }
+}
+
+// Init profit tab with this week
+document.addEventListener('DOMContentLoaded', function() {
+  const now = new Date();
+  const mon = new Date(now); mon.setDate(now.getDate() - ((now.getDay()+6)%7));
+  const fromEl = document.getElementById('profitFrom');
+  const toEl = document.getElementById('profitTo');
+  if (fromEl) fromEl.value = mon.toISOString().split('T')[0];
+  if (toEl) toEl.value = now.toISOString().split('T')[0];
+});
 </script>
 </body>
 </html>
