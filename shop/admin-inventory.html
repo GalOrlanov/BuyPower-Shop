@@ -341,13 +341,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 function calcPriceWidget() { /* simplified */ }
 
-function roundSellPrice() {
-  var val = parseFloat(document.getElementById('fSellPrice').value) || 0;
-  if (!val) return;
-  // Round up to nearest 0.5
-  var rounded = Math.ceil(val * 2) / 2;
-  document.getElementById('fSellPrice').value = rounded.toFixed(2);
-}
+// roundSellPrice moved to new version below
 
 function addQuantityDealRow(qty='', price='') {
   const container = (document.getElementById('quantityDealsContainer') || {});
