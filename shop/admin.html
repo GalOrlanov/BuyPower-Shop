@@ -309,9 +309,7 @@ input:checked + .slider::before { transform: translateX(20px); }
       <button class="tab-btn" onclick="showTab('users'); loadUsers();">👥 משתמשים</button>
       <button class="tab-btn" onclick="showTab('payment')">💳 תשלום Grow</button>
       <button class="tab-btn" onclick="showTab('pricing');loadPricing()">📊 מחירון שבועי</button>
-      <button class="tab-btn" onclick="showTab('expenses');loadExpenses()">💸 הוצאות</button>
-        <button class="tab-btn" onclick="showTab('profit-analysis');loadProfitAnalysis()">📊 ניתוח רווח</button>
-      <button class="tab-btn" onclick="showTab('pnl');loadPnl()">📈 P&L</button>
+      <button class="tab-btn" onclick="showTab('finance');initFinanceTab()">💰 פיננסים</button>
       <button class="tab-btn" onclick="showTab('crm');loadCrm()">👥 לקוחות</button>
     </div>
   </div>
@@ -788,7 +786,104 @@ input:checked + .slider::before { transform: translateX(20px); }
 
 
     <!-- EXPENSES TAB -->
-    <div id="tab-expenses" class="tab-panel">
+    
+
+    <!-- Expense Modal -->
+    <div id="expenseModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;overflow-y:auto">
+      <div style="background:white;border-radius:18px;padding:28px;max-width:500px;margin:40px auto;position:relative">
+        <button onclick="closeExpenseModal()" style="position:absolute;top:14px;left:14px;background:none;border:none;font-size:1.4rem;cursor:pointer;color:#6b7280">✕</button>
+        <div style="font-size:1.1rem;font-weight:900;margin-bottom:20px" id="expModalTitle">➕ הוצאה חדשה</div>
+        <div style="display:grid;gap:12px">
+          <input type="hidden" id="expId">
+          <div><label style="font-size:.8rem;font-weight:700;color:#374151">תאריך *</label>
+            <input type="date" id="expDateInput" style="width:100%;padding:10px;border:2px solid #e5e7eb;border-radius:10px;font-family:inherit;margin-top:4px;box-sizing:border-box"></div>
+          <div><label style="font-size:.8rem;font-weight:700;color:#374151">סוג *</label>
+            <select id="expTypeInput" style="width:100%;padding:10px;border:2px solid #e5e7eb;border-radius:10px;font-family:inherit;margin-top:4px">
+              <option>חשבונית</option><option>התחייבות</option><option>הסכם</option><option>שכר</option><option>אחר</option>
+            </select></div>
+          <div><label style="font-size:.8rem;font-weight:700;color:#374151">תיאור *</label>
+            <input type="text" id="expDesc" placeholder="לדוג: שכר דירה, רכישת מלאי..." style="width:100%;padding:10px;border:2px solid #e5e7eb;border-radius:10px;font-family:inherit;margin-top:4px;box-sizing:border-box"></div>
+          <div><label style="font-size:.8rem;font-weight:700;color:#374151">סכום (₪) *</label>
+            <input type="number" id="expAmount" placeholder="0.00" min="0" step="0.01" style="width:100%;padding:10px;border:2px solid #e5e7eb;border-radius:10px;font-family:inherit;margin-top:4px;box-sizing:border-box"></div>
+          <div><label style="font-size:.8rem;font-weight:700;color:#374151">ספק / צד שני</label>
+            <input type="text" id="expSupplier" placeholder="שם ספק או גוף" style="width:100%;padding:10px;border:2px solid #e5e7eb;border-radius:10px;font-family:inherit;margin-top:4px;box-sizing:border-box"></div>
+          <div><label style="font-size:.8rem;font-weight:700;color:#374151">סטטוס</label>
+            <select id="expStatusInput" style="width:100%;padding:10px;border:2px solid #e5e7eb;border-radius:10px;font-family:inherit;margin-top:4px">
+              <option value="ממתין">ממתין</option><option value="שולם">שולם</option><option value="מבוטל">מבוטל</option>
+            </select></div>
+          <div><label style="font-size:.8rem;font-weight:700;color:#374151">קישור / מסמך</label>
+            <input type="url" id="expLink" placeholder="https://..." style="width:100%;padding:10px;border:2px solid #e5e7eb;border-radius:10px;font-family:inherit;margin-top:4px;box-sizing:border-box;direction:ltr"></div>
+          <div><label style="font-size:.8rem;font-weight:700;color:#374151">הערות</label>
+            <textarea id="expNotes" rows="2" placeholder="הערות נוספות..." style="width:100%;padding:10px;border:2px solid #e5e7eb;border-radius:10px;font-family:inherit;margin-top:4px;resize:vertical;box-sizing:border-box"></textarea></div>
+        </div>
+        <div id="expModalError" style="color:#dc2626;font-size:.85rem;margin-top:8px;display:none"></div>
+        <div style="display:flex;gap:10px;margin-top:20px">
+          <button class="btn btn-green" onclick="saveExpense()" style="flex:1;padding:12px">💾 שמור</button>
+          <button class="btn btn-outline" onclick="closeExpenseModal()" style="padding:12px 20px">ביטול</button>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- P&L TAB -->
+    
+
+
+    <!-- PROFIT ANALYSIS TAB -->
+    
+
+    <!-- FINANCE TAB -->
+    <div id="tab-finance" class="tab-panel">
+      <!-- Sub-tabs -->
+      <div style="display:flex;gap:8px;margin-bottom:16px;border-bottom:2px solid #e5e7eb;padding-bottom:10px;flex-wrap:wrap">
+        <button id="ftab_profit" onclick="switchFinanceTab('profit')" style="padding:8px 18px;border-radius:8px;border:none;background:#15803d;color:white;font-weight:700;cursor:pointer;font-family:inherit;font-size:14px">📊 הכנסות ורווח</button>
+        <button id="ftab_expenses" onclick="switchFinanceTab('expenses')" style="padding:8px 18px;border-radius:8px;border:none;background:#f3f4f6;color:#6b7280;font-weight:600;cursor:pointer;font-family:inherit;font-size:14px">💸 הוצאות</button>
+        <button id="ftab_pnl" onclick="switchFinanceTab('pnl')" style="padding:8px 18px;border-radius:8px;border:none;background:#f3f4f6;color:#6b7280;font-weight:600;cursor:pointer;font-family:inherit;font-size:14px">📈 P&L שנתי</button>
+      </div>
+
+      <!-- PROFIT sub-tab -->
+      <div id="ftab-profit-content">
+      <div class="card" style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+          <div class="card-title" style="margin:0">📊 ניתוח רווח גולמי</div>
+          <div style="display:flex;gap:8px">
+            <button onclick="setProfitPeriod('week')" id="pBtn_week" style="padding:6px 14px;border-radius:20px;border:2px solid #15803d;background:#f0fdf4;color:#15803d;font-weight:700;cursor:pointer;font-family:inherit;font-size:13px">שבוע</button>
+            <button onclick="setProfitPeriod('month')" id="pBtn_month" style="padding:6px 14px;border-radius:20px;border:2px solid #d1d5db;background:white;color:#6b7280;font-weight:600;cursor:pointer;font-family:inherit;font-size:13px">חודש</button>
+            <button onclick="setProfitPeriod('all')" id="pBtn_all" style="padding:6px 14px;border-radius:20px;border:2px solid #d1d5db;background:white;color:#6b7280;font-weight:600;cursor:pointer;font-family:inherit;font-size:13px">הכל</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+          <div>
+            <label style="font-size:12px;color:#6b7280;display:block;margin-bottom:3px">מתאריך</label>
+            <input type="date" id="profitFrom" onchange="loadProfitAnalysis()" style="padding:8px;border:2px solid #e5e7eb;border-radius:8px;font-family:inherit">
+          </div>
+          <div>
+            <label style="font-size:12px;color:#6b7280;display:block;margin-bottom:3px">עד תאריך</label>
+            <input type="date" id="profitTo" onchange="loadProfitAnalysis()" style="padding:8px;border:2px solid #e5e7eb;border-radius:8px;font-family:inherit">
+          </div>
+          <div>
+            <label style="font-size:12px;color:#6b7280;display:block;margin-bottom:3px">קטגוריה</label>
+            <select id="profitCategory" onchange="loadProfitAnalysis()" style="padding:8px;border:2px solid #e5e7eb;border-radius:8px;font-family:inherit">
+              <option value="">כל הקטגוריות</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:12px;color:#6b7280;display:block;margin-bottom:3px">תצוגה</label>
+            <select id="profitViewSelect" onchange="renderProfitView()" style="padding:8px;border:2px solid #e5e7eb;border-radius:8px;font-family:inherit">
+              <option value="table">📋 טבלה</option>
+              <option value="chart">📊 גרף</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <!-- Summary cards -->
+      <div id="profitSummary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px"></div>
+      <!-- Chart/Table -->
+      <div id="profitViewContainer" style="background:white;border-radius:16px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,.06)"></div>
+      </div>
+
+      <!-- EXPENSES sub-tab -->
+      <div id="ftab-expenses-content" style="display:none">
       <!-- Summary cards -->
       <div id="expensesSummary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:16px"></div>
 
@@ -829,47 +924,10 @@ input:checked + .slider::before { transform: translateX(20px); }
 
       <!-- Table -->
       <div id="expensesTable"><div class="card" style="text-align:center;color:#9ca3af;padding:32px">טוען...</div></div>
-    </div>
-
-    <!-- Expense Modal -->
-    <div id="expenseModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;overflow-y:auto">
-      <div style="background:white;border-radius:18px;padding:28px;max-width:500px;margin:40px auto;position:relative">
-        <button onclick="closeExpenseModal()" style="position:absolute;top:14px;left:14px;background:none;border:none;font-size:1.4rem;cursor:pointer;color:#6b7280">✕</button>
-        <div style="font-size:1.1rem;font-weight:900;margin-bottom:20px" id="expModalTitle">➕ הוצאה חדשה</div>
-        <div style="display:grid;gap:12px">
-          <input type="hidden" id="expId">
-          <div><label style="font-size:.8rem;font-weight:700;color:#374151">תאריך *</label>
-            <input type="date" id="expDateInput" style="width:100%;padding:10px;border:2px solid #e5e7eb;border-radius:10px;font-family:inherit;margin-top:4px;box-sizing:border-box"></div>
-          <div><label style="font-size:.8rem;font-weight:700;color:#374151">סוג *</label>
-            <select id="expTypeInput" style="width:100%;padding:10px;border:2px solid #e5e7eb;border-radius:10px;font-family:inherit;margin-top:4px">
-              <option>חשבונית</option><option>התחייבות</option><option>הסכם</option><option>שכר</option><option>אחר</option>
-            </select></div>
-          <div><label style="font-size:.8rem;font-weight:700;color:#374151">תיאור *</label>
-            <input type="text" id="expDesc" placeholder="לדוג: שכר דירה, רכישת מלאי..." style="width:100%;padding:10px;border:2px solid #e5e7eb;border-radius:10px;font-family:inherit;margin-top:4px;box-sizing:border-box"></div>
-          <div><label style="font-size:.8rem;font-weight:700;color:#374151">סכום (₪) *</label>
-            <input type="number" id="expAmount" placeholder="0.00" min="0" step="0.01" style="width:100%;padding:10px;border:2px solid #e5e7eb;border-radius:10px;font-family:inherit;margin-top:4px;box-sizing:border-box"></div>
-          <div><label style="font-size:.8rem;font-weight:700;color:#374151">ספק / צד שני</label>
-            <input type="text" id="expSupplier" placeholder="שם ספק או גוף" style="width:100%;padding:10px;border:2px solid #e5e7eb;border-radius:10px;font-family:inherit;margin-top:4px;box-sizing:border-box"></div>
-          <div><label style="font-size:.8rem;font-weight:700;color:#374151">סטטוס</label>
-            <select id="expStatusInput" style="width:100%;padding:10px;border:2px solid #e5e7eb;border-radius:10px;font-family:inherit;margin-top:4px">
-              <option value="ממתין">ממתין</option><option value="שולם">שולם</option><option value="מבוטל">מבוטל</option>
-            </select></div>
-          <div><label style="font-size:.8rem;font-weight:700;color:#374151">קישור / מסמך</label>
-            <input type="url" id="expLink" placeholder="https://..." style="width:100%;padding:10px;border:2px solid #e5e7eb;border-radius:10px;font-family:inherit;margin-top:4px;box-sizing:border-box;direction:ltr"></div>
-          <div><label style="font-size:.8rem;font-weight:700;color:#374151">הערות</label>
-            <textarea id="expNotes" rows="2" placeholder="הערות נוספות..." style="width:100%;padding:10px;border:2px solid #e5e7eb;border-radius:10px;font-family:inherit;margin-top:4px;resize:vertical;box-sizing:border-box"></textarea></div>
-        </div>
-        <div id="expModalError" style="color:#dc2626;font-size:.85rem;margin-top:8px;display:none"></div>
-        <div style="display:flex;gap:10px;margin-top:20px">
-          <button class="btn btn-green" onclick="saveExpense()" style="flex:1;padding:12px">💾 שמור</button>
-          <button class="btn btn-outline" onclick="closeExpenseModal()" style="padding:12px 20px">ביטול</button>
-        </div>
       </div>
-    </div>
 
-
-    <!-- P&L TAB -->
-    <div id="tab-pnl" class="tab-panel">
+      <!-- PNL sub-tab -->
+      <div id="ftab-pnl-content" style="display:none">
       <div class="card" style="margin-bottom:12px">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px">
           <div class="card-title" style="margin:0">📈 רווח והפסד (P&L)</div>
@@ -882,50 +940,8 @@ input:checked + .slider::before { transform: translateX(20px); }
       <div id="pnlSummary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px"></div>
       <div id="pnlChart" style="margin-bottom:20px"></div>
       <div id="pnlTable"></div>
-    </div>
-
-
-    <!-- PROFIT ANALYSIS TAB -->
-    <div id="tab-profit-analysis" class="tab-panel">
-      <div class="card" style="margin-bottom:12px">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
-          <div class="card-title" style="margin:0">📊 ניתוח רווח גולמי</div>
-          <div style="display:flex;gap:8px">
-            <button onclick="setProfitPeriod('week')" id="pBtn_week" style="padding:6px 14px;border-radius:20px;border:2px solid #15803d;background:#f0fdf4;color:#15803d;font-weight:700;cursor:pointer;font-family:inherit;font-size:13px">שבוע</button>
-            <button onclick="setProfitPeriod('month')" id="pBtn_month" style="padding:6px 14px;border-radius:20px;border:2px solid #d1d5db;background:white;color:#6b7280;font-weight:600;cursor:pointer;font-family:inherit;font-size:13px">חודש</button>
-            <button onclick="setProfitPeriod('all')" id="pBtn_all" style="padding:6px 14px;border-radius:20px;border:2px solid #d1d5db;background:white;color:#6b7280;font-weight:600;cursor:pointer;font-family:inherit;font-size:13px">הכל</button>
-          </div>
-        </div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
-          <div>
-            <label style="font-size:12px;color:#6b7280;display:block;margin-bottom:3px">מתאריך</label>
-            <input type="date" id="profitFrom" onchange="loadProfitAnalysis()" style="padding:8px;border:2px solid #e5e7eb;border-radius:8px;font-family:inherit">
-          </div>
-          <div>
-            <label style="font-size:12px;color:#6b7280;display:block;margin-bottom:3px">עד תאריך</label>
-            <input type="date" id="profitTo" onchange="loadProfitAnalysis()" style="padding:8px;border:2px solid #e5e7eb;border-radius:8px;font-family:inherit">
-          </div>
-          <div>
-            <label style="font-size:12px;color:#6b7280;display:block;margin-bottom:3px">קטגוריה</label>
-            <select id="profitCategory" onchange="loadProfitAnalysis()" style="padding:8px;border:2px solid #e5e7eb;border-radius:8px;font-family:inherit">
-              <option value="">כל הקטגוריות</option>
-            </select>
-          </div>
-          <div>
-            <label style="font-size:12px;color:#6b7280;display:block;margin-bottom:3px">תצוגה</label>
-            <select id="profitViewSelect" onchange="renderProfitView()" style="padding:8px;border:2px solid #e5e7eb;border-radius:8px;font-family:inherit">
-              <option value="table">📋 טבלה</option>
-              <option value="chart">📊 גרף</option>
-            </select>
-          </div>
-        </div>
       </div>
-      <!-- Summary cards -->
-      <div id="profitSummary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px"></div>
-      <!-- Chart/Table -->
-      <div id="profitViewContainer" style="background:white;border-radius:16px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,.06)"></div>
     </div>
-
     <!-- CRM TAB -->
     <div id="tab-crm" class="tab-panel">
       <div class="card" style="margin-bottom:12px">
@@ -4475,6 +4491,22 @@ document.addEventListener('DOMContentLoaded', function() {
   if (fromEl) fromEl.value = mon.toISOString().split('T')[0];
   if (toEl) toEl.value = now.toISOString().split('T')[0];
 });
+
+function switchFinanceTab(tab) {
+  ['profit','expenses','pnl'].forEach(function(t) {
+    var btn = document.getElementById('ftab_' + t);
+    var content = document.getElementById('ftab-' + t + '-content');
+    if (btn) { btn.style.background = t === tab ? '#15803d' : '#f3f4f6'; btn.style.color = t === tab ? 'white' : '#6b7280'; }
+    if (content) content.style.display = t === tab ? 'block' : 'none';
+  });
+  if (tab === 'profit') loadProfitAnalysis();
+  if (tab === 'expenses') loadExpenses();
+  if (tab === 'pnl') loadPnl();
+}
+
+function initFinanceTab() {
+  switchFinanceTab('profit');
+}
 </script>
 </body>
 </html>
