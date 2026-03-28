@@ -3876,38 +3876,7 @@ async function togglePickup(orderId, currentStatus) {
 
 async // sendPickupSMSToAll - see updated version below
 
-async function sendPickupSMSToAll() {
-  const weekStart = document.getElementById('pickupWeekStart').value || getThisMonday();
-  const weekEnd = document.getElementById('pickupWeekEnd').value || '';
-  const count = _pickupData && _pickupData.orders ? _pickupData.orders.filter(o => !o.pickedUp).length : '?';
-  if (!confirm('לשלוח SMS לכל הלקוחות שטרם אספו (' + count + ' הזמנות)?')) return;
-  const btn = event.target;
-  btn.disabled = true;
-  btn.textContent = '⏳ שולח...';
-  try {
-    const body = { weekStart };
-    if (weekEnd) body.weekEnd = weekEnd + 'T23:59:59';
-    const pickupPoint = document.getElementById('pickupPointFilter') ? document.getElementById('pickupPointFilter').value : '';
-    if (pickupPoint) body.pickupPoint = pickupPoint;
-    const res = await fetch('/api/shop/admin/send-pickup-sms', {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify(body)
-    });
-    const data = await res.json();
-    if (data.ok) {
-      alert('✅ SMS נשלח ל-' + data.sent + ' לקוחות' + (data.failed && data.failed.length ? '\n❌ נכשל עבור ' + data.failed.length : ''));
-      loadPickupTracking();
-    } else {
-      alert('❌ ' + (data.error || 'שגיאה'));
-    }
-  } catch(e) {
-    alert('❌ שגיאת רשת: ' + e.message);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '📱 שלח SMS לכולם';
-  }
-}
+async // sendPickupSMSToAll - see updated version below
 
 async function sendPickupSMSToAll() {
   const weekStart = document.getElementById('pickupWeekStart').value || getThisMonday();
