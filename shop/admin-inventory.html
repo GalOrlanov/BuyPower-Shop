@@ -226,6 +226,7 @@
       </div>
 
     </div>
+    <div id="modalErr" style="display:none;color:#dc2626;font-size:13px;margin-bottom:8px;padding:8px;background:#fee2e2;border-radius:8px"></div>
     <div class="modal-actions">
       <button class="btn btn-green" onclick="saveItem()">💾 שמור</button>
       <button class="btn btn-outline" onclick="closeModal()">ביטול</button>
@@ -605,7 +606,7 @@ function openEditModal(id) {
 
 function closeModal() {
   document.getElementById('itemModal').classList.remove('open');
-  document.getElementById('modalErr').style.display = 'none';
+  var me=document.getElementById('modalErr'); if(me) me.style.display='none';
 }
 
 function clearForm() {
@@ -860,7 +861,7 @@ async function savePickupDropdown() {
 }
 
 function showErr(msg) {
-  const el = document.getElementById('modalErr');
+  const el = document.getElementById('modalErr'); if(!el) { alert(msg); return; }
   el.textContent = msg;
   el.style.display = 'block';
 }
