@@ -303,13 +303,7 @@ function getInvSelectedPickupPoints() {
 }
 
 function toggleUnlimitedStock() {
-  const unlimited = document.getElementById('fUnlimited').checked;
-  const qtyInput = document.getElementById('fQty');
-  if (qtyInput) {
-    qtyInput.disabled = unlimited;
-    qtyInput.style.opacity = unlimited ? '0.4' : '1';
-    if (unlimited) qtyInput.value = '999999';
-  }
+  // simplified - no unlimited checkbox
 }
 
 function setVat(val) {
@@ -331,7 +325,6 @@ function setVat(val) {
     btnExempt.style.background = 'white';
     btnExempt.style.color = '#374151';
   }
-  calcPriceWidget();
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -347,32 +340,7 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 });
 
-function calcPriceWidget() {
-  // Don't auto-calculate when loading existing item — preserve saved price
-  if (window._loadingEdit) return;
-  var buy = parseFloat(document.getElementById('fBuyPrice').value) || 0;
-  var pct = parseFloat(document.getElementById('fProfitPct').value) || 12;
-  var vat = document.getElementById('fVatType').value;
-
-  // Show/hide buy price with VAT indicator
-  var vatIndicator = document.getElementById('buyPriceWithVat');
-  if (vat === 'included' || vat === 'excluded') {
-    vatIndicator.style.display = 'block';
-    if (buy) {
-      var buyWithVat = (buy * 1.18).toFixed(2);
-      vatIndicator.textContent = '= ₪' + buyWithVat + ' כולל מע"מ';
-    } else {
-      vatIndicator.textContent = '';
-    }
-  } else {
-    vatIndicator.style.display = 'none';
-  }
-
-  if (!buy) return;
-  var base = buy * (1 + pct / 100);
-  if (vat === 'included' || vat === 'excluded') base = base * 1.18;
-  document.getElementById('fSellPrice').value = base.toFixed(2);
-}
+function calcPriceWidget() { /* simplified */ }
 
 function roundSellPrice() {
   var val = parseFloat(document.getElementById('fSellPrice').value) || 0;
@@ -401,23 +369,9 @@ function addQuantityDealRow(qty='', price='') {
   container.appendChild(row);
 }
 
-function getQuantityDeals() {
-  const rows = document.querySelectorAll('.qty-deal-row');
-  const deals = [];
-  rows.forEach(row => {
-    const qty = parseInt(row.querySelector('.deal-qty').value);
-    const price = parseFloat(row.querySelector('.deal-price').value);
-    if (qty > 0 && price >= 0) deals.push({ qty, price });
-  });
-  return deals.sort((a,b) => a.qty - b.qty);
-}
+function getQuantityDeals() { return []; }
 
-function populateQuantityDeals(deals) {
-  const container = document.getElementById('quantityDealsContainer');
-  container.innerHTML = '';
-  if (!deals || !deals.length) return;
-  deals.forEach(d => addQuantityDealRow(d.qty, d.price));
-}
+function populateQuantityDeals(deals) { /* simplified */ }
 
 async function loadInventory() {
   try {
