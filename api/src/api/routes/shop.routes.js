@@ -804,20 +804,57 @@ router.delete('/orders/:id', async (req, res) => {
 });
 
 // GET /api/shop/orders/summary/products
-router.get('/users', async (req, res) => {
+// GET /api/shop/users/activity — user activity stats (VIP/active/inactive)
+router.get('/users/activity', async (req, res) => {
   try {
     const db = await getDb();
-    const users = await db.collection('shop_users').find({}).sort({ createdAt: -1 }).toArray();
+    const { MongoClient } = require('mongodb');
+    const client2 = new MongoClient(MONGODB_URI);
+    await client2.connect();
+    const db2 = client2.db('groupPurchase');
+    const users = await db2.collection('shop_users').find({}).toArray();
+    await client2.close();
+
+    const now = new Date();
+    const d30 = new Date(now - 30*24*60*60*1000);
+    const d60 = new Date(now - 60*24*60*60*1000);
+    const orders = await db.collection('shop_orders').find({ status: { $ne: 'pending_payment' }, createdAt: { $gte: d60 } }).toArray();
+
+    const phoneToOrders = {};
+    orders.forEach(o => {
+      const p = (o.phone||'').replace(/\D/g,'');
+      if (!phoneToOrders[p]) phoneToOrders[p] = [];
+      phoneToOrders[p].push(o);
+    });
+
+    const result = users.map(u => {
+      const p = (u.phone||'').replace(/\D/g,'');
+      const userOrders = phoneToOrders[p] || [];
+      const recent30 = userOrders.filter(o => new Date(o.createdAt) >= d30);
+      const isVip = recent30.length >= 2;
+      const isActive = userOrders.length > 0;
+      return { ...u, orderCount: userOrders.length, recent30Count: recent30.length, isVip, isActive, tier: isVip ? 'vip' : isActive ? 'active' : 'inactive' };
+    });
+    res.json(result);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/users', async (req, res) => {
+  try {
+    const { MongoClient } = require('mongodb');
+    const client2 = new MongoClient(MONGODB_URI);
+    await client2.connect();
+    const db2 = client2.db('groupPurchase');
+    const users = await db2.collection('shop_users').find({}).sort({ createdAt: -1 }).toArray();
+    await client2.close();
     res.json(users);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // PUT /api/shop/users/:id - update user fields (name/email/phone/isBlocked)
 router.put('/users/:id', async (req, res) => {
-  const client = new MongoClient(MONGODB_URI);
   try {
-    await client.connect();
-    const db = client.db('groupPurchase');
+    const db = await getDb();
     const { name, email, phone, isBlocked, pickupPoint, pickupLocation } = req.body;
     const update = {};
     if (name !== undefined) update.name = name;
@@ -826,6 +863,7 @@ router.put('/users/:id', async (req, res) => {
     if (isBlocked !== undefined) update.isBlocked = isBlocked;
     if (pickupPoint !== undefined) update.pickupPoint = pickupPoint;
     if (pickupLocation !== undefined) update.pickupLocation = pickupLocation;
+    if (req.body.internalNotes !== undefined) update.internalNotes = req.body.internalNotes;
     await db.collection('shop_users').updateOne({ _id: new ObjectId(req.params.id) }, { $set: update });
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
@@ -834,14 +872,11 @@ router.put('/users/:id', async (req, res) => {
 
 // DELETE /api/shop/users/:id - delete user
 router.delete('/users/:id', async (req, res) => {
-  const client = new MongoClient(MONGODB_URI);
   try {
-    await client.connect();
-    const db = client.db('groupPurchase');
+    const db = await getDb();
     await db.collection('shop_users').deleteOne({ _id: new ObjectId(req.params.id) });
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
-  finally { await client.close(); }
 });
 
 // PUT /api/shop/users/:id/password - set password
@@ -1356,9 +1391,116 @@ router.post('/pickup/:token/confirm', async (req, res) => {
   }
 });
 
-module.exports = router;
-
 // ============================================
+// SMS PICKUP SYSTEM
+// ============================================
+
+// POST /api/shop/admin/send-pickup-sms
+router.post('/admin/send-pickup-sms', verifyShopToken, async (req, res) => {
+  try {
+    const db = await getDb();
+    const { orderId, weekStart, weekEnd, pickupPoint } = req.body;
+    const crypto = require('crypto');
+    const https = require('https');
+
+    let query = { status: { $in: ['paid', 'ready', 'confirmed', 'handled'] } };
+    if (orderId) {
+      query = { _id: new ObjectId(orderId) };
+    } else {
+      if (weekStart) query.createdAt = { $gte: new Date(weekStart) };
+      if (weekEnd) { query.createdAt = query.createdAt || {}; query.createdAt.$lte = new Date(weekEnd); }
+      if (pickupPoint) query.pickupLocation = pickupPoint;
+    }
+
+    const orders = await db.collection('shop_orders').find(query).toArray();
+    const sent = [];
+    const failed = [];
+
+    for (const order of orders) {
+      try {
+        const pickupToken = crypto.randomBytes(32).toString('hex');
+        await db.collection('shop_orders').updateOne(
+          { _id: order._id },
+          { $set: { pickupToken, pickupTokenSentAt: new Date() } }
+        );
+
+        let customerPhone = order.phone || order.customerPhone || '';
+        let customerName = order.customerName || order.name || 'לקוח יקר';
+
+        if (order.userId) {
+          try {
+            const customer = await db.collection('shop_users').findOne({ _id: new ObjectId(order.userId) });
+            if (customer) {
+              if (customer.phone) customerPhone = customer.phone;
+              if (customer.name) customerName = customer.name;
+            }
+          } catch(e) {}
+        }
+
+        if (!customerPhone) { failed.push({ orderId: order._id, reason: 'אין טלפון' }); continue; }
+
+        const pickupUrl = `https://shop.buypower.co.il/pickup/${pickupToken}`;
+        const msg = `שלום ${customerName}, ההזמנה שלך מוכנה לאיסוף! לצפייה ואישור: ${pickupUrl}`;
+
+        const inforuUser = process.env.INFORU_USER;
+        const inforuPassword = process.env.INFORU_PASSWORD;
+        const inforuSender = process.env.INFORU_SENDER || 'BuyPower';
+
+        if (!inforuUser || !inforuPassword) {
+          console.log(`[PICKUP SMS] Phone: ${customerPhone} | Token: ${pickupToken}`);
+          sent.push(order._id);
+          continue;
+        }
+
+        const cleanPhone = customerPhone.replace(/[^0-9]/g, '');
+        const xml = `<Inforu><User><Username>${inforuUser}</Username><ApiToken>${inforuPassword}</ApiToken></User><Content Type=sms><Message>${msg}</Message></Content><Recipients><PhoneNumber>${cleanPhone}</PhoneNumber></Recipients></Inforu>`;
+        const url = `https://api.inforu.co.il/SendMessageXml.ashx?InforuXML=${encodeURIComponent(xml)}`;
+
+        await new Promise((resolve, reject) => {
+          https.get(url, (r) => { resolve(r); }).on('error', reject);
+        });
+        sent.push(order._id);
+      } catch(e) {
+        failed.push({ orderId: order._id, reason: e.message });
+      }
+    }
+
+    res.json({ ok: true, sent: sent.length, failed });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/shop/pickup/:token — ציבורי
+router.get('/pickup/:token', async (req, res) => {
+  try {
+    const db = await getDb();
+    const order = await db.collection('shop_orders').findOne({ pickupToken: req.params.token });
+    if (!order) return res.status(404).json({ error: 'קישור לא תקין' });
+    const { _id, customerName, items, cart, pickupLocation, totalAmount, pickedUp, pickedUpItems, pickedUpAt } = order;
+    res.json({ order: { _id, customerName, items: items || cart || [], pickupLocation, totalAmount, pickedUp: !!pickedUp, pickedUpItems: pickedUpItems || [], pickedUpAt } });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/shop/pickup/:token/confirm — ציבורי
+router.post('/pickup/:token/confirm', async (req, res) => {
+  try {
+    const db = await getDb();
+    const order = await db.collection('shop_orders').findOne({ pickupToken: req.params.token });
+    if (!order) return res.status(404).json({ error: 'קישור לא תקין' });
+    const { pickedUpItems } = req.body;
+    await db.collection('shop_orders').updateOne(
+      { pickupToken: req.params.token },
+      { $set: { pickedUp: true, pickedUpItems: pickedUpItems || [], pickedUpAt: new Date() } }
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // INVENTORY MANAGEMENT
 // ============================================
 
@@ -2047,3 +2189,60 @@ router.get('/admin/staff/:id/report', verifyShopToken, async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+// ─── GROW PAYMENT WEBHOOK ────────────────────────────────────────────────────
+// POST /api/shop/payment/webhook — Grow/Make.com calls this after successful payment
+router.post('/payment/webhook', async (req, res) => {
+  try {
+    const db = await getDb();
+    console.log('[GROW WEBHOOK] received:', JSON.stringify(req.body));
+
+    // Grow/Make sends: orderId, status, amount, reference, phone, name
+    const { orderId, order_id, status, amount, reference, phone, full_name, name } = req.body;
+
+    const id = orderId || order_id;
+
+    // If orderId provided - update by ID
+    if (id) {
+      const { ObjectId } = require('mongodb');
+      try {
+        const result = await db.collection('shop_orders').updateOne(
+          { _id: new ObjectId(id), status: { $ne: 'paid' } },
+          { $set: { status: 'paid', paidAt: new Date(), growRef: reference || null, paidAmount: amount || null } }
+        );
+        console.log('[GROW WEBHOOK] updated by id:', id, 'modified:', result.modifiedCount);
+      } catch(e) {
+        console.log('[GROW WEBHOOK] invalid orderId:', id);
+      }
+    }
+
+    // If phone provided - update latest pending_payment by phone
+    if (phone && !id) {
+      const cleanPhone = phone.replace(/\D/g, '').replace(/^972/, '0');
+      const result = await db.collection('shop_orders').updateMany(
+        {
+          $or: [
+            { phone: cleanPhone },
+            { customerPhone: cleanPhone },
+            { customerName: full_name || name || '' }
+          ],
+          status: 'pending_payment'
+        },
+        { $set: { status: 'paid', paidAt: new Date(), growRef: reference || null, paidAmount: amount || null } }
+      );
+      console.log('[GROW WEBHOOK] updated by phone:', cleanPhone, 'modified:', result.modifiedCount);
+    }
+
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[GROW WEBHOOK] error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+
+// ============================================
+// PICKUP SMS SYSTEM
+// ============================================
+
+module.exports = router;

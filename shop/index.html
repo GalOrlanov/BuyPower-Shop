@@ -480,6 +480,46 @@ footer { background: #14532d; color: #bbf7d0; padding: 24px 16px; margin-top: 20
 .cat-pill { flex-shrink: 0; padding: 8px 18px; border-radius: 50px; border: 2px solid #d1fae5; background: white; color: #15803d; font-size: 0.95rem; font-weight: 700; cursor: pointer; font-family: inherit; transition: all 0.18s; white-space: nowrap; }
 .cat-pill.active { background: #15803d; color: white; border-color: #15803d; }
 .cat-pill:not(.active):hover { background: #f0fdf4; }
+
+/* CATEGORY DIVIDERS */
+.cat-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 32px 0 14px 0;
+  width: 100%;
+  grid-column: 1 / -1;
+  padding: 6px 0;
+}
+.cat-divider-line {
+  flex: 1;
+  height: 3px;
+  background: linear-gradient(90deg, #15803d 0%, #86efac 60%, transparent 100%);
+  border-radius: 3px;
+}
+.cat-divider-line-rev {
+  flex: 1;
+  height: 3px;
+  background: linear-gradient(90deg, transparent 0%, #86efac 40%, #15803d 100%);
+  border-radius: 3px;
+}
+.cat-divider-title {
+  font-size: 20px;
+  font-weight: 900;
+  color: #15803d;
+  white-space: nowrap;
+  letter-spacing: 0.5px;
+}
+.cat-divider-count {
+  font-size: 13px;
+  color: #15803d;
+  background: #f0fdf4;
+  border: 1.5px solid #86efac;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-weight: 700;
+}
+
 </style>
 </head>
 <body>
@@ -487,7 +527,7 @@ footer { background: #14532d; color: #bbf7d0; padding: 24px 16px; margin-top: 20
 <header>
   <div class="header-inner">
     <div class="logo">
-      <img src="/shop/logo.jpg?v=2" alt="לוגו" style="height:40px;width:40px;border-radius:50%;object-fit:cover;border:2px solid #86efac;box-shadow:0 2px 8px rgba(0,0,0,0.1)">
+      <img src="/logo.jpg?v=3" alt="לוגו" style="height:40px;width:40px;border-radius:50%;object-fit:cover;border:2px solid #86efac;box-shadow:0 2px 8px rgba(0,0,0,0.1)">
       <h1>נלחמים ביוקר המחיה</h1>
     </div>
     <div class="header-actions">
@@ -863,7 +903,9 @@ function buildCatBar() {
 function selectCategory(valOrEl) {
   activeCategory = (typeof valOrEl === 'string') ? valOrEl : valOrEl.dataset.v;
   buildCatBar();
-  filterProducts();
+    filterProducts();
+    insertCategoryDividers();
+    patchFilterForDividers();
   var fs = document.getElementById('featuredSection');
   if (fs) fs.style.display = (!activeCategory || activeCategory === '__featured__') ? 'block' : 'none';
 }
@@ -1112,6 +1154,9 @@ async function loadProducts() {
         '</div></div>';
     }).join('');
     buildCatBar();
+    filterProducts();
+    setTimeout(insertCategoryDividers, 50);
+    patchFilterForDividers();
   allProducts.forEach(function(p) {
       if (p.available_until && new Date(p.available_until) > new Date()) {
         startCountdown(p._id, p.available_until, 'btn_' + p._id);
@@ -1354,6 +1399,73 @@ window._closedBrowseMode = function() {
     // isClosed=false → overlay stays hidden, site is open
   }).catch(function(){});
 })();
+
+// ADD CATEGORY DIVIDERS
+var CATS_ORDER = [
+  { value: 'פירות וירקות', emoji: '🥦' },
+  { value: 'חד פעמי', emoji: '🥤' },
+  { value: 'מוצרי ניקיון', emoji: '🧹' },
+  { value: 'יינות תשבי פסח 2026', emoji: '🍷' },
+  { value: 'יינות תשבי קלאסי', emoji: '🍾' },
+  { value: 'יינות ומשקאות מיוחדים', emoji: '🍷' },
+  { value: 'ציוד משרדי', emoji: '🖨️' },
+  { value: 'כללי', emoji: '📦' },
+];
+
+function insertCategoryDividers() {
+  var grid = document.getElementById('productGrid');
+  if (!grid) return;
+  // מסיר dividers ישנים
+  grid.querySelectorAll('.cat-divider').forEach(function(d){ d.remove(); });
+  
+  var cards = Array.from(grid.querySelectorAll('.product-card[data-cat]'));
+  if (!cards.length) return;
+  
+  // מקבץ לפי קטגוריה בסדר
+  var catMap = {};
+  cards.forEach(function(card) {
+    var cat = card.getAttribute('data-cat') || 'כללי';
+    if (!catMap[cat]) catMap[cat] = [];
+    catMap[cat].push(card);
+  });
+  
+  var orderedCats = [];
+  CATS_ORDER.forEach(function(c) { if (catMap[c.value]) orderedCats.push(c); });
+  Object.keys(catMap).forEach(function(cat) {
+    if (!CATS_ORDER.find(function(c){ return c.value === cat; }))
+      orderedCats.push({ value: cat, emoji: '📦' });
+  });
+  
+  // מסדר מחדש את הkארדים ומוסיף dividers
+  orderedCats.forEach(function(cat) {
+    var divider = document.createElement('div');
+    divider.className = 'cat-divider';
+    divider.setAttribute('data-cat-div', cat.value);
+    divider.innerHTML = '<div class="cat-divider-line"></div>' +
+      '<span class="cat-divider-title">' + cat.emoji + ' ' + cat.value + '</span>' +
+      '<span class="cat-divider-count">' + catMap[cat.value].length + '</span>' +
+      '<div class="cat-divider-line-rev"></div>';
+    grid.appendChild(divider);
+    catMap[cat.value].forEach(function(card) { grid.appendChild(card); });
+  });
+}
+
+// פונקציה שמסתירה/מציגה dividers לפי סינון
+var _origFilterProducts = null;
+function patchFilterForDividers() {
+  var origFilter = window.filterProducts;
+  window.filterProducts = function() {
+    origFilter();
+    // עדכן dividers visibility
+    document.querySelectorAll('.cat-divider[data-cat-div]').forEach(function(div) {
+      var catVal = div.getAttribute('data-cat-div');
+      var grid = document.getElementById('productGrid');
+      var hasVisible = Array.from(grid.querySelectorAll('.product-card[data-cat="' + catVal + '"]'))
+        .some(function(c){ return c.style.display !== 'none'; });
+      div.style.display = hasVisible ? '' : 'none';
+    });
+  };
+}
 </script>
 </body>
 </html>
