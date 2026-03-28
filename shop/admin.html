@@ -913,7 +913,7 @@ input:checked + .slider::before { transform: translateX(20px); }
           </div>
           <div>
             <label style="font-size:12px;color:#6b7280;display:block;margin-bottom:3px">תצוגה</label>
-            <select id="profitView" onchange="renderProfitView()" style="padding:8px;border:2px solid #e5e7eb;border-radius:8px;font-family:inherit">
+            <select id="profitViewSelect" onchange="renderProfitView()" style="padding:8px;border:2px solid #e5e7eb;border-radius:8px;font-family:inherit">
               <option value="table">📋 טבלה</option>
               <option value="chart">📊 גרף</option>
             </select>
@@ -923,7 +923,7 @@ input:checked + .slider::before { transform: translateX(20px); }
       <!-- Summary cards -->
       <div id="profitSummary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px"></div>
       <!-- Chart/Table -->
-      <div id="profitView" style="background:white;border-radius:16px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,.06)"></div>
+      <div id="profitViewContainer" style="background:white;border-radius:16px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,.06)"></div>
     </div>
 
     <!-- CRM TAB -->
@@ -4408,14 +4408,14 @@ async function loadProfitAnalysis() {
 
     renderProfitView();
   } catch(e) {
-    document.getElementById('profitView').innerHTML = '<div style="color:#ef4444;padding:20px">שגיאה: ' + e.message + '</div>';
+    var pvc = document.getElementById('profitViewContainer'); if(pvc) pvc.innerHTML = '<div style="color:#ef4444;padding:20px">שגיאה: ' + e.message + '</div>';
   }
 }
 
 function renderProfitView() {
   if (!_profitData) return;
-  const mode = document.getElementById('profitView').value || 'table';
-  const container = document.getElementById('profitView');
+  const mode = (document.getElementById('profitViewSelect') || {}).value || 'table';
+  const container = document.getElementById('profitViewContainer');
 
   if (mode === 'chart') {
     const max = Math.max(..._profitData.map(p => p.revenue), 1);
