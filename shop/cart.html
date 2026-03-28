@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta property="og:title" content="עגלת קניות — נלחמים ביוקר המחיה">
 <meta property="og:description" content="מחזירים את הכוח לצרכן — מחירים שלא תמצאו בשום מקום אחר">
-<meta property="og:image" content="https://buypower.co.il/shop/logo.jpg">
-<meta property="og:url" content="https://buypower.co.il/shop/cart.html">
+<meta property="og:image" content="https://shop.buypower.co.il/logo.jpg">
+<meta property="og:url" content="https://shop.buypower.co.il/cart.html">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
 <title>עגלת קניות — נלחמים ביוקר המחיה</title>
@@ -341,6 +341,9 @@ input:focus, select:focus { outline: none; border-color: #15803d; }
         </div>
       </div>
 
+      <!-- Savings display -->
+      <div id="cartSavings" style="display:none"></div>
+
       <!-- Payment buttons -->
       <div id="paymentButtons" style="display:flex;flex-direction:column;gap:12px;margin-top:4px">
         <button class="checkout-btn" id="growBtn" onclick="openGrowForm()" style="background:#1d4ed8">💳 שלם עם כרטיס אשראי (Grow)</button>
@@ -353,8 +356,8 @@ input:focus, select:focus { outline: none; border-color: #15803d; }
 <script>
 var shopUser = JSON.parse(localStorage.getItem('shopUser') || 'null');
 if (!shopUser || shopUser.isGuest) {
-  alert('יש להירשם כדי לבצע הזמנה');
-  window.location.href = '/shop/login.html';
+  localStorage.setItem('afterLoginRedirect', window.location.href);
+  window.location.href = '/login.html?msg=יש+להירשם+כדי+לבצע+הזמנה';
 }
 const API = '/api/shop';
 // Check if shop is closed
@@ -400,14 +403,16 @@ async function fixAndRender() {
   try {
     const products = await fetch('/api/shop/products').then(function(r){return r.json();});
     shopProducts = Array.isArray(products) ? products : [];
-    // Enrich existing cart items with quantityDeals from shopProducts (fixes old localStorage items)
+    // Enrich existing cart items with quantityDeals + vatType from shopProducts
     cart.forEach(function(item) {
       var pid = item.productId || item.id || '';
       if (!pid && item.cartKey) pid = item.cartKey.split('_')[0];
       if (!pid) return;
       var prod = shopProducts.find(function(p){ return p._id === pid; });
-      if (prod && prod.quantityDeals && prod.quantityDeals.length) {
-        item.quantityDeals = prod.quantityDeals;
+      if (prod) {
+        if (prod.quantityDeals && prod.quantityDeals.length) item.quantityDeals = prod.quantityDeals;
+        // Always sync vatType from server (critical for correct tax in Grow)
+        if (prod.vatType !== undefined) item.vatType = prod.vatType;
       }
     });
     localStorage.setItem('yedidya_cart', JSON.stringify(cart));
@@ -517,6 +522,25 @@ function renderTotal() {
     }).join('');
   }
   grand.textContent = '₪' + total.toFixed(2);
+  // Savings calculation
+  var totalMarket = cart.reduce(function(s, i) {
+    var mp = i.marketPrice || 0;
+    if (!mp) return s;
+    return s + (mp * (i.qty || 1));
+  }, 0);
+  var saved = totalMarket - total;
+  var savingsEl = document.getElementById('cartSavings');
+  if (savingsEl) {
+    if (saved > 0.5) {
+      savingsEl.innerHTML = '<div style="background:#f0fdf4;border:2px solid #86efac;border-radius:12px;padding:12px 16px;margin-top:10px;text-align:center">' +
+        '<div style="font-size:13px;color:#6b7280;text-decoration:line-through">מחיר שוק: ₪' + totalMarket.toFixed(2) + '</div>' +
+        '<div style="font-size:18px;font-weight:900;color:#15803d;margin-top:4px">🎉 חסכת ₪' + saved.toFixed(2) + '!</div>' +
+        '</div>';
+      savingsEl.style.display = 'block';
+    } else {
+      savingsEl.style.display = 'none';
+    }
+  }
   if (minOrderAmount > 0 && total < minOrderAmount) {
     var missing = (minOrderAmount - total).toFixed(2);
     banner.style.display = 'block';
@@ -642,7 +666,7 @@ async function sendOrder() {
     const d = await res.json();
     if (d.orderId || d._id) {
       localStorage.removeItem('shopCart'); localStorage.removeItem('yedidya_cart');
-      window.location.href = '/shop/success.html?orderId=' + (d.orderId || d._id) + '&name=' + encodeURIComponent(name);
+      window.location.href = '/success.html?orderId=' + (d.orderId || d._id) + '&name=' + encodeURIComponent(name);
     } else {
       throw new Error('no order id');
     }
@@ -761,7 +785,7 @@ async function submitGrowForm() {
     var _orData = await _orRes.json();
     _orderId = _orData.orderId || _orData._id || null;
   } catch(e2) {}
-  var _successUrl = 'https://buypower.co.il/shop/success.html' +
+  var _successUrl = 'https://shop.buypower.co.il/success.html' +
     (_orderId ? ('?orderId=' + _orderId + '&name=' + encodeURIComponent(fname + ' ' + lname)) : '');
   try {
     const res = await fetch('/api/shop/payment/create', {
@@ -776,18 +800,25 @@ async function submitGrowForm() {
         chargeType: 1,
         payment_type: 'Payments',
         max_or_custom: 'Max Payments',
-        products: cart.map(item => ({
-          catalog_number: item._id || item.id || item.productId || (item.cartKey ? item.cartKey.split('_')[0] : '1'),
-          name: item.name + (item.variant ? ' - ' + item.variant : '') + (item.qty > 1 ? ' ×' + item.qty : ''),
-          price: calcItemTotal(item),
-          quantity: 1,
-          minimum_quantity: 1,
-          productUrl: item.imageUrl || '',
-          vatType: 1,
-          description: item.variant || ''
-        })),
+        products: cart.map(item => {
+          // Map our vatType string to Grow numeric: 1=חייב, 2=פטור
+          // Default to 2 (פטור) — most products are fruits/vegetables/exempt
+          let growVatType = 2;
+          if (item.vatType === 'included' || item.vatType === 'excluded') growVatType = 1;
+          else if (typeof item.vatType === 'number') growVatType = item.vatType;
+          return {
+            catalog_number: item._id || item.id || item.productId || (item.cartKey ? item.cartKey.split('_')[0] : '1'),
+            name: item.name + (item.variant ? ' - ' + item.variant : '') + (item.qty > 1 ? ' ×' + item.qty : ''),
+            price: calcItemTotal(item),
+            quantity: 1,
+            minimum_quantity: 1,
+            productUrl: item.imageUrl || '',
+            vatType: growVatType,
+            description: item.variant || ''
+          };
+        }),
         success_url: _successUrl,
-        fail_url: 'https://buypower.co.il/shop/cart.html?error=1' + (_orderId ? '&orderId=' + _orderId : '')
+        fail_url: 'https://shop.buypower.co.il/cart.html?error=1' + (_orderId ? '&orderId=' + _orderId : '')
       })
     });
     const data = await res.json();

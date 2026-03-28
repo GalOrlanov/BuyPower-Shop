@@ -115,5 +115,31 @@ async function sendWAOrder() {
 </script>
 
 </main>
+
+<div id="successSavings" style="display:none;max-width:400px;margin:0 auto"></div>
+<script>
+// Show savings on success page
+(function() {
+  try {
+    var orderData = JSON.parse(sessionStorage.getItem('lastOrderData') || localStorage.getItem('lastOrderData') || 'null');
+    if (!orderData || !orderData.items) return;
+    var total = orderData.totalAmount || 0;
+    var totalMarket = (orderData.items || []).reduce(function(s, i) {
+      return s + ((i.marketPrice || 0) * (i.qty || 1));
+    }, 0);
+    var saved = totalMarket - total;
+    if (saved > 0.5) {
+      var el = document.getElementById('successSavings');
+      if (el) {
+        el.innerHTML = '<div style="background:#f0fdf4;border:2px solid #86efac;border-radius:16px;padding:16px;text-align:center;margin:16px 0">' +
+          '<div style="font-size:24px;font-weight:900;color:#15803d">🎉 חסכת ₪' + saved.toFixed(2) + ' היום!</div>' +
+          '<div style="font-size:14px;color:#6b7280;margin-top:4px">לעומת מחיר שוק של ₪' + totalMarket.toFixed(2) + '</div>' +
+          '</div>';
+        el.style.display = 'block';
+      }
+    }
+  } catch(e) {}
+})();
+</script>
 </body>
 </html>
