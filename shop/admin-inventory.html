@@ -587,11 +587,9 @@ function openEditModal(id) {
   document.getElementById('fMarketPriceCalc').value = item.marketPrice != null ? item.marketPrice : '';
   document.getElementById('fUnit').value = item.unit||"יח'";
   document.getElementById('fSupplier').value = item.supplier||'';
-  document.getElementById('fLowAlert').value = item.lowStockAlert||5;
-  document.getElementById('fExpiry').value = item.expiryDate||'';
-  document.getElementById('fSerial').value = item.serialNumber||'';
+  // legacy fields removed
   document.getElementById('fImage').value = item.imageUrl||'';
-  document.getElementById('fNotes').value = item.notes||'';
+  // fNotes removed
   setVat(item.vatType||'exempt');
   loadInventoryPickupPoints(item.pickupPoints||[]);
   var featuredEl = document.getElementById('fFeatured');
@@ -611,7 +609,7 @@ function closeModal() {
 }
 
 function clearForm() {
-  ['fName','fQty','fBuyPrice','fSellPrice','fSupplier','fExpiry','fSerial','fImage','fNotes'].forEach(id => document.getElementById(id).value = '');
+  ['fName','fQty','fBuyPrice','fSellPrice','fSupplier','fImage'].forEach(id => { var el=document.getElementById(id); if(el) el.value=''; });
   if (document.getElementById('fLowAlert')) document.getElementById('fLowAlert').value = '5';
   loadInventoryPickupPoints([]);
   setVat('exempt');
@@ -652,15 +650,7 @@ async function uploadImageFile(input) {
   input.value = '';
 }
 
-function previewImageUrl() {
-  const url = document.getElementById('fImage').value.trim();
-  const preview = document.getElementById('fImagePreview');
-  if (url) {
-    preview.innerHTML = '<img src="' + url + '" style="max-width:120px;max-height:120px;border-radius:10px;border:2px solid #d1fae5;object-fit:cover" onerror="this.style.display=\'none\'">';
-  } else {
-    preview.innerHTML = '';
-  }
-}
+function previewImageUrl() { /* no preview in simplified form */ }
 
 async function saveItem() {
   const name = document.getElementById('fName').value.trim();
