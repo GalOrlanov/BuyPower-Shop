@@ -636,7 +636,8 @@ function buildItemRow(item) {
       </td>
       <td>${item.unit||"יח'"}</td>
       <td style="color:#6b7280">₪${item.purchasePrice||0}</td>
-      <td style="font-weight:800;color:#15803d">₪${item.sellingPrice||0}</td>
+      <td style="font-size:.8rem;color:#9ca3af;text-decoration:line-through">${item.marketPrice ? '₪'+item.marketPrice : '—'}</td>
+      <td style="font-weight:800;color:#15803d">₪${item.sellingPrice||0}${item.marketPrice && item.marketPrice > item.sellingPrice ? '<br><span style="color:#16a34a;font-size:.7rem;font-weight:700">חסכת ₪'+(item.marketPrice-item.sellingPrice).toFixed(0)+'</span>' : ''}</td>
       <td>${item.supplier||'—'}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-sm" style="background:${item.isActive?'#dcfce7':'#f3f4f6'};color:${item.isActive?'#15803d':'#6b7280'};font-weight:800;min-width:80px" 
@@ -688,7 +689,7 @@ function renderTable(items) {
   document.getElementById('tableWrap').innerHTML = `
     <table>
       <thead><tr>
-        <th>תמונה</th><th>שם</th><th>קטגוריה</th><th>כמות</th><th>יח'</th><th>עלות</th><th>💰 מחיר מכירה</th><th>ספק</th><th>פעולות</th>
+        <th>תמונה</th><th>שם</th><th>קטגוריה</th><th>כמות</th><th>יח'</th><th>עלות</th><th>מחיר שוק</th><th>💰 מחיר מכירה</th><th>ספק</th><th>פעולות</th>
           <th>נקודות חלוקה</th>
       </tr></thead>
       <tbody>${rows}</tbody>
