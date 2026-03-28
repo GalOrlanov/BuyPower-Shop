@@ -308,23 +308,12 @@ function toggleUnlimitedStock() {
 }
 
 function setVat(val) {
-  document.getElementById('fVatType').value = val;
-  var btnExempt = document.getElementById('vatBtnExempt');
-  var btnIncluded = document.getElementById('vatBtnIncluded');
-  if (val === 'exempt') {
-    btnExempt.style.border = '2px solid #15803d';
-    btnExempt.style.background = '#dcfce7';
-    btnExempt.style.color = '#14532d';
-    btnIncluded.style.border = '2px solid #d1d5db';
-    btnIncluded.style.background = 'white';
-    btnIncluded.style.color = '#374151';
-  } else {
-    btnIncluded.style.border = '2px solid #2563eb';
-    btnIncluded.style.background = '#dbeafe';
-    btnIncluded.style.color = '#1e40af';
-    btnExempt.style.border = '2px solid #d1d5db';
-    btnExempt.style.background = 'white';
-    btnExempt.style.color = '#374151';
+  var vatType = document.getElementById('fVatType');
+  if (vatType) vatType.value = val;
+  var display = document.getElementById('fVatDisplay');
+  if (display) {
+    display.textContent = val === 'exempt' ? '🟢 פטור ממע"מ' : '🔵 כולל מע"מ 18%';
+    display.style.color = val === 'exempt' ? '#15803d' : '#2563eb';
   }
 }
 
@@ -352,7 +341,7 @@ function roundSellPrice() {
 }
 
 function addQuantityDealRow(qty='', price='') {
-  const container = document.getElementById('quantityDealsContainer');
+  const container = (document.getElementById('quantityDealsContainer') || {});
   const row = document.createElement('div');
   row.className = 'qty-deal-row';
   row.style.cssText = 'display:flex;gap:8px;align-items:center;margin-bottom:6px';
@@ -611,7 +600,7 @@ function closeModal() {
 
 function clearForm() {
   ['fName','fQty','fBuyPrice','fSellPrice','fSupplier','fImage'].forEach(id => { var el=document.getElementById(id); if(el) el.value=''; });
-  if (document.getElementById('fLowAlert')) document.getElementById('fLowAlert').value = '5';
+  if (document.getElementById('fLowAlert')) (document.getElementById('fLowAlert') || {}).value = '5';
   loadInventoryPickupPoints([]);
   setVat('exempt');
   document.getElementById('fUnit').value = "יח'";
@@ -867,7 +856,7 @@ function showErr(msg) {
 }
 
 function showToast(msg, color) {
-  let t = document.getElementById('_toast');
+  let t = (document.getElementById('_toast') || document.body);
   if (!t) {
     t = document.createElement('div');
     t.id = '_toast';
