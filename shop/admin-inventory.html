@@ -116,6 +116,9 @@
     <select class="filter-select" id="catFilter" onchange="filterItems()">
       <option value="">כל הקטגוריות</option>
     </select>
+    <select class="filter-select" id="supplierFilter" onchange="filterItems()">
+      <option value="">כל הספקים</option>
+    </select>
     <select class="filter-select" id="stockFilter" onchange="filterItems()">
       <option value="">כל המלאי</option>
       <option value="low">מלאי נמוך</option>
@@ -158,6 +161,7 @@
           <option value="כללי">כללי</option>
         </select>
         <div style="margin-top:6px"><button class="btn btn-outline btn-sm" onclick="promptNewCategory()" type="button">+ קטגוריה חדשה</button></div>
+        <div id="fVatDisplay" style="font-size:13px;font-weight:700;margin-top:4px;color:#15803d">🟢 פטור ממע"מ</div>
       </div>
       <div class="form-row">
         <label>כמות במלאי *</label>
@@ -419,7 +423,22 @@ function setVat(val) {
   calcPriceWidget();
 }
 
+document.addEventListener('DOMContentLoaded', function() {
+  document.getElementById('fCategory').addEventListener('change', function() {
+    var vat = this.value === 'פירות וירקות' ? 'exempt' : 'included';
+    document.getElementById('fVatType').value = vat;
+    var display = document.getElementById('fVatDisplay');
+    if (display) {
+      display.textContent = vat === 'exempt' ? '🟢 פטור ממע"מ' : '🔵 כולל מע"מ 18%';
+      display.style.color = vat === 'exempt' ? '#15803d' : '#2563eb';
+    }
+    setVat(vat);
+  });
+});
+
 function calcPriceWidget() {
+  // Don't auto-calculate when loading existing item — preserve saved price
+  if (window._loadingEdit) return;
   var buy = parseFloat(document.getElementById('fBuyPrice').value) || 0;
   var pct = parseFloat(document.getElementById('fProfitPct').value) || 12;
   var vat = document.getElementById('fVatType').value;
@@ -500,6 +519,7 @@ async function loadInventory() {
     if (!categories.length) categories = ['כללי'];
     updateStats();
     populateCatFilter();
+    populateSupplierFilter();
     filterItems(); // use filterItems to respect status filter
   } catch(e) {
     document.getElementById('tableWrap').innerHTML = '<div class="empty-state"><div class="icon">⚠️</div><div>שגיאה בטעינת מלאי</div></div>';
@@ -521,19 +541,29 @@ function populateCatFilter() {
     categories.map(c => `<option value="${c}">${c}</option>`).join('');
 }
 
+function populateSupplierFilter() {
+  const suppliers = [...new Set(allItems.map(i => i.supplier).filter(Boolean))].sort((a,b) => a.localeCompare(b,'he'));
+  const sel = document.getElementById('supplierFilter');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">כל הספקים</option>' +
+    suppliers.map(s => `<option value="${s}">${s}</option>`).join('');
+}
+
 function filterItems() {
   const q = document.getElementById('searchInput').value.trim().toLowerCase();
   const cat = document.getElementById('catFilter').value;
+  const supplier = document.getElementById('supplierFilter') ? document.getElementById('supplierFilter').value : '';
   const stock = document.getElementById('stockFilter').value;
   const statusFilter = window._statusFilter || 'all';
   let filtered = allItems.filter(i => {
     const mq = !q || i.name.toLowerCase().includes(q) || (i.supplier||'').toLowerCase().includes(q);
     const mc = !cat || i.category === cat;
+    const msup = !supplier || i.supplier === supplier;
     const ms = !stock || (stock === 'low' ? i.quantity <= i.lowStockAlert : i.quantity > i.lowStockAlert);
     // isActive: explicitly false or null = inactive; true or undefined = active
     const effectiveActive = i.isActive !== false && i.isActive !== null;
     const mStatus = statusFilter === 'all' || (statusFilter === 'active' && effectiveActive) || (statusFilter === 'inactive' && !effectiveActive);
-    return mq && mc && ms && mStatus;
+    return mq && mc && msup && ms && mStatus;
   });
   renderTable(filtered);
 }
@@ -591,8 +621,8 @@ function buildItemRow(item) {
         ? '<span class="badge badge-orange">מלאי נמוך</span>'
         : '<span class="badge badge-green">תקין</span>';
     const img = item.imageUrl
-      ? `<img src="${item.imageUrl}" class="img-thumb" onerror="this.style.display='none'">`
-      : `<div class="no-img">📦</div>`;
+      ? `<img src="${item.imageUrl}" class="img-thumb" onerror="this.style.display='none'" title="לחץ להחלפת תמונה" style="cursor:pointer" onclick="quickUploadImg('${item._id}', this)">`
+      : `<div class="no-img" title="לחץ להעלאת תמונה" style="cursor:pointer" onclick="quickUploadImg('${item._id}', this)">📦<br><span style='font-size:.6rem;color:#9ca3af'>לחץ</span></div>`;
     const profit = item.sellingPrice && item.purchasePrice
       ? '<span style="color:#15803d;font-size:.75rem">(' + Math.round((item.sellingPrice - item.purchasePrice) / item.purchasePrice * 100) + '% רווח)</span>'
       : '';
@@ -674,18 +704,21 @@ function openAddModal() {
 }
 
 function openEditModal(id) {
-  console.log('openEditModal called', id, 'allItems length:', allItems.length);
   const item = allItems.find(i => i._id === id);
-  if (!item) { console.error('item not found!'); return; }
+  if (!item) { return; }
   editingId = id;
   document.getElementById('modalTitle').textContent = '✏️ עריכת פריט';
   populateModalCats();
+
+  // Set _loadingEdit flag so calcPriceWidget doesn't overwrite existing prices during load
+  window._loadingEdit = true;
+
   document.getElementById('fName').value = item.name||'';
   document.getElementById('fCategory').value = item.category||'כללי';
-  document.getElementById('fQty').value = item.quantity||0;
-  document.getElementById('fBuyPrice').value = item.purchasePrice||0;
-  document.getElementById('fSellPrice').value = item.sellingPrice||0;
-  document.getElementById('fMarketPriceCalc').value = item.marketPrice||0;
+  document.getElementById('fQty').value = item.quantity != null ? item.quantity : 0;
+  document.getElementById('fBuyPrice').value = item.purchasePrice != null ? item.purchasePrice : '';
+  document.getElementById('fSellPrice').value = item.sellingPrice != null ? item.sellingPrice : '';
+  document.getElementById('fMarketPriceCalc').value = item.marketPrice != null ? item.marketPrice : '';
   document.getElementById('fUnit').value = item.unit||"יח'";
   document.getElementById('fSupplier').value = item.supplier||'';
   document.getElementById('fLowAlert').value = item.lowStockAlert||5;
@@ -695,18 +728,20 @@ function openEditModal(id) {
   document.getElementById('fNotes').value = item.notes||'';
   setVat(item.vatType||'exempt');
   loadInventoryPickupPoints(item.pickupPoints||[]);
-  document.getElementById('fUnlimited').checked = item.isUnlimited || false;
+  const isUnlimited = !!(item.isUnlimited || item.hasUnlimitedStock);
+  document.getElementById('fUnlimited').checked = isUnlimited;
   document.getElementById('fPackSize').value = item.packSize || 1;
   document.getElementById('fFeatured').checked = item.isFeatured || false;
   document.getElementById('fSortOrder').value = item.sortOrder || 0;
   populateQuantityDeals(item.quantityDeals || []);
-  const unlimitedCb = document.getElementById('fUnlimited');
-  if (unlimitedCb) {
-    unlimitedCb.checked = !!item.hasUnlimitedStock;
-    toggleUnlimitedStock();
-  }
-  if (item.isUnlimited) document.getElementById('fQty').disabled = true;
+  toggleUnlimitedStock();
   updateImgPreview();
+
+  // VAT display sync
+  document.getElementById('fVatType').value = item.vatType || (item.category === 'פירות וירקות' ? 'exempt' : 'included');
+  document.getElementById('fCategory').dispatchEvent(new Event('change'));
+
+  window._loadingEdit = false;
   document.getElementById('itemModal').classList.add('open');
 }
 
@@ -782,6 +817,11 @@ async function saveItem() {
   const name = document.getElementById('fName').value.trim();
   const qty = document.getElementById('fQty').value;
   if (!name || qty === '') { showErr('שם וכמות הם שדות חובה'); return; }
+
+  // Prevent double-submit
+  const saveBtn = document.querySelector('.modal-actions .btn-green');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '⏳ שומר...'; }
+
   const body = {
     name, quantity: parseInt(qty),
     category: document.getElementById('fCategory').value,
@@ -810,12 +850,14 @@ async function saveItem() {
     const res = await fetch(url, {method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
     const data = await res.json();
     if (!res.ok) { showErr(data.error||'שגיאה'); return; }
-    const savedId = data.id || data._id || editingId;
-    const existingItem = editingId ? allItems.find(i=>i._id===editingId) : null;
-    await syncToShop({ ...body, _id: savedId, shopProductId: (existingItem||{}).shopProductId || data.shopProductId || null, isActive: body.isActive !== false });
+    // Server handles full sync to shop_products — no client-side syncToShop needed
     closeModal();
-    loadInventory();
+    await loadInventory();
+    showToast(editingId ? '✅ פריט עודכן' : '✅ פריט נוסף למלאי', '#15803d');
   } catch(e) { showErr(e.message); }
+  finally {
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 שמור'; }
+  }
 }
 
 async function syncToShop(item) {
