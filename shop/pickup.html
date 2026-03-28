@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>אישור איסוף — BuyPower</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f0fdf4;
+      min-height: 100vh;
+      direction: rtl;
+    }
+
+    .header {
+      background: #15803d;
+      color: white;
+      padding: 20px 16px 24px;
+      text-align: center;
+    }
+
+    .header h1 {
+      font-size: 1.4rem;
+      font-weight: 900;
+      margin-bottom: 4px;
+    }
+
+    .header p {
+      font-size: 0.9rem;
+      opacity: 0.85;
+    }
+
+    .logo {
+      font-size: 2rem;
+      margin-bottom: 8px;
+    }
+
+    .container {
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      border: 2px solid #e5e7eb;
+    }
+
+    .card-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #14532d;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .customer-name {
+      font-size: 1.3rem;
+      font-weight: 900;
+      color: #15803d;
+      margin-bottom: 4px;
+    }
+
+    .order-meta {
+      font-size: 0.85rem;
+      color: #6b7280;
+    }
+
+    /* Item checkbox rows */
+    .item-row {
+      display: flex;
+      align-items: center;
+      padding: 14px 0;
+      border-bottom: 1px solid #f3f4f6;
+      cursor: pointer;
+      gap: 14px;
+      transition: background 0.15s;
+    }
+
+    .item-row:last-child { border-bottom: none; }
+
+    .item-row:active { background: #f0fdf4; border-radius: 8px; }
+
+    .item-checkbox {
+      width: 28px;
+      height: 28px;
+      min-width: 28px;
+      border: 2.5px solid #d1d5db;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      font-size: 1.1rem;
+    }
+
+    .item-row.checked .item-checkbox {
+      background: #15803d;
+      border-color: #15803d;
+      color: white;
+    }
+
+    .item-info {
+      flex: 1;
+    }
+
+    .item-name {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #1f2937;
+    }
+
+    .item-variant {
+      font-size: 0.82rem;
+      color: #6b7280;
+      margin-top: 2px;
+    }
+
+    .item-qty {
+      font-size: 0.88rem;
+      color: #374151;
+      background: #f3f4f6;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .btn-confirm {
+      width: 100%;
+      padding: 16px;
+      background: #15803d;
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 1.1rem;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: inherit;
+      transition: opacity 0.2s, transform 0.1s;
+      margin-top: 8px;
+    }
+
+    .btn-confirm:disabled {
+      background: #9ca3af;
+      cursor: not-allowed;
+      opacity: 0.7;
+    }
+
+    .btn-confirm:not(:disabled):active {
+      transform: scale(0.98);
+      opacity: 0.9;
+    }
+
+    .success-banner {
+      background: #15803d;
+      color: white;
+      border-radius: 16px;
+      padding: 32px 20px;
+      text-align: center;
+      margin: 24px 0;
+    }
+
+    .success-banner .icon {
+      font-size: 3rem;
+      margin-bottom: 12px;
+    }
+
+    .success-banner h2 {
+      font-size: 1.4rem;
+      font-weight: 900;
+      margin-bottom: 8px;
+    }
+
+    .success-banner p {
+      font-size: 0.95rem;
+      opacity: 0.9;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 48px 16px;
+      color: #6b7280;
+    }
+
+    .error-box {
+      background: #fef2f2;
+      border: 2px solid #fca5a5;
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+      color: #991b1b;
+    }
+
+    .location-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #dcfce7;
+      color: #15803d;
+      border-radius: 20px;
+      padding: 6px 14px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      margin-top: 10px;
+    }
+
+    .total-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0 0;
+      border-top: 2px solid #f3f4f6;
+      margin-top: 4px;
+    }
+
+    .total-label { font-size: 0.9rem; color: #6b7280; font-weight: 600; }
+    .total-amount { font-size: 1.1rem; font-weight: 900; color: #15803d; }
+
+    .select-all-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 0 12px;
+      border-bottom: 2px solid #e5e7eb;
+      margin-bottom: 4px;
+      cursor: pointer;
+    }
+
+    .select-all-row span {
+      font-size: 0.9rem;
+      color: #374151;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">🛒</div>
+  <h1>BuyPower — איסוף הזמנה</h1>
+  <p>אשר את המוצרים שאספת</p>
+</div>
+
+<div class="container">
+  <div id="app">
+    <div class="loading">⏳ טוען הזמנה...</div>
+  </div>
+</div>
+
+<script>
+  const token = window.location.pathname.split('/pickup/')[1];
+
+  if (!token) {
+    document.getElementById('app').innerHTML = `
+      <div class="error-box">❌ קישור לא תקין</div>`;
+  } else {
+    loadOrder();
+  }
+
+  async function loadOrder() {
+    try {
+      const res = await fetch('/api/shop/pickup/' + token);
+      const data = await res.json();
+
+      if (data.error) {
+        document.getElementById('app').innerHTML = `
+          <div class="error-box">
+            <div style="font-size:1.5rem;margin-bottom:8px">❌</div>
+            <div style="font-weight:700;margin-bottom:4px">קישור לא תקין</div>
+            <div style="font-size:0.85rem">${data.error}</div>
+          </div>`;
+        return;
+      }
+
+      const order = data.order;
+
+      if (order.pickedUp) {
+        renderAlreadyConfirmed(order);
+      } else {
+        renderPickupForm(order);
+      }
+    } catch(e) {
+      document.getElementById('app').innerHTML = `
+        <div class="error-box">❌ שגיאת חיבור. נסה שוב.</div>`;
+    }
+  }
+
+  function renderAlreadyConfirmed(order) {
+    document.getElementById('app').innerHTML = `
+      <div class="success-banner">
+        <div class="icon">✅</div>
+        <h2>ההזמנה שלך כבר אושרה</h2>
+        <p>תודה ${order.customerName || ''}! האיסוף שלך רשום במערכת.</p>
+      </div>
+      ${renderOrderSummaryCard(order)}`;
+  }
+
+  function renderOrderSummaryCard(order) {
+    const items = order.items || [];
+    const pickedItems = order.pickedUpItems || [];
+    const itemsHtml = items.map(item => {
+      const name = item.name || item.productName || 'מוצר';
+      const qty = item.quantity || item.qty || 1;
+      const variant = item.variant || item.variantName || '';
+      const wasPicked = pickedItems.includes(name) || pickedItems.includes(name + (variant ? ' — ' + variant : ''));
+      return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #f3f4f6">
+        <span style="font-size:1.1rem">${wasPicked ? '✅' : '—'}</span>
+        <div style="flex:1">
+          <div style="font-weight:600">${name}${variant ? ' — ' + variant : ''}</div>
+        </div>
+        <div style="background:#f3f4f6;padding:4px 10px;border-radius:20px;font-size:0.85rem;font-weight:600">x${qty}</div>
+      </div>`;
+    }).join('');
+
+    return `<div class="card">
+      <div class="card-title">📦 פרטי ההזמנה</div>
+      ${itemsHtml}
+      ${order.totalAmount ? `<div class="total-row"><span class="total-label">סה"כ</span><span class="total-amount">₪${order.totalAmount}</span></div>` : ''}
+    </div>`;
+  }
+
+  function renderPickupForm(order) {
+    const items = order.items || [];
+    const customerName = order.customerName || '';
+    const location = order.pickupLocation || '';
+
+    let itemsHtml = '';
+    items.forEach((item, idx) => {
+      const name = item.name || item.productName || 'מוצר';
+      const qty = item.quantity || item.qty || 1;
+      const variant = item.variant || item.variantName || '';
+      const displayName = name + (variant ? ' — ' + variant : '');
+      itemsHtml += `
+        <div class="item-row" id="item-${idx}" onclick="toggleItem(${idx})" data-name="${escHtml(displayName)}">
+          <div class="item-checkbox" id="check-${idx}"></div>
+          <div class="item-info">
+            <div class="item-name">${escHtml(name)}</div>
+            ${variant ? `<div class="item-variant">${escHtml(variant)}</div>` : ''}
+          </div>
+          <div class="item-qty">x${qty}</div>
+        </div>`;
+    });
+
+    document.getElementById('app').innerHTML = `
+      <div class="card" style="margin-top:0">
+        <div class="customer-name">שלום, ${escHtml(customerName)}!</div>
+        <div class="order-meta">הזמנתך מוכנה לאיסוף</div>
+        ${location ? `<div class="location-badge">📍 ${escHtml(location)}</div>` : ''}
+      </div>
+
+      <div class="card">
+        <div class="card-title">🛍️ סמן מה אספת</div>
+        ${items.length > 1 ? `
+        <div class="select-all-row" onclick="selectAll()">
+          <div class="item-checkbox" id="check-all" style="border-color:#15803d"></div>
+          <span>סמן הכל</span>
+        </div>` : ''}
+        <div id="items-list">${itemsHtml}</div>
+        ${order.totalAmount ? `<div class="total-row"><span class="total-label">סה"כ להזמנה</span><span class="total-amount">₪${order.totalAmount}</span></div>` : ''}
+      </div>
+
+      <button class="btn-confirm" id="btn-confirm" disabled onclick="confirmPickup()">
+        סיימתי לאסוף ✅
+      </button>
+      <div id="confirm-msg" style="text-align:center;margin-top:12px;font-size:0.9rem;color:#6b7280"></div>`;
+
+    // Track checked state
+    window._checkedItems = new Set();
+    window._totalItems = items.length;
+  }
+
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function toggleItem(idx) {
+    const row = document.getElementById('item-' + idx);
+    const check = document.getElementById('check-' + idx);
+    const name = row.dataset.name;
+
+    if (window._checkedItems.has(idx)) {
+      window._checkedItems.delete(idx);
+      row.classList.remove('checked');
+      check.innerHTML = '';
+    } else {
+      window._checkedItems.add(idx);
+      row.classList.add('checked');
+      check.innerHTML = '✓';
+    }
+
+    updateConfirmButton();
+    updateSelectAll();
+  }
+
+  function selectAll() {
+    const allChecked = window._checkedItems.size === window._totalItems;
+    const itemsList = document.getElementById('items-list');
+    const rows = itemsList.querySelectorAll('.item-row');
+
+    if (allChecked) {
+      // Uncheck all
+      rows.forEach((row, idx) => {
+        window._checkedItems.delete(idx);
+        row.classList.remove('checked');
+        document.getElementById('check-' + idx).innerHTML = '';
+      });
+    } else {
+      // Check all
+      rows.forEach((row, idx) => {
+        window._checkedItems.add(idx);
+        row.classList.add('checked');
+        document.getElementById('check-' + idx).innerHTML = '✓';
+      });
+    }
+
+    updateConfirmButton();
+    updateSelectAll();
+  }
+
+  function updateSelectAll() {
+    const checkAll = document.getElementById('check-all');
+    if (!checkAll) return;
+    if (window._checkedItems.size === window._totalItems && window._totalItems > 0) {
+      checkAll.innerHTML = '✓';
+      checkAll.style.background = '#15803d';
+      checkAll.style.color = 'white';
+    } else {
+      checkAll.innerHTML = '';
+      checkAll.style.background = '';
+      checkAll.style.color = '';
+    }
+  }
+
+  function updateConfirmButton() {
+    const btn = document.getElementById('btn-confirm');
+    if (!btn) return;
+    btn.disabled = window._checkedItems.size === 0;
+  }
+
+  async function confirmPickup() {
+    const btn = document.getElementById('btn-confirm');
+    const msgEl = document.getElementById('confirm-msg');
+    btn.disabled = true;
+    btn.textContent = '⏳ שולח...';
+
+    // Collect checked item names
+    const itemsList = document.getElementById('items-list');
+    const rows = itemsList.querySelectorAll('.item-row');
+    const pickedUpItems = [];
+    rows.forEach((row, idx) => {
+      if (window._checkedItems.has(idx)) {
+        pickedUpItems.push(row.dataset.name);
+      }
+    });
+
+    try {
+      const res = await fetch('/api/shop/pickup/' + token + '/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pickedUpItems })
+      });
+      const data = await res.json();
+
+      if (data.ok) {
+        document.getElementById('app').innerHTML = `
+          <div class="success-banner">
+            <div class="icon">✅</div>
+            <h2>תודה! האיסוף שלך אושר</h2>
+            <p>נרשם שאספת ${pickedUpItems.length} פריט${pickedUpItems.length !== 1 ? 'ים' : ''}.<br>נתראה בשבוע הבא! 🥦</p>
+          </div>
+          <div class="card" style="text-align:center;color:#6b7280;font-size:0.9rem">
+            <div style="font-size:1.5rem;margin-bottom:8px">🛒</div>
+            BuyPower — ירקות טריים ישירות מהשדה
+          </div>`;
+      } else {
+        btn.disabled = false;
+        btn.textContent = 'סיימתי לאסוף ✅';
+        msgEl.textContent = '❌ ' + (data.error || 'שגיאה, נסה שוב');
+        msgEl.style.color = '#dc2626';
+      }
+    } catch(e) {
+      btn.disabled = false;
+      btn.textContent = 'סיימתי לאסוף ✅';
+      msgEl.textContent = '❌ שגיאת חיבור. נסה שוב.';
+      msgEl.style.color = '#dc2626';
+    }
+  }
+</script>
+</body>
+</html>

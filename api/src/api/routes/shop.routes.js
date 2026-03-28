@@ -68,7 +68,7 @@ async function getDb() {
     cachedClient = new MongoClient(MONGODB_URI);
     await cachedClient.connect();
   }
-  return cachedClient.db('groupPurchase');
+  return cachedClient.db('shop_prod');
 }
 
 async function sendSMS(phone, message) {
@@ -1235,6 +1235,124 @@ router.patch('/legal-comments/:id/resolve', async (req, res) => {
     res.status(500).json({ error: e.message });
   } finally {
     await client.close();
+  }
+});
+
+
+// ============================================
+// PICKUP SMS SYSTEM
+// ============================================
+
+// POST /api/shop/admin/send-pickup-sms
+router.post('/admin/send-pickup-sms', verifyShopToken, async (req, res) => {
+  if (!req.shopUser.isAdmin) return res.status(403).json({ error: 'אין הרשאה' });
+  try {
+    const db = await getDb();
+    const { orderId, weekStart, weekEnd, pickupPoint } = req.body;
+    const crypto = require('crypto');
+    const https = require('https');
+
+    let query = { status: { $in: ['paid', 'ready'] } };
+    if (orderId) {
+      query = { _id: new ObjectId(orderId) };
+    } else {
+      if (weekStart) query.createdAt = { $gte: new Date(weekStart) };
+      if (weekEnd) { query.createdAt = query.createdAt || {}; query.createdAt.$lte = new Date(weekEnd); }
+      if (pickupPoint) query.pickupLocation = pickupPoint;
+    }
+
+    const orders = await db.collection('shop_orders').find(query).toArray();
+    const sent = [];
+    const failed = [];
+
+    for (const order of orders) {
+      try {
+        // Generate pickupToken
+        const pickupToken = crypto.randomBytes(32).toString('hex');
+        await db.collection('shop_orders').updateOne(
+          { _id: order._id },
+          { $set: { pickupToken, pickupTokenSentAt: new Date() } }
+        );
+
+        let customerPhone = order.customerPhone || order.phone || '';
+        let customerName = order.customerName || order.name || 'לקוח יקר';
+
+        // Try to get from shop_users
+        if (order.userId) {
+          try {
+            const customer = await db.collection('shop_users').findOne({ _id: new ObjectId(order.userId) });
+            if (customer) {
+              if (customer.phone) customerPhone = customer.phone;
+              if (customer.name) customerName = customer.name;
+            }
+          } catch(e) {}
+        }
+
+        if (!customerPhone) { failed.push({ orderId: order._id, reason: 'אין טלפון' }); continue; }
+
+        const pickupUrl = `https://shop.buypower.co.il/pickup/${pickupToken}`;
+        const msg = `שלום ${customerName}, ההזמנה שלך מוכנה לאיסוף! לצפייה ואישור: ${pickupUrl}`;
+
+        const inforuUser = process.env.INFORU_USER;
+        const inforuPassword = process.env.INFORU_PASSWORD;
+        const inforuSender = process.env.INFORU_SENDER || 'BuyPower';
+
+        if (!inforuUser || !inforuPassword) {
+          console.log(`[PICKUP SMS] Phone: ${customerPhone} | Token: ${pickupToken} | Msg: ${msg}`);
+          sent.push(order._id);
+          continue;
+        }
+
+        const cleanPhone = customerPhone.replace(/[^0-9]/g, '');
+        const xml = `<Inforu><User><Username>${inforuUser}</Username><ApiToken>${inforuPassword}</ApiToken></User><Content Type="sms"><Message>${msg}</Message></Content><Recipients><PhoneNumber>${cleanPhone}</PhoneNumber></Recipients></Inforu>`;
+        const url = `https://api.inforu.co.il/SendMessageXml.ashx?InforuXML=${encodeURIComponent(xml)}`;
+
+        await new Promise((resolve, reject) => {
+          https.get(url, (r) => { resolve(r); }).on('error', reject);
+        });
+        sent.push(order._id);
+      } catch(e) {
+        console.error('SMS failed for order', order._id, e.message);
+        failed.push({ orderId: order._id, reason: e.message });
+      }
+    }
+
+    res.json({ ok: true, sent: sent.length, failed });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/shop/pickup/:token — ציבורי
+router.get('/pickup/:token', async (req, res) => {
+  try {
+    const db = await getDb();
+    const order = await db.collection('shop_orders').findOne({ pickupToken: req.params.token });
+    if (!order) return res.status(404).json({ error: 'קישור לא תקין או שפג תוקפו' });
+    const { _id, customerName, items, cart, pickupLocation, totalAmount, pickedUp, pickedUpItems, pickedUpAt } = order;
+    res.json({ order: { _id, customerName, items: items || cart || [], pickupLocation, totalAmount, pickedUp: !!pickedUp, pickedUpItems: pickedUpItems || [], pickedUpAt } });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/shop/pickup/:token/confirm — ציבורי
+router.post('/pickup/:token/confirm', async (req, res) => {
+  try {
+    const db = await getDb();
+    const order = await db.collection('shop_orders').findOne({ pickupToken: req.params.token });
+    if (!order) return res.status(404).json({ error: 'קישור לא תקין' });
+    const { pickedUpItems } = req.body;
+    await db.collection('shop_orders').updateOne(
+      { pickupToken: req.params.token },
+      { $set: { pickedUp: true, pickedUpItems: pickedUpItems || [], pickedUpAt: new Date() } }
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
   }
 });
 
