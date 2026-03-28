@@ -640,14 +640,8 @@ function openEditModal(id) {
   document.getElementById('fNotes').value = item.notes||'';
   setVat(item.vatType||'exempt');
   loadInventoryPickupPoints(item.pickupPoints||[]);
-  const isUnlimited = !!(item.isUnlimited || item.hasUnlimitedStock);
-  document.getElementById('fUnlimited').checked = isUnlimited;
-  document.getElementById('fPackSize').value = item.packSize || 1;
-  document.getElementById('fFeatured').checked = item.isFeatured || false;
-  document.getElementById('fSortOrder').value = item.sortOrder || 0;
-  populateQuantityDeals(item.quantityDeals || []);
-  toggleUnlimitedStock();
-  updateImgPreview();
+  var featuredEl = document.getElementById('fFeatured');
+  if (featuredEl) featuredEl.checked = item.isFeatured || false;
 
   // VAT display sync
   document.getElementById('fVatType').value = item.vatType || (item.category === 'פירות וירקות' ? 'exempt' : 'included');
@@ -664,17 +658,11 @@ function closeModal() {
 
 function clearForm() {
   ['fName','fQty','fBuyPrice','fSellPrice','fSupplier','fExpiry','fSerial','fImage','fNotes'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('fLowAlert').value = '5';
+  if (document.getElementById('fLowAlert')) document.getElementById('fLowAlert').value = '5';
   loadInventoryPickupPoints([]);
   setVat('exempt');
   document.getElementById('fUnit').value = "יח'";
-  document.getElementById('fImagePreview').innerHTML = '';
-  document.getElementById('fImageUploadStatus').innerHTML = '';
-  document.getElementById('fUnlimited').checked = false;
-  document.getElementById('fPackSize').value = '1';
-  document.getElementById('fFeatured').checked = false;
-  document.getElementById('fSortOrder').value = '0';
-  populateQuantityDeals([]);
+  if (document.getElementById('fFeatured')) document.getElementById('fFeatured').checked = false;
   document.getElementById('fQty').disabled = false;
 }
 
@@ -691,9 +679,7 @@ document.getElementById('fImage').addEventListener('input', updateImgPreview);
 async function uploadImageFile(input) {
   const file = input.files[0];
   if (!file) return;
-  const status = document.getElementById('fImageUploadStatus');
-  status.innerHTML = '⏳ מעלה תמונה...';
-  status.style.color = '#6b7280';
+  // upload status removed
   const formData = new FormData();
   formData.append('image', file);
   try {
@@ -701,16 +687,13 @@ async function uploadImageFile(input) {
     const data = await res.json();
     if (data.ok && data.imageUrl) {
       document.getElementById('fImage').value = data.imageUrl;
-      status.innerHTML = '✅ תמונה הועלתה בהצלחה!';
-      status.style.color = '#15803d';
+      // ok
       previewImageUrl();
     } else {
-      status.innerHTML = '❌ שגיאה: ' + (data.error || 'העלאה נכשלה');
-      status.style.color = '#dc2626';
+      // err
     }
   } catch(e) {
-    status.innerHTML = '❌ שגיאת רשת: ' + e.message;
-    status.style.color = '#dc2626';
+    // err
   }
   input.value = '';
 }
@@ -742,19 +725,13 @@ async function saveItem() {
     marketPrice: parseFloat(document.getElementById('fMarketPriceCalc').value)||0,
     unit: document.getElementById('fUnit').value,
     supplier: document.getElementById('fSupplier').value,
-    lowStockAlert: parseInt(document.getElementById('fLowAlert').value)||5,
-    expiryDate: document.getElementById('fExpiry').value||null,
-    serialNumber: document.getElementById('fSerial').value,
+    lowStockAlert: 5,
     imageUrl: document.getElementById('fImage').value.trim(),
-    notes: document.getElementById('fNotes').value,
+
     pickupPoints: getInvSelectedPickupPoints(),
     vatType: document.getElementById('fVatType').value,
-    isUnlimited: document.getElementById('fUnlimited').checked,
-    packSize: parseInt(document.getElementById('fPackSize').value) || 1,
-    isFeatured: document.getElementById('fFeatured').checked,
-    sortOrder: parseInt(document.getElementById('fSortOrder').value) || 0,
-    hasUnlimitedStock: document.getElementById('fUnlimited') ? !!document.getElementById('fUnlimited').checked : false,
-    quantityDeals: getQuantityDeals()
+    isFeatured: document.getElementById('fFeatured') ? document.getElementById('fFeatured').checked : false,
+    isActive: document.getElementById('fActive') ? document.getElementById('fActive').checked : true
   };
   try {
     const url = editingId ? API+'/inventory/'+editingId : API+'/inventory';
