@@ -141,6 +141,16 @@
     </div>
   </div>
 
+  <!-- Bulk action toolbar -->
+  <div id="bulkBar" style="display:none;position:sticky;top:0;z-index:100;background:#14532d;color:white;padding:10px 16px;border-radius:12px;margin-bottom:10px;display:none;align-items:center;gap:10px;flex-wrap:wrap">
+    <span id="bulkCount" style="font-weight:800;font-size:.9rem">0 נבחרו</span>
+    <select id="bulkSupplierSel" style="padding:7px 12px;border-radius:8px;border:none;font-family:inherit;font-size:.88rem;flex:1;min-width:160px">
+      <option value="">-- שייך לספק --</option>
+    </select>
+    <button onclick="applyBulkSupplier()" style="padding:7px 16px;background:#dcfce7;color:#14532d;border:none;border-radius:8px;font-weight:800;font-size:.88rem;cursor:pointer;font-family:inherit">✅ שייך</button>
+    <button onclick="clearSelection()" style="padding:7px 12px;background:rgba(255,255,255,.15);color:white;border:none;border-radius:8px;font-weight:700;font-size:.85rem;cursor:pointer;font-family:inherit">✕ בטל</button>
+  </div>
+
   <!-- Table -->
   <div id="tableWrap">
     <div class="empty-state"><div class="icon">⏳</div><div>טוען מלאי...</div></div>
@@ -256,7 +266,9 @@
       </div>
       <div class="form-row">
         <label>ספק</label>
-        <input type="text" id="fSupplier" placeholder="שם הספק">
+        <select id="fSupplier" style="width:100%;padding:8px 10px;border:2px solid #d1fae5;border-radius:8px;font-family:inherit;font-size:.88rem;background:#fafafa">
+          <option value="">-- בחר ספק --</option>
+        </select>
       </div>
       <div class="form-row">
         <label>התראה מלאי נמוך</label>
@@ -353,6 +365,18 @@ if (localStorage.getItem('shopAdminAuth') !== 'ok') {
 (async function initAdmin() {
   try {
     const pts = await fetch('/api/shop/pickup-points').then(r => r.json());
+    // Load suppliers for dropdown
+    try {
+      const suppliers = await fetch('/api/shop/suppliers', {headers:{'x-admin-password':'yedidya2024'}}).then(r=>r.json());
+      const sel = document.getElementById('fSupplier');
+      if (sel) {
+        const current = sel.value;
+        sel.innerHTML = '<option value="">-- בחר ספק --</option>' +
+          suppliers.map(s => '<option value="' + s.name + '">' + s.name + '</option>').join('');
+        if (current) sel.value = current;
+      }
+      window._suppliersLoaded = suppliers;
+    } catch(e) { console.warn('suppliers load failed', e); }
     window._allPickupPoints = pts;
   } catch(e) { window._allPickupPoints = []; }
   await loadInventory();
@@ -618,7 +642,8 @@ function buildItemRow(item) {
     const profit = item.sellingPrice && item.purchasePrice
       ? '<span style="color:#15803d;font-size:.75rem">(' + Math.round((item.sellingPrice - item.purchasePrice) / item.purchasePrice * 100) + '% רווח)</span>'
       : '';
-    return `<tr class="${isLow ? 'low-stock-row' : ''}">
+    return `<tr class="${isLow ? 'low-stock-row' : ''}" id="row_${item._id}">
+      <td style="text-align:center"><input type="checkbox" class="item-cb" data-id="${item._id}" style="width:16px;height:16px;accent-color:#15803d;cursor:pointer" onchange="updateBulkBar()"></td>
       <td>${img}</td>
       <td><strong>${item.name}</strong>${item.isFeatured ? ' <span style="color:#f59e0b">⭐</span>' : ''}${item.packSize > 1 ? ' <span class="badge badge-green">מארז x'+item.packSize+'</span>' : ''}${item.serialNumber ? '<br><span style="color:#9ca3af;font-size:.72rem">'+item.serialNumber+'</span>' : ''}</td>
       <td><span class="cat-tag">${item.category||'כללי'}</span><br><span style="font-size:.7rem;color:#6b7280">${(function(v){return v==='included'?'🔵 כולל מע\"מ':v==='excluded'?'🟡 לפני מע\"מ':'🟢 פטור';})(item.vatType||'exempt')}</span></td>
@@ -680,7 +705,7 @@ function renderTable(items) {
   document.getElementById('tableWrap').innerHTML = `
     <table>
       <thead><tr>
-        <th>תמונה</th><th>שם</th><th>קטגוריה</th><th>כמות</th><th>יח'</th><th>עלות</th><th>💰 מחיר מכירה</th><th>ספק</th><th>פעולות</th>
+        <th style="width:36px"><input type="checkbox" id="selectAllCb" onchange="toggleSelectAll(this)" style="width:16px;height:16px;accent-color:#15803d;cursor:pointer"></th><th>תמונה</th><th>שם</th><th>קטגוריה</th><th>כמות</th><th>יח'</th><th>עלות</th><th>💰 מחיר מכירה</th><th>ספק</th><th>פעולות</th>
           <th>נקודות חלוקה</th>
       </tr></thead>
       <tbody>${rows}</tbody>
@@ -711,7 +736,17 @@ function openEditModal(id) {
   document.getElementById('fSellPrice').value = item.sellingPrice||0;
   document.getElementById('fMarketPriceCalc').value = item.marketPrice||0;
   document.getElementById('fUnit').value = item.unit||"יח'";
-  document.getElementById('fSupplier').value = item.supplier||'';
+  const supSel = document.getElementById('fSupplier');
+  if (supSel) {
+    // ensure option exists (for legacy free-text values)
+    const supVal = item.supplier || '';
+    if (supVal && !Array.from(supSel.options).some(o => o.value === supVal)) {
+      const opt = document.createElement('option');
+      opt.value = supVal; opt.textContent = supVal;
+      supSel.appendChild(opt);
+    }
+    supSel.value = supVal;
+  }
   document.getElementById('fLowAlert').value = item.lowStockAlert||5;
   document.getElementById('fExpiry').value = item.expiryDate||'';
   document.getElementById('fSerial').value = item.serialNumber||'';
@@ -747,7 +782,8 @@ function closeModal() {
 }
 
 function clearForm() {
-  ['fName','fQty','fBuyPrice','fSellPrice','fSupplier','fExpiry','fSerial','fImage','fNotes'].forEach(id => document.getElementById(id).value = '');
+  ['fName','fQty','fBuyPrice','fSellPrice','fExpiry','fSerial','fImage','fNotes'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('fSupplier').value = '';
   document.getElementById('fLowAlert').value = '5';
   loadInventoryPickupPoints([]);
   setVat('exempt');
@@ -864,6 +900,8 @@ async function saveItem() {
   const name = document.getElementById('fName').value.trim();
   const qty = document.getElementById('fQty').value;
   if (!name || qty === '') { showErr('שם וכמות הם שדות חובה'); return; }
+  const supplierVal = document.getElementById('fSupplier').value;
+  if (!supplierVal) { showErr('חובה לשייך ספק למוצר'); return; }
   const body = {
     name, quantity: parseInt(qty),
     category: document.getElementById('fCategory').value,
@@ -1201,6 +1239,61 @@ document.getElementById('itemModal').addEventListener('click', function(e) { if(
 document.getElementById('catModal').addEventListener('click', function(e) { if(e.target===this) e.target.classList.remove('open'); });
 
 // loadInventory called by initAdmin above
+
+// ========== BULK SELECT ==========
+function toggleSelectAll(cb) {
+  document.querySelectorAll('.item-cb').forEach(function(ch) { ch.checked = cb.checked; });
+  updateBulkBar();
+}
+
+function updateBulkBar() {
+  const checked = document.querySelectorAll('.item-cb:checked');
+  const bar = document.getElementById('bulkBar');
+  if (checked.length > 0) {
+    document.getElementById('bulkCount').textContent = checked.length + ' נבחרו';
+    const sel = document.getElementById('bulkSupplierSel');
+    const current = sel.value;
+    sel.innerHTML = '<option value="">-- שייך לספק --</option>';
+    if (window._suppliersLoaded) {
+      window._suppliersLoaded.forEach(function(s) {
+        const opt = document.createElement('option');
+        opt.value = s.name; opt.textContent = s.name;
+        sel.appendChild(opt);
+      });
+    }
+    if (current) sel.value = current;
+    bar.style.display = 'flex';
+  } else {
+    bar.style.display = 'none';
+  }
+}
+
+function clearSelection() {
+  document.querySelectorAll('.item-cb').forEach(function(ch) { ch.checked = false; });
+  const cb = document.getElementById('selectAllCb');
+  if (cb) cb.checked = false;
+  document.getElementById('bulkBar').style.display = 'none';
+}
+
+async function applyBulkSupplier() {
+  const supplierName = document.getElementById('bulkSupplierSel').value;
+  if (!supplierName) { alert('יש לבחור ספק'); return; }
+  const checked = document.querySelectorAll('.item-cb:checked');
+  if (!checked.length) return;
+  const ids = Array.from(checked).map(function(ch) { return ch.dataset.id; });
+  showToast('משייך ' + ids.length + ' מוצרים ל' + supplierName + '...', '#2563eb');
+  await Promise.all(ids.map(function(id) {
+    return fetch(API + '/inventory/' + id, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ supplier: supplierName })
+    });
+  }));
+  clearSelection();
+  await loadInventory();
+  showToast('✅ ' + ids.length + ' מוצרים שויכו ל' + supplierName, '#15803d');
+}
+
 </script>
 <!-- Pickup points bottom sheet -->
 <div id="pickupSheetOverlay" onclick="closePickupDropdown()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9998"></div>

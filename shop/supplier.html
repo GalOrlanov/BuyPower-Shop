@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ספקים — BuyPower Shop</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',Arial,sans-serif;background:#f0fdf4;min-height:100vh;direction:rtl;color:#1a1a1a}
+  .header{background:linear-gradient(135deg,#14532d,#16a34a);color:white;padding:18px 20px;display:flex;align-items:center;gap:12px;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+  .header h1{font-size:1.3rem;font-weight:800}
+  .header a{color:white;text-decoration:none;font-size:1.4rem;opacity:.8}
+  .container{max-width:900px;margin:0 auto;padding:20px 16px}
+  .card{background:white;border-radius:16px;box-shadow:0 2px 12px rgba(0,0,0,.07);padding:20px;margin-bottom:16px}
+  .btn{padding:10px 20px;border-radius:12px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:.9rem;transition:.15s}
+  .btn-green{background:linear-gradient(135deg,#15803d,#16a34a);color:white}
+  .btn-green:hover{opacity:.9}
+  .btn-red{background:#fee2e2;color:#dc2626}
+  .btn-gray{background:#f3f4f6;color:#374151}
+  .btn-sm{padding:6px 12px;font-size:.8rem;border-radius:8px}
+  input,select,textarea{width:100%;padding:10px 12px;border:2px solid #d1fae5;border-radius:10px;font-family:inherit;font-size:.9rem;background:#fafafa;transition:.15s}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:#15803d;background:white}
+  label{font-size:.83rem;font-weight:700;color:#374151;margin-bottom:4px;display:block}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .form-group{display:flex;flex-direction:column;gap:4px}
+  .supplier-card{background:white;border-radius:14px;box-shadow:0 2px 10px rgba(0,0,0,.07);padding:16px;margin-bottom:12px;border:2px solid #d1fae5;transition:.15s}
+  .supplier-card:hover{border-color:#86efac}
+  .supplier-name{font-size:1.1rem;font-weight:800;color:#14532d}
+  .supplier-meta{font-size:.82rem;color:#6b7280;margin-top:4px;display:flex;flex-wrap:wrap;gap:10px}
+  .tag{background:#f0fdf4;border:1.5px solid #86efac;color:#15803d;padding:2px 10px;border-radius:12px;font-size:.78rem;font-weight:700}
+  .order-row{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-radius:10px;background:#f9fafb;border:1.5px solid #e5e7eb;margin-bottom:8px}
+  .order-date{font-size:.78rem;color:#9ca3af}
+  .order-items{font-size:.85rem;font-weight:700;color:#14532d}
+  .empty{text-align:center;color:#9ca3af;padding:30px;font-size:.9rem}
+  .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center}
+  .modal-bg.open{display:flex}
+  .modal{background:white;border-radius:20px;padding:24px 20px;width:100%;max-width:560px;max-height:90vh;overflow-y:auto;margin:16px}
+  .modal-title{font-size:1.15rem;font-weight:800;margin-bottom:18px;color:#14532d}
+  .section-title{font-size:.95rem;font-weight:800;color:#14532d;margin:18px 0 10px;border-bottom:2px solid #d1fae5;padding-bottom:6px}
+  .orders-table{width:100%;border-collapse:collapse;font-size:.82rem}
+  .orders-table th{background:#f0fdf4;color:#14532d;font-weight:700;padding:8px 10px;text-align:right;border-bottom:2px solid #d1fae5}
+  .orders-table td{padding:8px 10px;border-bottom:1px solid #f3f4f6}
+  .orders-table tr:hover td{background:#f9fafb}
+  #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);color:white;padding:12px 24px;border-radius:12px;font-weight:700;font-size:.95rem;z-index:9999;transition:opacity .3s;pointer-events:none;opacity:0}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <a href="admin.html">←</a>
+  <h1>🏭 ספקים</h1>
+  <div style="flex:1"></div>
+  <button class="btn btn-sm" style="background:rgba(255,255,255,.2);color:white;border:1.5px solid rgba(255,255,255,.4)" onclick="openAddModal()">+ ספק חדש</button>
+</div>
+
+<div class="container">
+  <div id="suppliersList">
+    <div class="empty">טוען ספקים...</div>
+  </div>
+</div>
+
+<!-- Add/Edit Supplier Modal -->
+<div class="modal-bg" id="supplierModal">
+  <div class="modal">
+    <div class="modal-title" id="modalTitle">➕ ספק חדש</div>
+    <div class="form-grid">
+      <div class="form-group" style="grid-column:1/-1">
+        <label>שם העסק *</label>
+        <input id="sName" placeholder="שם העסק / הספק">
+      </div>
+      <div class="form-group">
+        <label>ח.פ / ע.מ</label>
+        <input id="sTaxId" placeholder="000000000">
+      </div>
+      <div class="form-group">
+        <label>שם הסוכן</label>
+        <input id="sAgent" placeholder="שם הסוכן">
+      </div>
+      <div class="form-group">
+        <label>פלאפון</label>
+        <input id="sPhone" placeholder="05X-XXXXXXX" type="tel">
+      </div>
+      <div class="form-group">
+        <label>מייל</label>
+        <input id="sEmail" placeholder="supplier@example.com" type="email">
+      </div>
+      <div class="form-group" style="grid-column:1/-1">
+        <label>כתובת</label>
+        <input id="sAddress" placeholder="רחוב, עיר">
+      </div>
+      <div class="form-group" style="grid-column:1/-1">
+        <label>תנאי תשלום</label>
+        <select id="sPayment">
+          <option value="">-- בחר --</option>
+          <option value="מזומן">מזומן</option>
+          <option value="שוטף+30">שוטף+30</option>
+          <option value="שוטף+60">שוטף+60</option>
+          <option value="אשראי">אשראי</option>
+          <option value="העברה בנקאית">העברה בנקאית</option>
+        </select>
+      </div>
+      <div class="form-group" style="grid-column:1/-1">
+        <label>הערות</label>
+        <textarea id="sNotes" rows="2" placeholder="הערות חופשיות..."></textarea>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:18px">
+      <button class="btn btn-green" style="flex:1" onclick="saveSupplier()">💾 שמור</button>
+      <button class="btn btn-gray" onclick="closeModal('supplierModal')">ביטול</button>
+    </div>
+    <div id="modalErr" style="color:#dc2626;font-size:.83rem;margin-top:8px;display:none"></div>
+  </div>
+</div>
+
+<!-- Supplier Detail Modal -->
+<div class="modal-bg" id="detailModal">
+  <div class="modal">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="modal-title" id="detailTitle" style="margin:0"></div>
+      <button onclick="closeModal('detailModal')" style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:#6b7280">✕</button>
+    </div>
+    <div id="detailMeta" style="font-size:.85rem;color:#6b7280;margin-bottom:16px"></div>
+    <div style="display:flex;gap:8px;margin-bottom:4px">
+      <button class="btn btn-sm btn-green" onclick="editCurrentSupplier()">✏️ ערוך</button>
+      <button class="btn btn-sm btn-red" onclick="deleteCurrentSupplier()">🗑️ מחק ספק</button>
+    </div>
+    <div class="section-title">📦 מוצרים של ספק זה</div>
+    <div id="detailProducts"></div>
+    <div class="section-title">📋 הזמנות רכש</div>
+    <div id="detailOrders"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const API = '/api/shop';
+const HEADERS = { 'Content-Type': 'application/json', 'x-admin-password': 'yedidya2024' };
+
+let allSuppliers = [];
+let editingId = null;
+let currentSupplier = null;
+
+async function load() {
+  const res = await fetch(API + '/suppliers', { headers: HEADERS });
+  allSuppliers = await res.json();
+  render();
+}
+
+function render() {
+  const el = document.getElementById('suppliersList');
+  if (!allSuppliers.length) { el.innerHTML = '<div class="empty">אין ספקים עדיין.<br>לחץ "+ ספק חדש" כדי להוסיף.</div>'; return; }
+  el.innerHTML = allSuppliers.map(s => `
+    <div class="supplier-card" onclick="openDetail('${s._id}')">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div class="supplier-name">🏭 ${s.name}</div>
+          <div class="supplier-meta">
+            ${s.taxId ? '<span>ח.פ: ' + s.taxId + '</span>' : ''}
+            ${s.agentName ? '<span>🙋 ' + s.agentName + '</span>' : ''}
+            ${s.phone ? '<span>📞 ' + s.phone + '</span>' : ''}
+            ${s.email ? '<span>✉️ ' + s.email + '</span>' : ''}
+            ${s.paymentTerms ? '<span class="tag">' + s.paymentTerms + '</span>' : ''}
+          </div>
+          ${s.notes ? '<div style="font-size:.8rem;color:#9ca3af;margin-top:6px">' + s.notes + '</div>' : ''}
+        </div>
+        <div style="font-size:1.5rem;color:#d1fae5">›</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function openAddModal() {
+  editingId = null;
+  document.getElementById('modalTitle').textContent = '➕ ספק חדש';
+  document.getElementById('sName').value = '';
+  document.getElementById('sPhone').value = '';
+  document.getElementById('sAgent').value = '';
+  document.getElementById('sCompany').value = '';
+  document.getElementById('sTaxId').value = '';
+  document.getElementById('sAddress').value = '';
+  document.getElementById('sEmail').value = '';
+  document.getElementById('sContact').value = '';
+  document.getElementById('sPayment').value = '';
+  document.getElementById('sNotes').value = '';
+  document.getElementById('modalErr').style.display = 'none';
+  document.getElementById('supplierModal').classList.add('open');
+}
+
+function openEditModal(s) {
+  editingId = s._id;
+  document.getElementById('modalTitle').textContent = '✏️ עריכת ספק';
+  document.getElementById('sName').value = s.name || '';
+  document.getElementById('sPhone').value = s.phone || '';
+  document.getElementById('sAgent').value = s.agentName || '';
+  document.getElementById('sCompany').value = s.companyName || '';
+  document.getElementById('sTaxId').value = s.taxId || '';
+  document.getElementById('sAddress').value = s.address || '';
+  document.getElementById('sEmail').value = s.email || '';
+  document.getElementById('sContact').value = s.contactName || '';
+  document.getElementById('sPayment').value = s.paymentTerms || '';
+  document.getElementById('sNotes').value = s.notes || '';
+  document.getElementById('modalErr').style.display = 'none';
+  document.getElementById('supplierModal').classList.add('open');
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+
+async function saveSupplier() {
+  const name = document.getElementById('sName').value.trim();
+  if (!name) { showErr('שם ספק הוא שדה חובה'); return; }
+  const body = {
+    name,
+    phone: document.getElementById('sPhone').value.trim(),
+    agentName: document.getElementById('sAgent').value.trim(),
+    companyName: document.getElementById('sCompany').value.trim(),
+    taxId: document.getElementById('sTaxId').value.trim(),
+    address: document.getElementById('sAddress').value.trim(),
+    taxId: document.getElementById('sTaxId').value.trim(),
+    agentName: document.getElementById('sAgent').value.trim(),
+    address: document.getElementById('sAddress').value.trim(),
+    email: document.getElementById('sEmail').value.trim(),
+    paymentTerms: document.getElementById('sPayment').value,
+    notes: document.getElementById('sNotes').value.trim()
+  };
+  const url = editingId ? API + '/suppliers/' + editingId : API + '/suppliers';
+  const method = editingId ? 'PUT' : 'POST';
+  const res = await fetch(url, { method, headers: HEADERS, body: JSON.stringify(body) });
+  if (!res.ok) { const d = await res.json(); showErr(d.error || 'שגיאה'); return; }
+  closeModal('supplierModal');
+  await load();
+  toast('✅ ספק נשמר');
+}
+
+async function openDetail(id) {
+  currentSupplier = allSuppliers.find(s => s._id == id);
+  if (!currentSupplier) return;
+  document.getElementById('detailTitle').textContent = '🏭 ' + currentSupplier.name;
+  const meta = [
+    currentSupplier.taxId ? 'ח.פ: ' + currentSupplier.taxId : '',
+    currentSupplier.agentName ? '🙋 סוכן: ' + currentSupplier.agentName : '',
+    currentSupplier.phone ? '📞 ' + currentSupplier.phone : '',
+    currentSupplier.email ? '✉️ ' + currentSupplier.email : '',
+    currentSupplier.address ? '📍 ' + currentSupplier.address : '',
+    currentSupplier.paymentTerms ? '💳 ' + currentSupplier.paymentTerms : '',
+    currentSupplier.notes ? '📝 ' + currentSupplier.notes : ''
+  ].filter(Boolean).join(' &nbsp;·&nbsp; ');
+  document.getElementById('detailMeta').innerHTML = meta;
+
+  // Load products for this supplier
+  const invRes = await fetch(API + '/inventory', { headers: HEADERS });
+  const inv = await invRes.json();
+  const myProducts = inv.filter(i => i.supplier && i.supplier.toLowerCase() === currentSupplier.name.toLowerCase());
+  const prodsEl = document.getElementById('detailProducts');
+  if (!myProducts.length) {
+    prodsEl.innerHTML = '<div style="color:#9ca3af;font-size:.85rem;padding:8px 0">אין מוצרים מקושרים לספק זה.<br><small>ודא ששם הספק במלאי תואם בדיוק.</small></div>';
+  } else {
+    prodsEl.innerHTML = myProducts.map(p =>
+      `<div style="display:flex;justify-content:space-between;padding:8px 10px;border-radius:8px;background:#f9fafb;border:1px solid #e5e7eb;margin-bottom:6px">
+        <span style="font-weight:700">${p.name}</span>
+        <span style="color:#6b7280;font-size:.82rem">${p.isActive ? '🟢 פעיל' : '⚪ לא פעיל'} · מלאי: ${p.quantity || 0} ${p.unit || ''}</span>
+      </div>`
+    ).join('');
+  }
+
+  // Load purchase orders
+  await loadOrders(id);
+  document.getElementById('detailModal').classList.add('open');
+}
+
+async function loadOrders(supplierId) {
+  const id = supplierId || currentSupplier._id;
+  const res = await fetch(API + '/suppliers/' + id + '/orders', { headers: HEADERS });
+  const orders = await res.json();
+  const el = document.getElementById('detailOrders');
+  if (!orders.length) { el.innerHTML = '<div style="color:#9ca3af;font-size:.85rem;padding:8px 0">אין הזמנות רכש עדיין.</div>'; return; }
+  el.innerHTML = '<table class="orders-table"><thead><tr><th>תאריך</th><th>סה"כ יחידות</th><th></th></tr></thead><tbody>' +
+    orders.map(o => `<tr>
+      <td style="font-weight:700">${new Date(o.createdAt).toLocaleDateString('he-IL')}</td>
+      <td style="font-weight:900;color:#14532d;font-size:1.05rem">${o.totalItems}</td>
+      <td style="display:flex;gap:6px;align-items:center">
+        <button class="btn btn-sm" style="background:#fef9c3;color:#92400e" onclick="viewOrder('${o._id}')">👁️ פירוט</button>
+        <button class="btn btn-sm btn-red" onclick="deleteOrder('${o._id}')">✕</button>
+      </td>
+    </tr>`).join('') + '</tbody></table>';
+}
+
+function viewOrder(orderId) {
+  // re-fetch and display
+  fetch(API + '/suppliers/' + currentSupplier._id + '/orders', { headers: HEADERS })
+    .then(r => r.json()).then(orders => {
+      const o = orders.find(x => x._id == orderId);
+      if (!o) return;
+      const w = window.open('', '_blank');
+      w.document.write(generateOrderHTML(o, currentSupplier));
+      w.document.close();
+    });
+}
+
+function generateOrderHTML(order, supplier) {
+  const totalCost = order.totalCost || order.items.reduce((s,i)=>s+((i.lineTotal||0)),0);
+  const rows = order.items.map((item, i) => `<tr>
+    <td style="padding:10px 14px;text-align:center">${i+1}</td>
+    <td style="padding:10px 14px;font-weight:700">${item.name}</td>
+    <td style="padding:10px 14px;text-align:center;font-weight:900;color:#14532d">${item.qty}</td>
+    <td style="padding:10px 14px;text-align:center">${item.unitPrice ? '₪'+Number(item.unitPrice).toFixed(2) : '—'}</td>
+    <td style="padding:10px 14px;text-align:center;font-weight:700">${item.lineTotal ? '₪'+Number(item.lineTotal).toFixed(2) : '—'}</td>
+  </tr>`).join('');
+  return `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>הזמנה לספק</title>
+  <style>@page{size:A4;margin:20mm}body{font-family:Arial,sans-serif;direction:rtl;color:#111;font-size:12pt}h1{font-size:17pt;color:#14532d;margin-bottom:4px}.meta{color:#555;font-size:10pt;margin-bottom:20px}table{width:100%;border-collapse:collapse;margin-top:8px}th{background:#14532d;color:white;padding:10px 14px;text-align:right;font-size:11pt}td{border-bottom:1px solid #e5e7eb}.total-row td{background:#f0fdf4;font-weight:900;border-top:3px solid #14532d}.btn{position:fixed;top:16px;left:16px;background:#14532d;color:white;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;font-weight:700;font-size:12pt}@media print{.btn{display:none}}</style></head>
+  <body><button class="btn" onclick="window.print()">🖨️ הדפס</button>
+  <h1>📋 הזמנה לספק — ${supplier.name}</h1>
+  <div class="meta">
+    ${supplier.phone ? 'טלפון: ' + supplier.phone + ' &nbsp;·&nbsp; ' : ''}
+    טווח הזמנות: ${order.dateRange || 'לא צוין'} &nbsp;·&nbsp; הופק: ${new Date(order.createdAt).toLocaleString('he-IL')}
+  </div>
+  <table><thead><tr><th style="width:40px;text-align:center">#</th><th>מוצר</th><th style="width:70px;text-align:center">כמות</th><th style="width:90px;text-align:center">מחיר ליח'</th><th style="width:100px;text-align:center">סה"כ שורה</th></tr></thead>
+  <tbody>${rows}
+  <tr class="total-row"><td colspan="2" style="padding:10px 14px">📦 סה"כ</td><td style="padding:10px 14px;text-align:center">${order.totalItems}</td><td></td><td style="padding:10px 14px;text-align:center;color:#14532d">₪${totalCost.toFixed(2)}</td></tr>
+  </tbody></table>
+  ${order.notes ? '<p style="margin-top:20px;color:#555">הערות: ' + order.notes + '</p>' : ''}
+  </body></html>`;
+}
+
+async function deleteOrder(orderId) {
+  if (!confirm('למחוק הזמנה זו?')) return;
+  await fetch(API + '/suppliers/' + currentSupplier._id + '/orders/' + orderId, { method: 'DELETE', headers: HEADERS });
+  await loadOrders();
+  toast('🗑️ הזמנה נמחקה');
+}
+
+function editCurrentSupplier() {
+  closeModal('detailModal');
+  openEditModal(currentSupplier);
+}
+
+async function deleteCurrentSupplier() {
+  if (!confirm('למחוק את הספק ' + currentSupplier.name + '?\n(המוצרים במלאי לא יימחקו)')) return;
+  await fetch(API + '/suppliers/' + currentSupplier._id, { method: 'DELETE', headers: HEADERS });
+  closeModal('detailModal');
+  await load();
+  toast('🗑️ ספק נמחק');
+}
+
+function showErr(msg) {
+  const el = document.getElementById('modalErr');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function toast(msg, color) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.background = color || '#15803d';
+  t.style.opacity = '1';
+  setTimeout(() => { t.style.opacity = '0'; }, 2500);
+}
+
+load();
+</script>
+</body>
+</html>

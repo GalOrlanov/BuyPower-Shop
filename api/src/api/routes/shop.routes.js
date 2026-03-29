@@ -219,7 +219,21 @@ router.post('/products', async (req, res) => {
     const shopProductId = result.insertedId;
 
     // AUTO-CREATE inventory entry so shop and inventory stay in sync
+    // Only if no existing inventory entry for this name (prevents duplicates when syncing from inventory page)
     try {
+      const existingInv = await db.collection('shop_inventory').findOne({ name: doc.name });
+      if (existingInv) {
+        // Link existing inventory to this shop product instead of creating duplicate
+        await db.collection('shop_products').updateOne(
+          { _id: shopProductId },
+          { $set: { inventoryId: existingInv._id.toString() } }
+        );
+        await db.collection('shop_inventory').updateOne(
+          { _id: existingInv._id },
+          { $set: { shopProductId: shopProductId.toString(), updatedAt: new Date() } }
+        );
+        doc.inventoryId = existingInv._id.toString();
+      } else {
       const invDoc = {
         name: doc.name,
         quantity: doc.stock,
@@ -251,6 +265,7 @@ router.post('/products', async (req, res) => {
         { $set: { inventoryId: invResult.insertedId.toString() } }
       );
       doc.inventoryId = invResult.insertedId.toString();
+      } // end else - no existing inventory
     } catch (invErr) {
       console.warn('Auto-create inventory entry failed:', invErr.message);
     }
@@ -2289,5 +2304,78 @@ router.post('/payment/webhook', async (req, res) => {
 // ============================================
 // PICKUP SMS SYSTEM
 // ============================================
+
+
+// ========== SUPPLIERS ==========
+
+router.get('/suppliers', async (req, res) => {
+  try {
+    const db = await getDb();
+    const suppliers = await db.collection('shop_suppliers').find({}).sort({ name: 1 }).toArray();
+    res.json(suppliers);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/suppliers', async (req, res) => {
+  try {
+    const db = await getDb();
+    const { name, phone, agentName, companyName, taxId, address, email, contactName, paymentTerms, notes } = req.body;
+    if (!name) return res.status(400).json({ error: 'שם ספק הוא שדה חובה' });
+    const doc = { name, phone: phone||'', agentName: agentName||'', companyName: companyName||'', taxId: taxId||'', address: address||'', email: email||'', contactName: contactName||'', paymentTerms: paymentTerms||'', notes: notes||'', createdAt: new Date(), updatedAt: new Date() };
+    const result = await db.collection('shop_suppliers').insertOne(doc);
+    res.json({ ...doc, _id: result.insertedId });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/suppliers/:id', async (req, res) => {
+  try {
+    const db = await getDb();
+    const { ObjectId } = require('mongodb');
+    const update = { ...req.body, updatedAt: new Date() };
+    delete update._id;
+    await db.collection('shop_suppliers').updateOne({ _id: new ObjectId(req.params.id) }, { $set: update });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/suppliers/:id', async (req, res) => {
+  try {
+    const db = await getDb();
+    const { ObjectId } = require('mongodb');
+    await db.collection('shop_suppliers').deleteOne({ _id: new ObjectId(req.params.id) });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/suppliers/:id/orders', async (req, res) => {
+  try {
+    const db = await getDb();
+    const orders = await db.collection('shop_purchase_orders').find({ supplierId: req.params.id }).sort({ createdAt: -1 }).toArray();
+    res.json(orders);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/suppliers/:id/orders', async (req, res) => {
+  try {
+    const db = await getDb();
+    const { ObjectId } = require('mongodb');
+    const { items, dateRange, notes } = req.body;
+    if (!items || !items.length) return res.status(400).json({ error: 'אין פריטים' });
+    const supplier = await db.collection('shop_suppliers').findOne({ _id: new ObjectId(req.params.id) });
+    if (!supplier) return res.status(404).json({ error: 'ספק לא נמצא' });
+    const doc = { supplierId: req.params.id, supplierName: supplier.name, items, dateRange: dateRange||'', notes: notes||'', totalItems: items.reduce((s,i)=>s+(i.qty||0),0), createdAt: new Date() };
+    const result = await db.collection('shop_purchase_orders').insertOne(doc);
+    res.json({ ...doc, _id: result.insertedId });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/suppliers/:supplierId/orders/:orderId', async (req, res) => {
+  try {
+    const db = await getDb();
+    const { ObjectId } = require('mongodb');
+    await db.collection('shop_purchase_orders').deleteOne({ _id: new ObjectId(req.params.orderId) });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
 module.exports = router;
