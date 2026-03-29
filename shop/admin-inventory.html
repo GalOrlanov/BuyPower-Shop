@@ -510,7 +510,11 @@ async function loadInventory() {
       fetch(API + '/inventory'),
       fetch(API + '/inventory/categories')
     ]);
-    allItems = await itemsRes.json(); window._allItems = allItems;
+    const rawItems = await itemsRes.json();
+    // Deduplicate by _id before rendering
+    const seen = new Set();
+    allItems = rawItems.filter(i => { if (seen.has(i._id)) return false; seen.add(i._id); return true; });
+    window._allItems = allItems;
     categories = await catsRes.json();
     if (!categories.length) categories = ['כללי'];
     updateStats();
