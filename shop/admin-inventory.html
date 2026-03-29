@@ -165,17 +165,11 @@
         <label>כמות במלאי *</label>
         <div style="display:flex;align-items:center;gap:10px">
           <input type="number" id="fQty" min="0" value="0" placeholder="0" style="flex:1;min-width:100px">
-          <label style="display:flex;align-items:center;gap:6px;font-weight:600;font-size:.85rem;cursor:pointer;white-space:nowrap">
-            <input type="checkbox" id="fUnlimited" onchange="toggleUnlimitedStock()" style="width:18px;height:18px;cursor:pointer">
+          <label style="display:flex;align-items:center;gap=6px;font-weight:600;font-size:.85rem;cursor:pointer;white-space:nowrap">
+            <input type="checkbox" id="fUnlimited" onchange="toggleUnlimitedStock()" style="width:18px;height:18px;cursor:pointer;accent-color:#15803d">
             ♾️ ללא הגבלה
           </label>
         </div>
-      </div>
-      <div class="form-row full">
-        <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
-          <input type="checkbox" id="fUnlimited" onchange="document.getElementById('fQty').disabled=this.checked;if(this.checked)document.getElementById('fQty').value=9999" style="width:18px;height:18px;accent-color:#15803d">
-          <span>♾️ מלאי ללא הגבלה (לפירות, ירקות — ניתן להזמין ללא מגבלת כמות)</span>
-        </label>
       </div>
       <input type="hidden" id="fPackSize" value="1">
       <input type="hidden" id="fSortOrder" value="0">
@@ -402,10 +396,8 @@ function toggleUnlimitedStock() {
 const VAT_EXEMPT_CATEGORIES = ['פירות וירקות', 'ירקות', 'פירות', 'פירות', 'ירקות ופירות', 'פירות וירקות'];
 
 function onCategoryChange(cat) {
-  var isExempt = VAT_EXEMPT_CATEGORIES.some(function(c) { return cat.includes(c) || c.includes(cat); });
-  if (isExempt) {
-    setVat('exempt');
-  }
+  var isFruitVeg = cat.includes('פירות') || cat.includes('ירקות');
+  setVat(isFruitVeg ? 'exempt' : 'included');
 }
 
 function setVat(val) {
