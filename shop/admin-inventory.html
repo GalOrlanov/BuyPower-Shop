@@ -900,7 +900,7 @@ async function saveItem() {
       await syncToShop(mergedItem);
     }
     closeModal();
-    loadInventory();
+    await loadInventory(); // force fresh data from server
   } catch(e) { showErr(e.message); }
 }
 
