@@ -999,15 +999,22 @@ async function savePickupDropdown() {
   closePickupDropdown();
   // Save to server
   try {
-    await fetch(API + '/inventory/' + itemId, {
+    const saveRes = await fetch(API + '/inventory/' + itemId, {
       method: 'PUT', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ pickupPoints: pts })
     });
+    const saveData = await saveRes.json();
+    // Update shopProductId in local allItems if returned
+    if (saveData.shopProductId && item) item.shopProductId = saveData.shopProductId;
+
     if (item && item.shopProductId) {
       fetch('/api/shop/products/' + item.shopProductId, {
-        method: 'PUT', headers: {'Content-Type':'application/json'},
+        method: 'PUT', headers: {'Content-Type':'application/json','x-admin-password':'yedidya2024'},
         body: JSON.stringify({ pickupPoints: pts })
       }).catch(()=>{});
+    } else if (item) {
+      // No shopProductId yet — do full sync to link properly
+      await syncToShop({ ...item, pickupPoints: pts });
     }
     showToast('✅ נקודות חלוקה עודכנו', '#15803d');
   } catch(e) { showToast('שגיאה: ' + e.message, '#dc2626'); }
@@ -1049,6 +1056,12 @@ async function toggleActive(id, currentlyActive) {
       const invItem = allItems.find(i => i._id === id);
       if (invItem) {
         invItem.isActive = !currentlyActive;
+        // Reload fresh item from server to get latest shopProductId before sync
+        try {
+          const fresh = await fetch(API + '/inventory').then(r=>r.json());
+          const freshItem = fresh.find(i => i._id === id);
+          if (freshItem && freshItem.shopProductId) invItem.shopProductId = freshItem.shopProductId;
+        } catch(e) {}
         await syncToShop({ ...invItem });
       }
       loadInventory();
