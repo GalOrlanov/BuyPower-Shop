@@ -860,7 +860,6 @@ function saveItemOnce(btn) {
 }
 
 async function saveItem() {
-  console.log('saveItem START, editingId:', editingId, 'time:', new Date().toISOString());
   const name = document.getElementById('fName').value.trim();
   const qty = document.getElementById('fQty').value;
   if (!name || qty === '') { showErr('שם וכמות הם שדות חובה'); return; }
@@ -889,18 +888,20 @@ async function saveItem() {
   try {
     const url = editingId ? API+'/inventory/'+editingId : API+'/inventory';
     const method = editingId ? 'PUT' : 'POST';
+    showToast('1️⃣ שומר מלאי... pickup:' + JSON.stringify(body.pickupPoints), '#2563eb');
     const res = await fetch(url, {method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
     const data = await res.json();
     if (!res.ok) { showErr(data.error||'שגיאה'); return; }
+    showToast('2️⃣ מלאי נשמר. shopProductId:' + (data.shopProductId||'אין') + ' pickup:' + JSON.stringify(data.pickupPoints), '#2563eb');
     const savedId = data.id || data._id || editingId;
     const existingItem = editingId ? allItems.find(i=>i._id===editingId) : null;
     const mergedItem = { ...body, _id: savedId, shopProductId: (existingItem||{}).shopProductId || data.shopProductId || null, isActive: body.isActive !== false };
-    // Only sync to shop if item is active — prevent creating duplicate shop products
     if (mergedItem.isActive) {
+      showToast('3️⃣ מסנכרן לחנות... shopProductId:' + (mergedItem.shopProductId||'אין'), '#7c3aed');
       await syncToShop(mergedItem);
     }
     closeModal();
-    await loadInventory(); // force fresh data from server
+    await loadInventory();
   } catch(e) { showErr(e.message); }
 }
 
