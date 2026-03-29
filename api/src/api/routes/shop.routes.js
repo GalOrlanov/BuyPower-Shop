@@ -1288,44 +1288,8 @@ router.put('/inventory/:id', async (req, res) => {
     if (update.sellingPrice != null) update.sellingPrice = parseFloat(update.sellingPrice);
     await db.collection('shop_inventory').updateOne({ _id: new ObjectId(req.params.id) }, { $set: update });
 
-    // AUTO-SYNC to shop product
-    try {
-      const invItem = await db.collection('shop_inventory').findOne({ _id: new ObjectId(req.params.id) });
-      if (invItem) {
-        let shopProductId = invItem.shopProductId;
-        // Find shop product by ID or by name (fuzzy)
-        let shopProduct = shopProductId
-          ? await db.collection('shop_products').findOne({ _id: new ObjectId(shopProductId) })
-          : null;
-        if (!shopProduct && invItem.name) {
-          // Exact name match only — no fuzzy to prevent duplicates
-          shopProduct = await db.collection('shop_products').findOne({ name: invItem.name });
-        }
-        if (shopProduct) {
-          const shopUpdate = {};
-          if (invItem.sellingPrice) shopUpdate.shopPrice = invItem.sellingPrice;
-          if (invItem.quantity != null) shopUpdate.stock = invItem.quantity;
-          if (invItem.quantityDeals != null) shopUpdate.quantityDeals = invItem.quantityDeals;
-          if (invItem.isActive != null) shopUpdate.isActive = invItem.isActive;
-          if (invItem.category) shopUpdate.category = invItem.category;
-          if (invItem.imageUrl) shopUpdate.imageUrl = invItem.imageUrl;
-          shopUpdate.updatedAt = new Date();
-          await db.collection('shop_products').updateOne(
-            { _id: shopProduct._id },
-            { $set: shopUpdate }
-          );
-          // Save shopProductId link if missing
-          if (!shopProductId) {
-            await db.collection('shop_inventory').updateOne(
-              { _id: new ObjectId(req.params.id) },
-              { $set: { shopProductId: shopProduct._id.toString() } }
-            );
-          }
-        }
-      }
-    } catch (syncErr) {
-      console.warn('Auto-sync to shop failed:', syncErr.message);
-    }
+    // NOTE: No auto-sync here — frontend (syncToShop) handles all shop product updates
+    // Having both caused duplicate products on every save
 
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
