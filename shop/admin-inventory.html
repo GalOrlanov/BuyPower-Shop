@@ -118,9 +118,6 @@
     <select class="filter-select" id="catFilter" onchange="filterItems()">
       <option value="">כל הקטגוריות</option>
     </select>
-    <select class="filter-select" id="supplierFilter" onchange="filterItems()">
-      <option value="">כל הספקים</option>
-    </select>
     <select class="filter-select" id="stockFilter" onchange="filterItems()">
       <option value="">כל המלאי</option>
       <option value="low">מלאי נמוך</option>
@@ -152,95 +149,176 @@
 <div class="modal-overlay" id="itemModal">
   <div class="modal">
     <div class="modal-title" id="modalTitle">➕ הוסף פריט למלאי</div>
-    <input type="hidden" id="fId">
     <div class="form-grid">
-
       <div class="form-row full">
         <label>שם הפריט *</label>
-        <input type="text" id="fName" placeholder="תותים 0.5 קג">
+        <input type="text" id="fName" placeholder="למשל: צלחות חרסינה לבנות">
       </div>
-
       <div class="form-row">
         <label>קטגוריה *</label>
-        <select id="fCategory"><option value="כללי">כללי</option></select>
-        <button class="btn btn-outline btn-sm" onclick="promptNewCategory()" type="button" style="margin-top:6px">+ חדשה</button>
-        <div id="fVatDisplay" style="font-size:13px;font-weight:700;margin-top:6px;color:#15803d">🟢 פטור ממע"מ</div>
-        <input type="hidden" id="fVatType" value="exempt">
+        <select id="fCategory">
+          <option value="כללי">כללי</option>
+        </select>
+        <div style="margin-top:6px"><button class="btn btn-outline btn-sm" onclick="promptNewCategory()" type="button">+ קטגוריה חדשה</button></div>
       </div>
+      <div class="form-row">
+        <label>כמות במלאי *</label>
+        <div style="display:flex;align-items:center;gap:10px">
+          <input type="number" id="fQty" min="0" value="0" placeholder="0" style="flex:1;min-width:100px">
+          <label style="display:flex;align-items:center;gap:6px;font-weight:600;font-size:.85rem;cursor:pointer;white-space:nowrap">
+            <input type="checkbox" id="fUnlimited" onchange="toggleUnlimitedStock()" style="width:18px;height:18px;cursor:pointer">
+            ♾️ ללא הגבלה
+          </label>
+        </div>
+      </div>
+      <div class="form-row full">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <input type="checkbox" id="fUnlimited" onchange="document.getElementById('fQty').disabled=this.checked;if(this.checked)document.getElementById('fQty').value=9999" style="width:18px;height:18px;accent-color:#15803d">
+          <span>♾️ מלאי ללא הגבלה (לפירות, ירקות — ניתן להזמין ללא מגבלת כמות)</span>
+        </label>
+      </div>
+      <div class="form-row">
+        <label>גודל מארז <span style="color:#9ca3af;font-weight:400">(3 ב-₪200 → הכנס 3)</span></label>
+        <input type="number" id="fPackSize" min="1" value="1" placeholder="1">
+      </div>
+      <div class="form-row">
+        <label>סדר הצגה <span style="color:#9ca3af;font-weight:400">(0 = ראשון)</span></label>
+        <input type="number" id="fSortOrder" min="0" value="0" placeholder="0">
+      </div>
+      <div class="form-row full">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <input type="checkbox" id="fFeatured" style="width:18px;height:18px;accent-color:#f59e0b">
+          <span>⭐ מוצר מומלץ (מוצג בולט בדף הבית)</span>
+        </label>
+      </div>
+      <!-- קובית חישוב מחיר — 5 ריבועים בשורה -->
+      <div class="form-row full" style="background:#f0fdf4;border:2px solid #86efac;border-radius:14px;padding:14px 12px;margin-bottom:8px">
+        <div style="font-weight:800;color:#14532d;margin-bottom:10px;font-size:.95rem">🧮 חישוב מחיר חנות</div>
+        <div style="display:flex;flex-direction:row-reverse;gap:8px;overflow-x:auto;padding-bottom:6px">
 
+          <!-- ① מחיר שוק — ימין -->
+          <div style="flex:1;min-width:95px;background:white;border:1.5px solid #d1d5db;border-radius:10px;padding:10px 8px;text-align:center">
+            <div style="font-size:.68rem;color:#6b7280;margin-bottom:3px;white-space:nowrap">① מחיר שוק</div>
+            <input type="number" id="fMarketPriceCalc" min="0" step="0.01" placeholder="0"
+              style="width:100%;border:none;text-align:center;font-size:.95rem;font-weight:700;color:#111;font-family:inherit;outline:none;padding:2px 0"
+              oninput="calcPriceWidget()">
+            <div style="font-size:.62rem;color:#9ca3af;margin-top:2px">בחנויות אחרות</div>
+          </div>
+
+          <!-- ② מחיר קנייה -->
+          <div style="flex:1;min-width:95px;background:white;border:1.5px solid #d1d5db;border-radius:10px;padding:10px 8px;text-align:center">
+            <div style="font-size:.68rem;color:#6b7280;margin-bottom:3px;white-space:nowrap">② מחיר קנייה</div>
+            <input type="number" id="fBuyPrice" min="0" step="0.01" placeholder="0"
+              style="width:100%;border:none;text-align:center;font-size:.95rem;font-weight:700;color:#111;font-family:inherit;outline:none;padding:2px 0"
+              oninput="calcPriceWidget()">
+            <div style="font-size:.62rem;color:#9ca3af;margin-top:2px">מחיר ספק</div>
+            <div id="buyPriceWithVat" style="display:none;font-size:.65rem;color:#2563eb;font-weight:700;margin-top:3px;white-space:nowrap"></div>
+          </div>
+
+          <!-- ③ אחוז רווח -->
+          <div style="flex:1;min-width:85px;background:white;border:1.5px solid #d1d5db;border-radius:10px;padding:10px 8px;text-align:center">
+            <div style="font-size:.68rem;color:#6b7280;margin-bottom:3px;white-space:nowrap">③ % רווח</div>
+            <div style="display:flex;align-items:center;justify-content:center;gap:2px">
+              <input type="number" id="fProfitPct" min="0" max="200" step="1" value="12"
+                style="width:42px;border:none;text-align:center;font-size:.95rem;font-weight:700;color:#111;font-family:inherit;outline:none;padding:2px 0"
+                oninput="calcPriceWidget()">
+              <span style="font-size:.8rem;color:#555">%</span>
+            </div>
+            <div id="profitCalcPreview" style="font-size:.65rem;color:#15803d;font-weight:700;margin-top:3px;white-space:nowrap;min-height:14px"></div>
+            <button type="button" onclick="calcAndRound()" style="margin-top:4px;padding:2px 8px;background:#2563eb;color:white;border:none;border-radius:5px;font-size:.68rem;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">⬆ חשב + עגל</button>
+          </div>
+
+          <!-- ④ סוג מע"מ -->
+          <div style="flex:1;min-width:110px;background:white;border:1.5px solid #d1d5db;border-radius:10px;padding:10px 8px;text-align:center">
+            <div style="font-size:.68rem;color:#6b7280;margin-bottom:8px;white-space:nowrap">④ סוג מע"מ</div>
+            <input type="hidden" id="fVatType" value="exempt">
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <button type="button" id="vatBtnExempt" onclick="setVat('exempt')"
+                style="padding:6px 8px;border-radius:8px;border:2px solid #15803d;background:#dcfce7;color:#14532d;font-size:.78rem;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap">
+                🟢 פטור
+              </button>
+              <button type="button" id="vatBtnIncluded" onclick="setVat('included')"
+                style="padding:6px 8px;border-radius:8px;border:2px solid #d1d5db;background:white;color:#374151;font-size:.78rem;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">
+                🔵 הוסף מע"מ
+              </button>
+            </div>
+          </div>
+
+          <!-- ⑤ מחיר מכירה — שמאל -->
+          <div style="flex:1;min-width:95px;background:linear-gradient(135deg,#dcfce7,#bbf7d0);border:2px solid #15803d;border-radius:10px;padding:10px 8px;text-align:center">
+            <div style="font-size:.68rem;color:#14532d;font-weight:800;margin-bottom:3px;white-space:nowrap">⑤ מחיר מכירה</div>
+            <input type="number" id="fSellPrice" min="0" step="0.01" placeholder="0"
+              style="width:100%;border:none;text-align:center;font-size:.95rem;font-weight:800;color:#14532d;font-family:inherit;outline:none;background:transparent;padding:2px 0">
+            <button type="button" onclick="roundSellPrice()"
+              style="margin-top:4px;padding:2px 8px;background:#15803d;color:white;border:none;border-radius:5px;font-size:.68rem;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">
+              ✓ עגל למעלה
+            </button>
+          </div>
+
+        </div>
+      </div>
+      <!-- סוג מע"מ מנוהל בתוך קובית החישוב (④) למעלה -->
+      <div class="form-row">
+        <label>יחידת מידה</label>
+        <select id="fUnit">
+          <option>יח'</option><option>ק"ג</option><option>ליטר</option><option>קרטון</option><option>זוג</option><option>מארז</option>
+        </select>
+      </div>
       <div class="form-row">
         <label>ספק</label>
         <input type="text" id="fSupplier" placeholder="שם הספק">
       </div>
-
+      <div class="form-row">
+        <label>התראה מלאי נמוך</label>
+        <input type="number" id="fLowAlert" min="0" value="5" placeholder="5">
+      </div>
+      <div class="form-row">
+        <label>תאריך תפוגה</label>
+        <input type="date" id="fExpiry">
+      </div>
+      <div class="form-row">
+        <label>מספר סידורי <span style="color:#9ca3af;font-weight:400">(אופציונלי)</span></label>
+        <input type="text" id="fSerial" placeholder="SKU / ברקוד">
+      </div>
       <div class="form-row full">
-        <label>📍 נקודות איסוף <span style="color:#9ca3af;font-weight:400">(ריק = כל הנקודות)</span></label>
-        <div id="fPickupPointsContainer" style="display:flex;gap:10px;flex-wrap:wrap;padding:10px;border:1.5px solid #e5e7eb;border-radius:8px;background:#f9fafb">
-          <span style="color:#9ca3af;font-size:13px">טוען...</span>
-        </div>
-      </div>
-
-      <div class="form-row">
-        <label>כמות במלאי *</label>
-        <input type="number" id="fQty" min="0" value="0">
-      </div>
-
-      <div class="form-row">
-        <label>מחיר קנייה (₪)</label>
-        <input type="number" id="fBuyPrice" min="0" step="0.01" placeholder="0">
-      </div>
-
-      <div class="form-row">
-        <label>💰 מחיר שוק (₪) <span style="color:#9ca3af;font-weight:400">להצגת חיסכון</span></label>
-        <input type="number" id="fMarketPriceCalc" min="0" step="0.01" placeholder="0">
-      </div>
-
-      <div class="form-row">
-        <label>🏷️ מחיר מכירה (₪) *</label>
-        <input type="number" id="fSellPrice" min="0" step="0.01" placeholder="0" oninput="updateVatCalc()">
-        <div id="vatCalcDisplay" style="margin-top:6px;padding:8px 10px;background:#f0fdf4;border-radius:8px;font-size:13px;display:none">
-          <div id="vatCalcText" style="color:#374151;margin-bottom:6px"></div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap">
-            <button type="button" onclick="roundSellPrice('up')" style="padding:4px 12px;background:#15803d;color:white;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">עגל מעלה ▲</button>
-            <button type="button" onclick="roundSellPrice('down')" style="padding:4px 12px;background:#6b7280;color:white;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">עגל מטה ▼</button>
+        <label>תמונת מוצר</label>
+        <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap">
+          <div style="flex:1;min-width:200px">
+            <input type="text" id="fImage" placeholder="https://... (או העלה תמונה 👇)" oninput="previewImageUrl()">
+          </div>
+          <div>
+            <label for="fImageFile" style="display:inline-block;padding:9px 16px;background:#eff6ff;color:#1d4ed8;border:2px solid #93c5fd;border-radius:10px;cursor:pointer;font-size:.84rem;font-weight:700;white-space:nowrap">
+              📁 העלה תמונה
+            </label>
+            <input type="file" id="fImageFile" accept="image/*" style="display:none" onchange="uploadImageFile(this)">
           </div>
         </div>
+        <div id="fImageUploadStatus" style="margin-top:6px;font-size:.8rem"></div>
+        <div id="fImagePreview" style="margin-top:8px"></div>
       </div>
-
-      <div class="form-row">
-        <label>יחידה</label>
-        <select id="fUnit">
-          <option value="יח'">יח'</option>
-          <option value="קג">קג</option>
-          <option value="ליטר">ליטר</option>
-          <option value="חבילה">חבילה</option>
-          <option value="קופסה">קופסה</option>
-        </select>
+      <div class="form-row full" style="border:2px solid #fef9c3;border-radius:12px;padding:14px;background:#fffbeb;margin-bottom:4px">
+        <label style="font-weight:800;color:#92400e;margin-bottom:10px;display:block">🏷️ מבצעי כמות</label>
+        <div style="font-size:.8rem;color:#78716c;margin-bottom:10px">לדוגמה: קופסה 1 = ₪8 | 2 קופסאות = ₪15</div>
+        <div id="quantityDealsContainer"></div>
+        <button type="button" onclick="addQuantityDealRow()" 
+          style="margin-top:8px;padding:6px 14px;background:#f0fdf4;color:#15803d;border:1.5px solid #86efac;border-radius:8px;font-size:.83rem;font-weight:700;cursor:pointer">
+          + הוסף מבצע
+        </button>
       </div>
-
-      <div class="form-row">
-        <label>תמונה (URL)</label>
-        <input type="text" id="fImage" placeholder="https://...">
+      <div class="form-row full">
+        <label>📍 נקודות חלוקה (הצ'ק = הפריט שייך לנקודה)</label>
+        <div id="fPickupPointsContainer" style="display:flex;gap:10px;flex-wrap:wrap;padding:10px;border:1.5px solid #e5e7eb;border-radius:8px;background:#f9fafb;margin-bottom:12px">
+          <span style="color:#9ca3af;font-size:.85rem">טוען...</span>
+        </div>
+        <label>הערות</label>
+        <textarea id="fNotes" rows="2" style="resize:vertical" placeholder="הערות נוספות..."></textarea>
       </div>
-
-      <div class="form-row full" style="display:flex;gap:20px;flex-wrap:wrap">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:700">
-          <input type="checkbox" id="fActive" checked style="width:18px;height:18px;accent-color:#15803d">
-          פעיל בחנות
-        </label>
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:700">
-          <input type="checkbox" id="fFeatured" style="width:18px;height:18px;accent-color:#f59e0b">
-          ⭐ כוכב השבוע
-        </label>
-      </div>
-
     </div>
-    <div id="modalErr" style="display:none;color:#dc2626;font-size:13px;margin-bottom:8px;padding:8px;background:#fee2e2;border-radius:8px"></div>
     <div class="modal-actions">
-      <button class="btn btn-green" onclick="saveItem()">💾 שמור</button>
+      <button class="btn btn-green" style="flex:1" onclick="saveItem()">💾 שמור</button>
       <button class="btn btn-outline" onclick="closeModal()">ביטול</button>
-      <button class="btn btn-red btn-sm" id="deleteBtn" onclick="deleteCurrentItem()" style="display:none;margin-right:auto">🗑️ מחק</button>
     </div>
+    <div id="modalErr" style="color:#dc2626;font-size:.82rem;margin-top:8px;display:none"></div>
   </div>
 </div>
 
@@ -313,40 +391,84 @@ function getInvSelectedPickupPoints() {
 }
 
 function toggleUnlimitedStock() {
-  // simplified - no unlimited checkbox
-}
-
-function setVat(val) {
-  var vatType = document.getElementById('fVatType');
-  if (vatType) vatType.value = val;
-  var display = document.getElementById('fVatDisplay');
-  if (display) {
-    display.textContent = val === 'exempt' ? '🟢 פטור ממע"מ' : '🔵 כולל מע"מ 18%';
-    display.style.color = val === 'exempt' ? '#15803d' : '#2563eb';
+  const unlimited = document.getElementById('fUnlimited').checked;
+  const qtyInput = document.getElementById('fQty');
+  if (qtyInput) {
+    qtyInput.disabled = unlimited;
+    qtyInput.style.opacity = unlimited ? '0.4' : '1';
+    if (unlimited) qtyInput.value = '999999';
   }
 }
 
-document.addEventListener('DOMContentLoaded', function() {
-  document.getElementById('fCategory').addEventListener('change', function() {
-    var vat = this.value === 'פירות וירקות' ? 'exempt' : 'included';
-    document.getElementById('fVatType').value = vat;
-    var display = document.getElementById('fVatDisplay');
-    if (display) {
-      display.textContent = vat === 'exempt' ? '🟢 פטור ממע"מ' : '🔵 כולל מע"מ 18%';
-      display.style.color = vat === 'exempt' ? '#15803d' : '#2563eb';
+function setVat(val) {
+  document.getElementById('fVatType').value = val;
+  var btnExempt = document.getElementById('vatBtnExempt');
+  var btnIncluded = document.getElementById('vatBtnIncluded');
+  if (val === 'exempt') {
+    btnExempt.style.border = '2px solid #15803d';
+    btnExempt.style.background = '#dcfce7';
+    btnExempt.style.color = '#14532d';
+    btnIncluded.style.border = '2px solid #d1d5db';
+    btnIncluded.style.background = 'white';
+    btnIncluded.style.color = '#374151';
+  } else {
+    btnIncluded.style.border = '2px solid #2563eb';
+    btnIncluded.style.background = '#dbeafe';
+    btnIncluded.style.color = '#1e40af';
+    btnExempt.style.border = '2px solid #d1d5db';
+    btnExempt.style.background = 'white';
+    btnExempt.style.color = '#374151';
+  }
+  calcPriceWidget();
+}
+
+function calcPriceWidget() {
+  var buy = parseFloat(document.getElementById('fBuyPrice').value) || 0;
+  var pct = parseFloat(document.getElementById('fProfitPct').value) || 12;
+  var vat = document.getElementById('fVatType').value;
+
+  // Show/hide buy price with VAT indicator
+  var vatIndicator = document.getElementById('buyPriceWithVat');
+  if (vat === 'included' || vat === 'excluded') {
+    vatIndicator.style.display = 'block';
+    if (buy) {
+      var buyWithVat = (buy * 1.18).toFixed(2);
+      vatIndicator.textContent = '= ₪' + buyWithVat + ' כולל מע"מ';
+    } else {
+      vatIndicator.textContent = '';
     }
-    setVat(vat);
-  
-  updateVatCalc();
-});
-});
+  } else {
+    vatIndicator.style.display = 'none';
+  }
 
-function calcPriceWidget() { /* simplified */ }
+  var preview = document.getElementById('profitCalcPreview');
+  if (!buy) { if (preview) preview.textContent = ''; return; }
+  var base = buy * (1 + pct / 100);
+  if (vat === 'included' || vat === 'excluded') base = base * 1.18;
+  var rounded = Math.ceil(base * 2) / 2;
+  document.getElementById('fSellPrice').value = base.toFixed(2);
+  if (preview) preview.textContent = '→ ₪' + base.toFixed(2) + ' (עגול: ₪' + rounded.toFixed(1) + ')';
+}
 
-// roundSellPrice moved to new version below
+function roundSellPrice() {
+  var val = parseFloat(document.getElementById('fSellPrice').value) || 0;
+  if (!val) return;
+  var rounded = Math.ceil(val * 2) / 2;
+  document.getElementById('fSellPrice').value = rounded.toFixed(2);
+}
+
+function calcAndRound() {
+  calcPriceWidget();
+  var val = parseFloat(document.getElementById('fSellPrice').value) || 0;
+  if (!val) return;
+  var rounded = Math.ceil(val * 2) / 2;
+  document.getElementById('fSellPrice').value = rounded.toFixed(2);
+  var preview = document.getElementById('profitCalcPreview');
+  if (preview) preview.textContent = '✅ עוגל ל-₪' + rounded.toFixed(1);
+}
 
 function addQuantityDealRow(qty='', price='') {
-  const container = (document.getElementById('quantityDealsContainer') || {});
+  const container = document.getElementById('quantityDealsContainer');
   const row = document.createElement('div');
   row.className = 'qty-deal-row';
   row.style.cssText = 'display:flex;gap:8px;align-items:center;margin-bottom:6px';
@@ -364,9 +486,23 @@ function addQuantityDealRow(qty='', price='') {
   container.appendChild(row);
 }
 
-function getQuantityDeals() { return []; }
+function getQuantityDeals() {
+  const rows = document.querySelectorAll('.qty-deal-row');
+  const deals = [];
+  rows.forEach(row => {
+    const qty = parseInt(row.querySelector('.deal-qty').value);
+    const price = parseFloat(row.querySelector('.deal-price').value);
+    if (qty > 0 && price >= 0) deals.push({ qty, price });
+  });
+  return deals.sort((a,b) => a.qty - b.qty);
+}
 
-function populateQuantityDeals(deals) { /* simplified */ }
+function populateQuantityDeals(deals) {
+  const container = document.getElementById('quantityDealsContainer');
+  container.innerHTML = '';
+  if (!deals || !deals.length) return;
+  deals.forEach(d => addQuantityDealRow(d.qty, d.price));
+}
 
 async function loadInventory() {
   try {
@@ -379,7 +515,6 @@ async function loadInventory() {
     if (!categories.length) categories = ['כללי'];
     updateStats();
     populateCatFilter();
-    populateSupplierFilter();
     filterItems(); // use filterItems to respect status filter
   } catch(e) {
     document.getElementById('tableWrap').innerHTML = '<div class="empty-state"><div class="icon">⚠️</div><div>שגיאה בטעינת מלאי</div></div>';
@@ -401,29 +536,19 @@ function populateCatFilter() {
     categories.map(c => `<option value="${c}">${c}</option>`).join('');
 }
 
-function populateSupplierFilter() {
-  const suppliers = [...new Set(allItems.map(i => i.supplier).filter(Boolean))].sort((a,b) => a.localeCompare(b,'he'));
-  const sel = document.getElementById('supplierFilter');
-  if (!sel) return;
-  sel.innerHTML = '<option value="">כל הספקים</option>' +
-    suppliers.map(s => `<option value="${s}">${s}</option>`).join('');
-}
-
 function filterItems() {
   const q = document.getElementById('searchInput').value.trim().toLowerCase();
   const cat = document.getElementById('catFilter').value;
-  const supplier = document.getElementById('supplierFilter') ? document.getElementById('supplierFilter').value : '';
   const stock = document.getElementById('stockFilter').value;
   const statusFilter = window._statusFilter || 'all';
   let filtered = allItems.filter(i => {
     const mq = !q || i.name.toLowerCase().includes(q) || (i.supplier||'').toLowerCase().includes(q);
     const mc = !cat || i.category === cat;
-    const msup = !supplier || i.supplier === supplier;
     const ms = !stock || (stock === 'low' ? i.quantity <= i.lowStockAlert : i.quantity > i.lowStockAlert);
     // isActive: explicitly false or null = inactive; true or undefined = active
     const effectiveActive = i.isActive !== false && i.isActive !== null;
     const mStatus = statusFilter === 'all' || (statusFilter === 'active' && effectiveActive) || (statusFilter === 'inactive' && !effectiveActive);
-    return mq && mc && msup && ms && mStatus;
+    return mq && mc && ms && mStatus;
   });
   renderTable(filtered);
 }
@@ -481,8 +606,8 @@ function buildItemRow(item) {
         ? '<span class="badge badge-orange">מלאי נמוך</span>'
         : '<span class="badge badge-green">תקין</span>';
     const img = item.imageUrl
-      ? `<img src="${item.imageUrl}" class="img-thumb" onerror="this.style.display='none'" title="לחץ להחלפת תמונה" style="cursor:pointer" onclick="quickUploadImg('${item._id}', this)">`
-      : `<div class="no-img" title="לחץ להעלאת תמונה" style="cursor:pointer" onclick="quickUploadImg('${item._id}', this)">📦<br><span style='font-size:.6rem;color:#9ca3af'>לחץ</span></div>`;
+      ? `<img src="${item.imageUrl}" class="img-thumb" onerror="this.style.display='none'">`
+      : `<div class="no-img">📦</div>`;
     const profit = item.sellingPrice && item.purchasePrice
       ? '<span style="color:#15803d;font-size:.75rem">(' + Math.round((item.sellingPrice - item.purchasePrice) / item.purchasePrice * 100) + '% רווח)</span>'
       : '';
@@ -496,8 +621,7 @@ function buildItemRow(item) {
       </td>
       <td>${item.unit||"יח'"}</td>
       <td style="color:#6b7280">₪${item.purchasePrice||0}</td>
-      <td style="font-size:.8rem;color:#9ca3af;text-decoration:line-through">${item.marketPrice ? '₪'+item.marketPrice : '—'}</td>
-      <td style="font-weight:800;color:#15803d">₪${item.sellingPrice||0}${item.marketPrice && item.marketPrice > item.sellingPrice ? '<br><span style="color:#16a34a;font-size:.7rem;font-weight:700">חסכת ₪'+(item.marketPrice-item.sellingPrice).toFixed(0)+'</span>' : ''}</td>
+      <td style="font-weight:800;color:#15803d">₪${item.sellingPrice||0}</td>
       <td>${item.supplier||'—'}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-sm" style="background:${item.isActive?'#dcfce7':'#f3f4f6'};color:${item.isActive?'#15803d':'#6b7280'};font-weight:800;min-width:80px" 
@@ -549,7 +673,7 @@ function renderTable(items) {
   document.getElementById('tableWrap').innerHTML = `
     <table>
       <thead><tr>
-        <th>תמונה</th><th>שם</th><th>קטגוריה</th><th>כמות</th><th>יח'</th><th>עלות</th><th>מחיר שוק</th><th>💰 מחיר מכירה</th><th>ספק</th><th>פעולות</th>
+        <th>תמונה</th><th>שם</th><th>קטגוריה</th><th>כמות</th><th>יח'</th><th>עלות</th><th>💰 מחיר מכירה</th><th>ספק</th><th>פעולות</th>
           <th>נקודות חלוקה</th>
       </tr></thead>
       <tbody>${rows}</tbody>
@@ -565,51 +689,60 @@ function openAddModal() {
 }
 
 function openEditModal(id) {
+  console.log('openEditModal called', id, 'allItems length:', allItems.length);
   const item = allItems.find(i => i._id === id);
-  if (!item) { return; }
+  if (!item) { console.error('item not found!'); return; }
   editingId = id;
   document.getElementById('modalTitle').textContent = '✏️ עריכת פריט';
   populateModalCats();
-
-  // Set _loadingEdit flag so calcPriceWidget doesn't overwrite existing prices during load
-  window._loadingEdit = true;
-
   document.getElementById('fName').value = item.name||'';
   document.getElementById('fCategory').value = item.category||'כללי';
-  document.getElementById('fQty').value = item.quantity != null ? item.quantity : 0;
-  document.getElementById('fBuyPrice').value = item.purchasePrice != null ? item.purchasePrice : '';
-  document.getElementById('fSellPrice').value = item.sellingPrice != null ? item.sellingPrice : '';
-  document.getElementById('fMarketPriceCalc').value = item.marketPrice != null ? item.marketPrice : '';
+  document.getElementById('fQty').value = item.quantity||0;
+  document.getElementById('fBuyPrice').value = item.purchasePrice||0;
+  document.getElementById('fSellPrice').value = item.sellingPrice||0;
+  document.getElementById('fMarketPriceCalc').value = item.marketPrice||0;
   document.getElementById('fUnit').value = item.unit||"יח'";
   document.getElementById('fSupplier').value = item.supplier||'';
-  // legacy fields removed
+  document.getElementById('fLowAlert').value = item.lowStockAlert||5;
+  document.getElementById('fExpiry').value = item.expiryDate||'';
+  document.getElementById('fSerial').value = item.serialNumber||'';
   document.getElementById('fImage').value = item.imageUrl||'';
-  // fNotes removed
+  document.getElementById('fNotes').value = item.notes||'';
   setVat(item.vatType||'exempt');
   loadInventoryPickupPoints(item.pickupPoints||[]);
-  var featuredEl = document.getElementById('fFeatured');
-  if (featuredEl) featuredEl.checked = item.isFeatured || false;
-
-  // VAT display sync
-  document.getElementById('fVatType').value = item.vatType || (item.category === 'פירות וירקות' ? 'exempt' : 'included');
-  document.getElementById('fCategory').dispatchEvent(new Event('change'));
-
-  window._loadingEdit = false;
+  document.getElementById('fUnlimited').checked = item.isUnlimited || false;
+  document.getElementById('fPackSize').value = item.packSize || 1;
+  document.getElementById('fFeatured').checked = item.isFeatured || false;
+  document.getElementById('fSortOrder').value = item.sortOrder || 0;
+  populateQuantityDeals(item.quantityDeals || []);
+  const unlimitedCb = document.getElementById('fUnlimited');
+  if (unlimitedCb) {
+    unlimitedCb.checked = !!item.hasUnlimitedStock;
+    toggleUnlimitedStock();
+  }
+  if (item.isUnlimited) document.getElementById('fQty').disabled = true;
+  updateImgPreview();
   document.getElementById('itemModal').classList.add('open');
 }
 
 function closeModal() {
   document.getElementById('itemModal').classList.remove('open');
-  var me=document.getElementById('modalErr'); if(me) me.style.display='none';
+  document.getElementById('modalErr').style.display = 'none';
 }
 
 function clearForm() {
-  ['fName','fQty','fBuyPrice','fSellPrice','fSupplier','fImage'].forEach(id => { var el=document.getElementById(id); if(el) el.value=''; });
-  if (document.getElementById('fLowAlert')) (document.getElementById('fLowAlert') || {}).value = '5';
+  ['fName','fQty','fBuyPrice','fSellPrice','fSupplier','fExpiry','fSerial','fImage','fNotes'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('fLowAlert').value = '5';
   loadInventoryPickupPoints([]);
   setVat('exempt');
   document.getElementById('fUnit').value = "יח'";
-  if (document.getElementById('fFeatured')) document.getElementById('fFeatured').checked = false;
+  document.getElementById('fImagePreview').innerHTML = '';
+  document.getElementById('fImageUploadStatus').innerHTML = '';
+  document.getElementById('fUnlimited').checked = false;
+  document.getElementById('fPackSize').value = '1';
+  document.getElementById('fFeatured').checked = false;
+  document.getElementById('fSortOrder').value = '0';
+  populateQuantityDeals([]);
   document.getElementById('fQty').disabled = false;
 }
 
@@ -626,7 +759,9 @@ document.getElementById('fImage').addEventListener('input', updateImgPreview);
 async function uploadImageFile(input) {
   const file = input.files[0];
   if (!file) return;
-  // upload status removed
+  const status = document.getElementById('fImageUploadStatus');
+  status.innerHTML = '⏳ מעלה תמונה...';
+  status.style.color = '#6b7280';
   const formData = new FormData();
   formData.append('image', file);
   try {
@@ -634,28 +769,34 @@ async function uploadImageFile(input) {
     const data = await res.json();
     if (data.ok && data.imageUrl) {
       document.getElementById('fImage').value = data.imageUrl;
-      // ok
+      status.innerHTML = '✅ תמונה הועלתה בהצלחה!';
+      status.style.color = '#15803d';
       previewImageUrl();
     } else {
-      // err
+      status.innerHTML = '❌ שגיאה: ' + (data.error || 'העלאה נכשלה');
+      status.style.color = '#dc2626';
     }
   } catch(e) {
-    // err
+    status.innerHTML = '❌ שגיאת רשת: ' + e.message;
+    status.style.color = '#dc2626';
   }
   input.value = '';
 }
 
-function previewImageUrl() { /* no preview in simplified form */ }
+function previewImageUrl() {
+  const url = document.getElementById('fImage').value.trim();
+  const preview = document.getElementById('fImagePreview');
+  if (url) {
+    preview.innerHTML = '<img src="' + url + '" style="max-width:120px;max-height:120px;border-radius:10px;border:2px solid #d1fae5;object-fit:cover" onerror="this.style.display=\'none\'">';
+  } else {
+    preview.innerHTML = '';
+  }
+}
 
 async function saveItem() {
   const name = document.getElementById('fName').value.trim();
   const qty = document.getElementById('fQty').value;
   if (!name || qty === '') { showErr('שם וכמות הם שדות חובה'); return; }
-
-  // Prevent double-submit
-  const saveBtn = document.querySelector('.modal-actions .btn-green');
-  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '⏳ שומר...'; }
-
   const body = {
     name, quantity: parseInt(qty),
     category: document.getElementById('fCategory').value,
@@ -664,13 +805,19 @@ async function saveItem() {
     marketPrice: parseFloat(document.getElementById('fMarketPriceCalc').value)||0,
     unit: document.getElementById('fUnit').value,
     supplier: document.getElementById('fSupplier').value,
-    lowStockAlert: 5,
+    lowStockAlert: parseInt(document.getElementById('fLowAlert').value)||5,
+    expiryDate: document.getElementById('fExpiry').value||null,
+    serialNumber: document.getElementById('fSerial').value,
     imageUrl: document.getElementById('fImage').value.trim(),
-
+    notes: document.getElementById('fNotes').value,
     pickupPoints: getInvSelectedPickupPoints(),
     vatType: document.getElementById('fVatType').value,
-    isFeatured: document.getElementById('fFeatured') ? document.getElementById('fFeatured').checked : false,
-    isActive: document.getElementById('fActive') ? document.getElementById('fActive').checked : true
+    isUnlimited: document.getElementById('fUnlimited').checked,
+    packSize: parseInt(document.getElementById('fPackSize').value) || 1,
+    isFeatured: document.getElementById('fFeatured').checked,
+    sortOrder: parseInt(document.getElementById('fSortOrder').value) || 0,
+    hasUnlimitedStock: document.getElementById('fUnlimited') ? !!document.getElementById('fUnlimited').checked : false,
+    quantityDeals: getQuantityDeals()
   };
   try {
     const url = editingId ? API+'/inventory/'+editingId : API+'/inventory';
@@ -678,14 +825,12 @@ async function saveItem() {
     const res = await fetch(url, {method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
     const data = await res.json();
     if (!res.ok) { showErr(data.error||'שגיאה'); return; }
-    // Server handles full sync to shop_products — no client-side syncToShop needed
+    const savedId = data.id || data._id || editingId;
+    const existingItem = editingId ? allItems.find(i=>i._id===editingId) : null;
+    await syncToShop({ ...body, _id: savedId, shopProductId: (existingItem||{}).shopProductId || data.shopProductId || null, isActive: body.isActive !== false });
     closeModal();
-    await loadInventory();
-    showToast(editingId ? '✅ פריט עודכן' : '✅ פריט נוסף למלאי', '#15803d');
+    loadInventory();
   } catch(e) { showErr(e.message); }
-  finally {
-    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 שמור'; }
-  }
 }
 
 async function syncToShop(item) {
@@ -855,13 +1000,13 @@ async function savePickupDropdown() {
 }
 
 function showErr(msg) {
-  const el = document.getElementById('modalErr'); if(!el) { alert(msg); return; }
+  const el = document.getElementById('modalErr');
   el.textContent = msg;
   el.style.display = 'block';
 }
 
 function showToast(msg, color) {
-  let t = (document.getElementById('_toast') || document.body);
+  let t = document.getElementById('_toast');
   if (!t) {
     t = document.createElement('div');
     t.id = '_toast';
@@ -964,39 +1109,6 @@ document.getElementById('itemModal').addEventListener('click', function(e) { if(
 document.getElementById('catModal').addEventListener('click', function(e) { if(e.target===this) e.target.classList.remove('open'); });
 
 // loadInventory called by initAdmin above
-
-function updateVatCalc() {
-  var price = parseFloat(document.getElementById('fSellPrice').value) || 0;
-  var vatType = (document.getElementById('fVatType') || {}).value || 'exempt';
-  var display = document.getElementById('vatCalcDisplay');
-  var text = document.getElementById('vatCalcText');
-  if (!display || !text || price <= 0) {
-    if (display) display.style.display = 'none';
-    return;
-  }
-  display.style.display = 'block';
-  if (vatType === 'exempt') {
-    text.innerHTML = '<span style="color:#15803d;font-weight:700">פטור ממע\"מ</span> — המחיר ללקוח: <strong>₪' + price.toFixed(2) + '</strong>';
-  } else {
-    var withVat = price * 1.18;
-    text.innerHTML = 'מחיר לפני מע\"מ: <strong>₪' + price.toFixed(2) + '</strong><br>כולל מע\"מ 18%: <strong style="color:#15803d">₪' + withVat.toFixed(2) + '</strong>';
-  }
-}
-
-function roundSellPrice(dir) {
-  var el = document.getElementById('fSellPrice');
-  var vatType = (document.getElementById('fVatType') || {}).value || 'exempt';
-  var price = parseFloat(el.value) || 0;
-  var base = vatType === 'exempt' ? price : price * 1.18;
-  var rounded = dir === 'up' ? Math.ceil(base) : Math.floor(base);
-  // אם vatType included — שומרים מחיר לפני מע"מ
-  if (vatType === 'included') {
-    el.value = (rounded / 1.18).toFixed(2);
-  } else {
-    el.value = rounded;
-  }
-  updateVatCalc();
-}
 </script>
 <!-- Pickup points bottom sheet -->
 <div id="pickupSheetOverlay" onclick="closePickupDropdown()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9998"></div>
