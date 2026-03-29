@@ -341,6 +341,11 @@
 </div>
 
 <script>
+window.onerror = function(msg, src, line, col, err) {
+  document.body.style.background = 'white';
+  document.body.innerHTML = '<div style="padding:30px;font-family:sans-serif;direction:rtl"><h2 style="color:red">❌ שגיאת JavaScript</h2><pre style="background:#fee;padding:12px;border-radius:8px;font-size:14px;white-space:pre-wrap">' + msg + '\nשורה: ' + line + '\nקובץ: ' + src + '</pre><p>שלח צילום מסך לגל.</p></div>';
+  return true;
+};
 const API = '/api/shop';
 const ADMIN_PASS = 'yedidya2024';
 let allItems = [];
