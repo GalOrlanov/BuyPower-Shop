@@ -1526,8 +1526,8 @@ router.get('/inventory', async (req, res) => {
 router.post('/inventory', async (req, res) => {
   try {
     const db = await getDb();
-    const { name, quantity, purchasePrice, sellingPrice, unit, category, imageUrl, supplier, lowStockAlert, expiryDate, serialNumber, notes } = req.body;
-    console.log('[inventory POST]', new Date().toISOString(), 'name:', name, 'buy:', purchasePrice, 'sell:', sellingPrice);
+    const { name, quantity, purchasePrice, sellingPrice, unit, category, imageUrl, supplier, lowStockAlert, expiryDate, serialNumber, notes, pickupPoints, vatType, isUnlimited, isFeatured, quantityDeals, sortOrder, marketPrice } = req.body;
+    console.log('[inventory POST]', new Date().toISOString(), 'name:', name, 'buy:', purchasePrice, 'sell:', sellingPrice, 'pickup:', pickupPoints);
     if (!name || quantity == null) return res.status(400).json({ error: 'שם וכמות הם שדות חובה' });
 
     // Prevent duplicates — if item with same name exists, update it instead
@@ -1537,7 +1537,10 @@ router.post('/inventory', async (req, res) => {
         quantity: parseInt(quantity), purchasePrice: parseFloat(purchasePrice)||0,
         sellingPrice: parseFloat(sellingPrice)||0, unit: unit||existing.unit||'יח\'',
         category: category||existing.category||'כללי', imageUrl: imageUrl||existing.imageUrl||'',
-        supplier: supplier||existing.supplier||'', updatedAt: new Date()
+        supplier: supplier||existing.supplier||'',
+        pickupPoints: pickupPoints || existing.pickupPoints || [],
+        vatType: vatType || existing.vatType || 'exempt',
+        updatedAt: new Date()
       };
       await db.collection('shop_inventory').updateOne({ _id: existing._id }, { $set: update });
       return res.json({ ...existing, ...update, _id: existing._id });
@@ -1549,6 +1552,13 @@ router.post('/inventory', async (req, res) => {
       category: category||'כללי', imageUrl: imageUrl||'', supplier: supplier||'',
       lowStockAlert: parseInt(lowStockAlert)||5, expiryDate: expiryDate||null,
       serialNumber: serialNumber||'', notes: notes||'',
+      pickupPoints: pickupPoints || [],
+      vatType: vatType || 'exempt',
+      isUnlimited: isUnlimited || false,
+      isFeatured: isFeatured || false,
+      quantityDeals: quantityDeals || [],
+      sortOrder: sortOrder || 0,
+      marketPrice: parseFloat(marketPrice)||0,
       createdAt: new Date(), updatedAt: new Date()
     };
     const result = await db.collection('shop_inventory').insertOne(item);
