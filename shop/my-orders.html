@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ההזמנות שלי — נלחמים ביוקר המחיה</title>
+  <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Rubik', sans-serif; background: #f0fdf4; color: #1a1a1a; min-height: 100vh; }
+    header { background: linear-gradient(135deg,#15803d,#16a34a); color: white; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 12px rgba(0,0,0,0.15); }
+    .header-inner { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; }
+    .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: white; }
+    .logo img { width: 38px; height: 38px; border-radius: 50%; object-fit: cover; border: 2px solid rgba(255,255,255,0.4); }
+    .logo h1 { font-size: 1.1rem; font-weight: 800; }
+    main { max-width: 600px; margin: 0 auto; padding: 20px 16px 80px; }
+    .page-title { font-size: 1.4rem; font-weight: 900; color: #14532d; margin-bottom: 4px; }
+    .page-sub { font-size: 0.88rem; color: #6b7280; margin-bottom: 20px; }
+    .order-card { background: white; border-radius: 16px; padding: 18px; margin-bottom: 16px; box-shadow: 0 2px 10px rgba(0,0,0,0.06); border-right: 4px solid #16a34a; }
+    .order-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+    .order-date { font-size: 0.82rem; color: #6b7280; }
+    .order-status { font-size: 0.78rem; font-weight: 700; padding: 3px 10px; border-radius: 20px; background: #dcfce7; color: #15803d; }
+    .order-status.pending { background: #fef9c3; color: #92400e; }
+    .order-status.ready { background: #dbeafe; color: #1d4ed8; }
+    .order-status.collected { background: #dcfce7; color: #15803d; }
+    .order-status.cancelled { background: #fee2e2; color: #dc2626; }
+    .order-items { font-size: 0.92rem; color: #374151; line-height: 2; margin-bottom: 10px; }
+    .order-total { font-size: 1rem; font-weight: 800; color: #15803d; border-top: 1px solid #f3f4f6; padding-top: 10px; }
+    .order-pickup { font-size: 0.82rem; color: #6b7280; margin-top: 6px; }
+    .empty-state { text-align: center; padding: 60px 20px; color: #6b7280; }
+    .empty-state .icon { font-size: 3.5rem; margin-bottom: 12px; }
+    .empty-state .text { font-size: 1rem; font-weight: 700; margin-bottom: 6px; color: #374151; }
+    .btn-shop { display: block; text-align: center; background: linear-gradient(135deg,#15803d,#16a34a); color: white; padding: 14px; border-radius: 14px; font-size: 1rem; font-weight: 800; text-decoration: none; margin-top: 20px; }
+    .loading { text-align: center; padding: 40px; color: #6b7280; }
+    .week-header { font-size: 0.8rem; font-weight: 700; color: #6b7280; letter-spacing: 1px; margin: 20px 0 10px; padding: 0 4px; }
+    .wa-float { position: fixed; bottom: 20px; right: 20px; background: #25D366; color: white; border-radius: 50%; width: 52px; height: 52px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.2); z-index: 1000; text-decoration: none; font-size: 1.5rem; }
+    .collect-btn { width: 100%; margin-top: 12px; padding: 12px; background: linear-gradient(135deg,#15803d,#16a34a); color: white; border: none; border-radius: 12px; font-family: inherit; font-weight: 800; font-size: .95rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .collect-btn:disabled { background: #d1d5db; color: #9ca3af; cursor: not-allowed; }
+    .collect-modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 2000; align-items: flex-end; justify-content: center; }
+    .collect-modal-bg.open { display: flex; }
+    .collect-modal { background: white; border-radius: 20px 20px 0 0; padding: 24px 20px; width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; }
+    .collect-item-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid #f3f4f6; }
+    .collect-item-row:last-child { border-bottom: none; }
+    .collect-checkbox { width: 28px; height: 28px; accent-color: #15803d; cursor: pointer; flex-shrink: 0; }
+    .collect-item-name { flex: 1; font-weight: 700; font-size: .95rem; }
+    .collect-item-name.done { text-decoration: line-through; color: #9ca3af; }
+    .collect-item-qty { background: #dcfce7; color: #14532d; font-weight: 800; font-size: .82rem; padding: 3px 10px; border-radius: 10px; white-space: nowrap; }
+    .collect-item-qty.done { background: #f3f4f6; color: #9ca3af; }
+    .collect-progress { height: 8px; background: #e5e7eb; border-radius: 4px; margin: 16px 0 8px; overflow: hidden; }
+    .collect-progress-bar { height: 100%; background: linear-gradient(90deg,#15803d,#16a34a); border-radius: 4px; transition: width .3s; }
+    .collect-done-banner { background: #f0fdf4; border: 2px solid #86efac; border-radius: 12px; padding: 16px; text-align: center; margin-top: 12px; display: none; }
+  </style>
+</head>
+<body>
+<header>
+  <div class="header-inner">
+    <a href="index.html" class="logo">
+      <img src="logo.jpg?v=2" alt="לוגו">
+      <h1>נלחמים ביוקר המחיה</h1>
+    </a>
+    <a href="cart.html" style="color:white;font-size:1.5rem;text-decoration:none">🛒</a>
+  </div>
+</header>
+
+<main>
+  <div class="page-title">📦 היסטוריית ההזמנות</div>
+  <div class="page-sub" id="pageSubtitle">הזמנות השבוע האחרון</div>
+  <div id="ordersList"><div class="loading">⏳ טוען הזמנות...</div></div>
+</main>
+
+<a href="https://wa.me/972538286227" target="_blank" class="wa-float">💬</a>
+
+<script>
+const API = '/api/shop';
+
+function getPhone() {
+  try {
+    const u = JSON.parse(localStorage.getItem('shopUser') || '{}');
+    return u.phone || '';
+  } catch(e) { return ''; }
+}
+
+function formatDate(d) {
+  const date = new Date(d);
+  const days = ['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'];
+  return 'יום ' + days[date.getDay()] + ' ' + date.getDate() + '/' + (date.getMonth()+1) + ' ' +
+    String(date.getHours()).padStart(2,'0') + ':' + String(date.getMinutes()).padStart(2,'0');
+}
+
+function renderOrder(order) {
+  var items = (order.items || []).map(function(i) {
+    var line = '• ' + i.name;
+    if (i.variant) line += ' — ' + i.variant;
+    line += ' × ' + i.qty;
+    return line;
+  }).join('<br>');
+  var total = order.totalAmount || (order.items || []).reduce(function(s,i){ return s + i.price * i.qty; }, 0) || '';
+  var confirmed = order.confirmed || order.status === 'confirmed';
+  return '<div class="order-card">' +
+    '<div class="order-header"><div class="order-date">' + formatDate(order.createdAt) + '</div>' +
+    '<div class="order-status ' + statusClass(order.status) + '">' + statusLabel(order.status) + '</div></div>' +
+    '<div class="order-items">' + (items || '(פרטים לא זמינים)') + '</div>' +
+    '<div class="order-total">💰 סה"כ: ' + total + ' ₪</div>' +
+    (order.timeSlot ? '<div style="font-size:.82rem;color:#6b7280;margin-top:4px">🕐 שעת איסוף מועדפת: <strong>' + order.timeSlot + '</strong></div>' : '') +
+    '<div class="order-pickup">📍 ' + (order.pickupLocation || 'העגלה החברתית') + '</div>' +
+    (['paid','handled','confirmed'].includes(order.status) && order._id && order.source !== 'grow'
+      ? '<button class="collect-btn" onclick="openCollectModal('' + order._id + '')">' +
+        (order.status === 'collected' ? '✅ נאסף' : '🧺 איסוף הזמנה') + '</button>'
+      : '') +
+    '</div>';
+}
+
+function statusLabel(s) {
+  if (!s || s === 'pending') return '⏳ ממתין לאישור';
+  if (['paid','handled'].includes(s)) return '✅ שולם ואושר';
+  if (s === 'confirmed') return '✅ אושרה';
+  if (s === 'pending_payment') return '⏳ ממתין לתשלום';
+  if (s === 'ready') return '📦 מוכן לאיסוף';
+  if (s === 'collected') return '🎉 נאסף';
+  if (s === 'cancelled') return '❌ מבוטל';
+  return '⏳ בטיפול';
+}
+function statusClass(s) {
+  if (s === 'ready') return 'ready';
+  if (s === 'collected') return 'collected';
+  if (s === 'cancelled') return 'cancelled';
+  if (['paid','handled','confirmed'].includes(s)) return '';
+  if (s === 'pending_payment') return 'pending';
+  return 'pending';
+}
+
+async function loadOrders() {
+  var phone = getPhone();
+  if (!phone) {
+    document.getElementById('ordersList').innerHTML =
+      '<div class="empty-state"><div class="icon">🔐</div><div class="text">נדרשת כניסה לחשבון</div><div class="sub">כדי לראות את ההזמנות שלך</div></div>' +
+      '<a href="/login.html" class="btn-shop">כניסה לחשבון →</a>';
+    return;
+  }
+  try {
+    // Fetch from both shop_orders and grow_payments
+    var [res1, res2] = await Promise.all([
+      fetch(API + '/orders/my?phone=' + encodeURIComponent(phone)),
+      fetch(API + '/payments/my?phone=' + encodeURIComponent(phone))
+    ]);
+    var shopOrders = await res1.json().catch(() => []);
+    var growOrders = await res2.json().catch(() => []);
+    // Normalize grow payments to same format
+    var growNorm = Array.isArray(growOrders) ? growOrders.map(function(p) {
+      return {
+        _id: p._id,
+        createdAt: p.createdAt,
+        items: p.products && p.products.length ? p.products : [{name: p.rawBody && p.rawBody.paymentDesc ? p.rawBody.paymentDesc : 'הזמנה', qty: 1, price: parseFloat((p.rawBody && p.rawBody.paymentSum) || 0)}],
+        totalAmount: parseFloat((p.rawBody && p.rawBody.paymentSum) || p.totalAmount || 0),
+        confirmed: true,
+        source: 'grow'
+      };
+    }) : [];
+    var orders = shopOrders.concat(growNorm).sort(function(a,b){ return new Date(b.createdAt)-new Date(a.createdAt); });
+    if (!Array.isArray(orders) || !orders.length) {
+      document.getElementById('ordersList').innerHTML =
+        '<div class="empty-state"><div class="icon">🛍️</div><div class="text">עדיין אין הזמנות</div></div>' +
+        '<a href="index.html" class="btn-shop">לחנות →</a>';
+      return;
+    }
+    document.getElementById('pageSubtitle').textContent = orders.length + ' הזמנות';
+    var thisWeekStart = new Date();
+    thisWeekStart.setDate(thisWeekStart.getDate() - thisWeekStart.getDay());
+    thisWeekStart.setHours(0,0,0,0);
+    var thisWeek = orders.filter(function(o){ return new Date(o.createdAt) >= thisWeekStart; });
+    var older = orders.filter(function(o){ return new Date(o.createdAt) < thisWeekStart; });
+    var html = '';
+    if (thisWeek.length) { html += '<div class="week-header">🗓️ השבוע</div>' + thisWeek.map(renderOrder).join(''); }
+    if (older.length) { html += '<div class="week-header">לפני כן</div>' + older.map(renderOrder).join(''); }
+    document.getElementById('ordersList').innerHTML = html;
+  } catch(e) {
+    document.getElementById('ordersList').innerHTML = '<div class="empty-state"><div class="icon">⚠️</div><div class="text">שגיאה בטעינת הזמנות</div></div>';
+  }
+}
+loadOrders();
+</script>
+
+<!-- Collection Modal -->
+<div class="collect-modal-bg" id="collectModal">
+  <div class="collect-modal">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+      <div style="font-size:1.1rem;font-weight:800;color:#14532d">🧺 איסוף הזמנה</div>
+      <button onclick="closeCollectModal()" style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:#6b7280">✕</button>
+    </div>
+    <div style="font-size:.82rem;color:#6b7280;margin-bottom:14px">סמן ✓ ליד כל מוצר שאספת</div>
+    <div class="collect-progress"><div class="collect-progress-bar" id="collectProgressBar" style="width:0%"></div></div>
+    <div id="collectProgressText" style="font-size:.78rem;color:#6b7280;margin-bottom:12px;text-align:center">0 מתוך 0 פריטים</div>
+    <div id="collectItemsList"></div>
+    <div class="collect-done-banner" id="collectDoneBanner">
+      <div style="font-size:2rem;margin-bottom:6px">🎉</div>
+      <div style="font-weight:800;font-size:1rem;color:#14532d">כל המוצרים נאספו!</div>
+      <div style="font-size:.82rem;color:#6b7280;margin-top:4px">תודה, ונתראה בשבוע הבא 😊</div>
+    </div>
+  </div>
+</div>
+
+<script>
+var _collectOrderId = null;
+var _collectItems = [];
+
+async function openCollectModal(orderId) {
+  _collectOrderId = orderId;
+  document.getElementById('collectModal').classList.add('open');
+  document.getElementById('collectItemsList').innerHTML = '<div style="text-align:center;padding:20px;color:#9ca3af">טוען...</div>';
+  var token = localStorage.getItem('shopToken') || '';
+  var res = await fetch('/api/shop/orders/' + orderId + '/collection-status', {
+    headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+  });
+  var order = await res.json();
+  _collectItems = (order.items || []).map(function(item, i) {
+    return { index: i, name: item.name, variant: item.variant || '', qty: item.qty, collected: !!item.collected };
+  });
+  renderCollectItems();
+}
+
+function closeCollectModal() {
+  document.getElementById('collectModal').classList.remove('open');
+  _collectOrderId = null;
+  _collectItems = [];
+  loadOrders(); // refresh order list
+}
+
+function renderCollectItems() {
+  var total = _collectItems.length;
+  var done = _collectItems.filter(function(i) { return i.collected; }).length;
+  var pct = total ? Math.round(done/total*100) : 0;
+  document.getElementById('collectProgressBar').style.width = pct + '%';
+  document.getElementById('collectProgressText').textContent = done + ' מתוך ' + total + ' פריטים';
+  var banner = document.getElementById('collectDoneBanner');
+  if (done === total && total > 0) {
+    banner.style.display = 'block';
+  } else {
+    banner.style.display = 'none';
+  }
+  document.getElementById('collectItemsList').innerHTML = _collectItems.map(function(item) {
+    var label = item.name + (item.variant ? ' — ' + item.variant : '');
+    return '<div class="collect-item-row">' +
+      '<input type="checkbox" class="collect-checkbox" ' + (item.collected ? 'checked' : '') + ' onchange="toggleCollectItem(' + item.index + ', this.checked)">' +
+      '<div class="collect-item-name' + (item.collected ? ' done' : '') + '">' + label + '</div>' +
+      '<div class="collect-item-qty' + (item.collected ? ' done' : '') + '">x' + item.qty + '</div>' +
+      '</div>';
+  }).join('');
+}
+
+async function toggleCollectItem(itemIndex, collected) {
+  // Optimistic update
+  _collectItems[itemIndex].collected = collected;
+  renderCollectItems();
+  // Save to server
+  var token = localStorage.getItem('shopToken') || '';
+  await fetch('/api/shop/orders/' + _collectOrderId + '/collect-item', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'Authorization': token ? 'Bearer ' + token : '' },
+    body: JSON.stringify({ itemIndex: itemIndex, collected: collected })
+  });
+}
+</script>
+
+</body>
+</html>

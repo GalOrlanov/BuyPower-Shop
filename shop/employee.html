@@ -207,6 +207,8 @@ function showApp(payload) {
   }
   loadPickupPoints();
   loadData();
+  // Auto-refresh every 15s for real-time customer collection status
+  setInterval(function() { if (!document.hidden && _token) loadData(); }, 15000);
 }
 
 function doLogout() {
@@ -299,19 +301,40 @@ function renderList() {
 }
 
 function cardHtml(order) {
-  const items = (order.items || order.cart || []).map(i => (i.name||i.productName||'') + ' x' + (i.quantity||i.qty||1)).join(', ');
+  const orderItems = order.items || order.cart || [];
+  const collectedCount = orderItems.filter(i => i.collected).length;
+  const totalCount = orderItems.length;
+  const allCollected = totalCount > 0 && collectedCount === totalCount;
+  const pct = totalCount ? Math.round(collectedCount/totalCount*100) : 0;
   const pickedTime = order.pickedUpAt ? new Date(order.pickedUpAt).toLocaleString('he-IL',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
-  return `<div class="order-card ${order.pickedUp ? 'picked' : ''}">
+
+  const itemRows = orderItems.map((i,idx) => {
+    const name = (i.name||i.productName||'') + (i.variant ? ' — '+i.variant : '') + ' x' + (i.quantity||i.qty||1);
+    const done = !!i.collected;
+    return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:.85rem;">
+      <span style="font-size:1rem">${done ? '✅' : '⬜'}</span>
+      <span style="${done ? 'text-decoration:line-through;color:#9ca3af' : ''}">${name}</span>
+    </div>`;
+  }).join('');
+
+  const progressBar = totalCount > 0 ? `<div style="height:6px;background:#e5e7eb;border-radius:3px;margin:8px 0 4px;overflow:hidden">
+    <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#15803d,#16a34a);border-radius:3px;transition:width .3s"></div>
+  </div>
+  <div style="font-size:.75rem;color:#6b7280;margin-bottom:6px">${collectedCount} מתוך ${totalCount} פריטים נאספו</div>` : '';
+
+  return `<div class="order-card ${order.pickedUp || allCollected ? 'picked' : ''}" id="emp-order-${order._id}">
     <div class="order-row">
-      <div class="order-info">
+      <div class="order-info" style="flex:1">
         <div class="order-name">${order.customerName || 'לא ידוע'}</div>
         <div class="order-phone">${order.customerPhone || ''}</div>
-        <div class="order-items">${items}</div>
+        ${progressBar}
+        <div style="border:1px solid #f0fdf4;border-radius:8px;padding:6px 8px;background:#fafafa">${itemRows}</div>
         ${order.pickedUp ? `<div class="order-picked-time">✅ נאסף ב-${pickedTime}</div>` : ''}
+        ${allCollected && !order.pickedUp ? '<div style="font-size:.78rem;color:#15803d;font-weight:700;margin-top:6px">🎉 הלקוח סימן איסוף לכל הפריטים</div>' : ''}
       </div>
       <div class="order-actions">
-        <button class="btn-pickup ${order.pickedUp ? 'done' : 'pending'}" onclick="togglePickup('${order._id}', ${!!order.pickedUp})">
-          ${order.pickedUp ? '✅ נאסף' : '⬜ סמן איסוף'}
+        <button class="btn-pickup ${order.pickedUp || allCollected ? 'done' : 'pending'}" onclick="togglePickup('${order._id}', ${!!order.pickedUp})">
+          ${order.pickedUp || allCollected ? '✅ נאסף' : '⬜ סמן איסוף'}
         </button>
         <button class="btn-email" onclick="sendEmail('${order._id}')">📧 פירוט הזמנה במייל</button>
         <button class="btn-sms" onclick="sendSMS('${order._id}')">📱 SMS תזכורת לאיסוף</button>

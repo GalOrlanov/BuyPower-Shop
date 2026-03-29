@@ -2378,4 +2378,42 @@ router.delete('/suppliers/:supplierId/orders/:orderId', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+
+// ========== ITEM-LEVEL COLLECTION ==========
+
+// PUT /api/shop/orders/:id/collect-item — mark single item as collected
+router.put('/orders/:id/collect-item', async (req, res) => {
+  try {
+    const db = await getDb();
+    const { ObjectId } = require('mongodb');
+    const { itemIndex, collected } = req.body; // itemIndex: number, collected: bool
+    const order = await db.collection('shop_orders').findOne({ _id: new ObjectId(req.params.id) });
+    if (!order) return res.status(404).json({ error: 'הזמנה לא נמצאה' });
+    const items = order.items || [];
+    if (itemIndex < 0 || itemIndex >= items.length) return res.status(400).json({ error: 'פריט לא נמצא' });
+    items[itemIndex].collected = !!collected;
+    items[itemIndex].collectedAt = collected ? new Date() : null;
+    // If all items collected → auto-set status to collected
+    const allCollected = items.every(i => i.collected);
+    const update = { items, updatedAt: new Date() };
+    if (allCollected) update.status = 'collected';
+    await db.collection('shop_orders').updateOne({ _id: new ObjectId(req.params.id) }, { $set: update });
+    res.json({ ok: true, allCollected, status: allCollected ? 'collected' : order.status });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/shop/orders/:id/collection-status — get real-time collection status
+router.get('/orders/:id/collection-status', async (req, res) => {
+  try {
+    const db = await getDb();
+    const { ObjectId } = require('mongodb');
+    const order = await db.collection('shop_orders').findOne(
+      { _id: new ObjectId(req.params.id) },
+      { projection: { items: 1, status: 1, customerName: 1, phone: 1, pickupLocation: 1 } }
+    );
+    if (!order) return res.status(404).json({ error: 'לא נמצא' });
+    res.json(order);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;
