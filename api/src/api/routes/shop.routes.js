@@ -1558,14 +1558,8 @@ router.put('/inventory/:id', async (req, res) => {
           ? await db.collection('shop_products').findOne({ _id: new ObjectId(shopProductId) })
           : null;
         if (!shopProduct && invItem.name) {
-          // Fuzzy name match
-          const allShopProducts = await db.collection('shop_products').find({ isActive: { $ne: false } }).toArray();
-          const normName = n => (n || '').replace(/[\s'׳״\-\(\)]/g, '').toLowerCase();
-          const invNorm = normName(invItem.name);
-          shopProduct = allShopProducts.find(p => {
-            const pNorm = normName(p.name);
-            return pNorm === invNorm || pNorm.includes(invNorm) || invNorm.includes(pNorm);
-          });
+          // Exact name match only — no fuzzy to prevent duplicates
+          shopProduct = await db.collection('shop_products').findOne({ name: invItem.name });
         }
         if (shopProduct) {
           const shopUpdate = {};
