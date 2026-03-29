@@ -224,7 +224,8 @@
                 oninput="calcPriceWidget()">
               <span style="font-size:.8rem;color:#555">%</span>
             </div>
-            <div style="font-size:.62rem;color:#9ca3af;margin-top:2px">ברירת מחדל 12%</div>
+            <div id="profitCalcPreview" style="font-size:.65rem;color:#15803d;font-weight:700;margin-top:3px;white-space:nowrap;min-height:14px"></div>
+            <button type="button" onclick="calcAndRound()" style="margin-top:4px;padding:2px 8px;background:#2563eb;color:white;border:none;border-radius:5px;font-size:.68rem;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">⬆ חשב + עגל</button>
           </div>
 
           <!-- ④ סוג מע"מ -->
@@ -440,18 +441,30 @@ function calcPriceWidget() {
     vatIndicator.style.display = 'none';
   }
 
-  if (!buy) return;
+  var preview = document.getElementById('profitCalcPreview');
+  if (!buy) { if (preview) preview.textContent = ''; return; }
   var base = buy * (1 + pct / 100);
   if (vat === 'included' || vat === 'excluded') base = base * 1.18;
+  var rounded = Math.ceil(base * 2) / 2;
   document.getElementById('fSellPrice').value = base.toFixed(2);
+  if (preview) preview.textContent = '→ ₪' + base.toFixed(2) + ' (עגול: ₪' + rounded.toFixed(1) + ')';
 }
 
 function roundSellPrice() {
   var val = parseFloat(document.getElementById('fSellPrice').value) || 0;
   if (!val) return;
-  // Round up to nearest 0.5
   var rounded = Math.ceil(val * 2) / 2;
   document.getElementById('fSellPrice').value = rounded.toFixed(2);
+}
+
+function calcAndRound() {
+  calcPriceWidget();
+  var val = parseFloat(document.getElementById('fSellPrice').value) || 0;
+  if (!val) return;
+  var rounded = Math.ceil(val * 2) / 2;
+  document.getElementById('fSellPrice').value = rounded.toFixed(2);
+  var preview = document.getElementById('profitCalcPreview');
+  if (preview) preview.textContent = '✅ עוגל ל-₪' + rounded.toFixed(1);
 }
 
 function addQuantityDealRow(qty='', price='') {
