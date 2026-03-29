@@ -303,7 +303,7 @@
       </div>
     </div>
     <div class="modal-actions">
-      <button class="btn btn-green" style="flex:1" onclick="saveItem()">💾 שמור</button>
+      <button class="btn btn-green" style="flex:1" id="saveItemBtn" onclick="saveItemOnce(this)">💾 שמור</button>
       <button class="btn btn-outline" onclick="closeModal()">ביטול</button>
     </div>
     <div id="modalErr" style="color:#dc2626;font-size:.82rem;margin-top:8px;display:none"></div>
@@ -796,6 +796,17 @@ function previewImageUrl() {
   } else {
     preview.innerHTML = '';
   }
+}
+
+let _savingInProgress = false;
+function saveItemOnce(btn) {
+  if (_savingInProgress) return;
+  _savingInProgress = true;
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ שומר...'; }
+  saveItem().finally(function() {
+    _savingInProgress = false;
+    if (btn) { btn.disabled = false; btn.textContent = '💾 שמור'; }
+  });
 }
 
 async function saveItem() {
