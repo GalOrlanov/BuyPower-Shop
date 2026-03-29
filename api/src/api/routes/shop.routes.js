@@ -186,6 +186,7 @@ router.put('/products/reorder', async (req, res) => {
 });
 
 router.post('/products', async (req, res) => {
+  console.log('[products POST]', new Date().toISOString(), 'name:', req.body.name, 'active:', req.body.isActive, 'pickup:', JSON.stringify(req.body.pickupPoints));
   try {
     const db = await getDb();
     const imageUrls = Array.isArray(req.body.imageUrls) ? req.body.imageUrls.filter(Boolean) : (req.body.imageUrl ? [req.body.imageUrl] : []);
