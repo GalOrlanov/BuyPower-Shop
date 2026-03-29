@@ -177,14 +177,8 @@
           <span>♾️ מלאי ללא הגבלה (לפירות, ירקות — ניתן להזמין ללא מגבלת כמות)</span>
         </label>
       </div>
-      <div class="form-row">
-        <label>גודל מארז <span style="color:#9ca3af;font-weight:400">(3 ב-₪200 → הכנס 3)</span></label>
-        <input type="number" id="fPackSize" min="1" value="1" placeholder="1">
-      </div>
-      <div class="form-row">
-        <label>סדר הצגה <span style="color:#9ca3af;font-weight:400">(0 = ראשון)</span></label>
-        <input type="number" id="fSortOrder" min="0" value="0" placeholder="0">
-      </div>
+      <input type="hidden" id="fPackSize" value="1">
+      <input type="hidden" id="fSortOrder" value="0">
       <div class="form-row full">
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
           <input type="checkbox" id="fFeatured" style="width:18px;height:18px;accent-color:#f59e0b">
