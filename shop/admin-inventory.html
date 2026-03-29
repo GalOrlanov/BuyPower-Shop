@@ -294,9 +294,10 @@
         </button>
       </div>
       <div class="form-row full">
-        <label>📍 נקודות חלוקה (הצ'ק = הפריט שייך לנקודה)</label>
-        <div id="fPickupPointsContainer" style="display:flex;gap:10px;flex-wrap:wrap;padding:10px;border:1.5px solid #e5e7eb;border-radius:8px;background:#f9fafb;margin-bottom:12px">
-          <span style="color:#9ca3af;font-size:.85rem">טוען...</span>
+        <label>📍 נקודות חלוקה</label>
+        <div id="fPickupPointsContainer" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px;border:1.5px solid #e5e7eb;border-radius:8px;background:#f9fafb;margin-bottom:12px">
+          <span id="modalPickupDisplay" style="font-size:.85rem;color:#6b7280">הכל (ללא הגבלה)</span>
+          <button type="button" onclick="openModalPickupSheet()" style="padding:5px 12px;background:#f0fdf4;border:1.5px solid #86efac;border-radius:20px;font-size:.78rem;font-weight:700;color:#15803d;cursor:pointer;font-family:inherit">✏️ שנה</button>
         </div>
         <label>הערות</label>
         <textarea id="fNotes" rows="2" style="resize:vertical" placeholder="הערות נוספות..."></textarea>
@@ -687,9 +688,11 @@ function renderTable(items) {
 
 function openAddModal() {
   editingId = null;
+  _modalPickupPoints = [];
   document.getElementById('modalTitle').textContent = '➕ הוסף פריט למלאי';
   clearForm();
   populateModalCats();
+  updateModalPickupDisplay();
   document.getElementById('itemModal').classList.add('open');
 }
 
@@ -718,7 +721,9 @@ function openEditModal(id) {
   var isFruitVeg = (item.category||'').includes('פירות') || (item.category||'').includes('ירקות');
   if (isFruitVeg) vatVal = 'exempt';
   setVat(vatVal);
+  _modalPickupPoints = item.pickupPoints || [];
   loadInventoryPickupPoints(item.pickupPoints||[]);
+  updateModalPickupDisplay();
   document.getElementById('fUnlimited').checked = item.isUnlimited || false;
   document.getElementById('fPackSize').value = item.packSize || 1;
   document.getElementById('fFeatured').checked = item.isFeatured || false;
@@ -805,6 +810,39 @@ function previewImageUrl() {
 
 let _savingInProgress = false;
 let _saveCount = 0;
+let _modalPickupPoints = []; // pickup points selected in modal
+
+function updateModalPickupDisplay() {
+  var el = document.getElementById('modalPickupDisplay');
+  if (!el) return;
+  if (!_modalPickupPoints || !_modalPickupPoints.length) {
+    el.textContent = 'הכל (ללא הגבלה)';
+    el.style.color = '#9ca3af';
+  } else {
+    el.textContent = '📍 ' + _modalPickupPoints.join(', ');
+    el.style.color = '#15803d';
+    el.style.fontWeight = '700';
+  }
+}
+
+function openModalPickupSheet() {
+  _pickupDropdownItemId = '__modal__';
+  var panel = document.getElementById('pickupDropdownPanel');
+  var opts = document.getElementById('pickupDropdownOptions');
+  var pts = window._allPickupPoints || [];
+  opts.innerHTML = pts.map(function(pt) {
+    var name = pt.name || pt;
+    var checked = (_modalPickupPoints||[]).includes(name);
+    return '<label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:6px 8px;border-radius:8px;background:' + (checked?'#f0fdf4':'#fafafa') + ';border:1.5px solid ' + (checked?'#86efac':'#e5e7eb') + '">' +
+      '<input type="checkbox" value="' + name.replace(/"/g,'&quot;') + '" ' + (checked?'checked':'') + ' onchange="this.closest(\'label\').style.background=this.checked?\'#f0fdf4\':\'#fafafa\';this.closest(\'label\').style.borderColor=this.checked?\'#86efac\':\'#e5e7eb\'" style="width:16px;height:16px;accent-color:#15803d">' +
+      '<span style="font-size:.85rem;font-weight:600">' + name + '</span></label>';
+  }).join('');
+  panel.style.display = 'block';
+  document.getElementById('pickupSheetOverlay').style.display = 'block';
+  panel.style.transform = 'translateY(100%)';
+  panel.style.transition = 'transform .25s ease';
+  requestAnimationFrame(function(){ panel.style.transform = 'translateY(0)'; });
+}
 function saveItemOnce(btn) {
   _saveCount++;
   console.log('saveItemOnce called, count:', _saveCount, 'inProgress:', _savingInProgress, 'editingId:', editingId);
@@ -839,7 +877,7 @@ async function saveItem() {
     serialNumber: document.getElementById('fSerial').value,
     imageUrl: document.getElementById('fImage').value.trim(),
     notes: document.getElementById('fNotes').value,
-    pickupPoints: getInvSelectedPickupPoints(),
+    pickupPoints: _modalPickupPoints || [],
     vatType: document.getElementById('fVatType').value,
     isUnlimited: document.getElementById('fUnlimited').checked,
     packSize: parseInt(document.getElementById('fPackSize').value) || 1,
@@ -1002,6 +1040,15 @@ function closePickupDropdown() {
 async function savePickupDropdown() {
   const itemId = _pickupDropdownItemId;
   if (!itemId) return;
+  
+  // If opened from modal (new/edit item) — just update _modalPickupPoints
+  if (itemId === '__modal__') {
+    const checkboxes = document.querySelectorAll('#pickupDropdownOptions input[type=checkbox]');
+    _modalPickupPoints = [...checkboxes].filter(c=>c.checked).map(c=>c.value);
+    closePickupDropdown();
+    updateModalPickupDisplay();
+    return;
+  }
   const checkboxes = document.querySelectorAll('#pickupDropdownOptions input[type=checkbox]');
   const pts = [...checkboxes].filter(c=>c.checked).map(c=>c.value);
   const item = allItems.find(i => i._id === itemId);
