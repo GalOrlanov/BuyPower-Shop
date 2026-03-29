@@ -2416,4 +2416,38 @@ router.get('/orders/:id/collection-status', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+
+// ========== SUPPLIER PAYMENTS ==========
+
+router.get('/suppliers/:id/payments', async (req, res) => {
+  try {
+    const db = await getDb();
+    const payments = await db.collection('shop_supplier_payments').find({ supplierId: req.params.id }).sort({ date: -1, createdAt: -1 }).toArray();
+    res.json(payments);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/suppliers/:id/payments', async (req, res) => {
+  try {
+    const db = await getDb();
+    const { ObjectId } = require('mongodb');
+    const supplier = await db.collection('shop_suppliers').findOne({ _id: new ObjectId(req.params.id) });
+    if (!supplier) return res.status(404).json({ error: 'ספק לא נמצא' });
+    const { type, docNum, amount, date, method, notes } = req.body;
+    if (!amount) return res.status(400).json({ error: 'סכום חובה' });
+    const doc = { supplierId: req.params.id, supplierName: supplier.name, type: type||'חשבונית', docNum: docNum||'', amount: parseFloat(amount)||0, date: date ? new Date(date) : new Date(), method: method||'', notes: notes||'', createdAt: new Date() };
+    const result = await db.collection('shop_supplier_payments').insertOne(doc);
+    res.json({ ...doc, _id: result.insertedId });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/suppliers/:supplierId/payments/:paymentId', async (req, res) => {
+  try {
+    const db = await getDb();
+    const { ObjectId } = require('mongodb');
+    await db.collection('shop_supplier_payments').deleteOne({ _id: new ObjectId(req.params.paymentId) });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;
