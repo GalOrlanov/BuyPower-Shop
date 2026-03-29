@@ -1059,21 +1059,24 @@ async function savePickupDropdown() {
   closePickupDropdown();
   // Save to server
   try {
-    const saveRes = await fetch(API + '/inventory/' + itemId, {
+    // First reload fresh item from server to get latest shopProductId
+    const freshList = await fetch(API + '/inventory', {cache:'no-store'}).then(r=>r.json());
+    const freshItem = freshList.find(i => i._id === itemId);
+    if (freshItem && freshItem.shopProductId && item) item.shopProductId = freshItem.shopProductId;
+
+    await fetch(API + '/inventory/' + itemId, {
       method: 'PUT', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ pickupPoints: pts })
     });
-    const saveData = await saveRes.json();
-    // Update shopProductId in local allItems if returned
-    if (saveData.shopProductId && item) item.shopProductId = saveData.shopProductId;
 
     if (item && item.shopProductId) {
-      fetch('/api/shop/products/' + item.shopProductId, {
+      // Just update pickupPoints on existing shop product
+      await fetch('/api/shop/products/' + item.shopProductId, {
         method: 'PUT', headers: {'Content-Type':'application/json','x-admin-password':'yedidya2024'},
         body: JSON.stringify({ pickupPoints: pts })
-      }).catch(()=>{});
+      });
     } else if (item) {
-      // No shopProductId yet — do full sync to link properly
+      // syncToShop will create OR update — safe because unique name check exists
       await syncToShop({ ...item, pickupPoints: pts });
     }
     showToast('✅ נקודות חלוקה עודכנו', '#15803d');
