@@ -1522,6 +1522,7 @@ router.post('/inventory', async (req, res) => {
   try {
     const db = await getDb();
     const { name, quantity, purchasePrice, sellingPrice, unit, category, imageUrl, supplier, lowStockAlert, expiryDate, serialNumber, notes } = req.body;
+    console.log('[inventory POST]', new Date().toISOString(), 'name:', name, 'buy:', purchasePrice, 'sell:', sellingPrice);
     if (!name || quantity == null) return res.status(400).json({ error: 'שם וכמות הם שדות חובה' });
 
     // Prevent duplicates — if item with same name exists, update it instead

@@ -799,17 +799,25 @@ function previewImageUrl() {
 }
 
 let _savingInProgress = false;
+let _saveCount = 0;
 function saveItemOnce(btn) {
-  if (_savingInProgress) return;
+  _saveCount++;
+  console.log('saveItemOnce called, count:', _saveCount, 'inProgress:', _savingInProgress, 'editingId:', editingId);
+  if (_savingInProgress) {
+    console.warn('BLOCKED duplicate save!');
+    return;
+  }
   _savingInProgress = true;
   if (btn) { btn.disabled = true; btn.textContent = '⏳ שומר...'; }
   saveItem().finally(function() {
     _savingInProgress = false;
+    _saveCount = 0;
     if (btn) { btn.disabled = false; btn.textContent = '💾 שמור'; }
   });
 }
 
 async function saveItem() {
+  console.log('saveItem START, editingId:', editingId, 'time:', new Date().toISOString());
   const name = document.getElementById('fName').value.trim();
   const qty = document.getElementById('fQty').value;
   if (!name || qty === '') { showErr('שם וכמות הם שדות חובה'); return; }
