@@ -296,10 +296,9 @@
         </button>
       </div>
       <div class="form-row full">
-        <label>📍 נקודות חלוקה</label>
-        <div id="fPickupPointsContainer" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px;border:1.5px solid #e5e7eb;border-radius:8px;background:#f9fafb;margin-bottom:12px">
-          <span id="modalPickupDisplay" style="font-size:.85rem;color:#6b7280">הכל (ללא הגבלה)</span>
-          <button type="button" onclick="openModalPickupSheet()" style="padding:5px 12px;background:#f0fdf4;border:1.5px solid #86efac;border-radius:20px;font-size:.78rem;font-weight:700;color:#15803d;cursor:pointer;font-family:inherit">✏️ שנה</button>
+        <label>📍 נקודות חלוקה (בחר לאיזה נקודות המוצר שייך)</label>
+        <div id="fPickupPointsContainer" style="display:flex;gap:8px;flex-wrap:wrap;padding:10px;border:1.5px solid #e5e7eb;border-radius:8px;background:#f9fafb;margin-bottom:12px">
+          <span style="font-size:.82rem;color:#9ca3af">טוען נקודות...</span>
         </div>
         <label>הערות</label>
         <textarea id="fNotes" rows="2" style="resize:vertical" placeholder="הערות נוספות..."></textarea>
@@ -694,7 +693,7 @@ function openAddModal() {
   document.getElementById('modalTitle').textContent = '➕ הוסף פריט למלאי';
   clearForm();
   populateModalCats();
-  updateModalPickupDisplay();
+  loadInventoryPickupPoints([]);
   document.getElementById('itemModal').classList.add('open');
 }
 
@@ -878,7 +877,7 @@ async function saveItem() {
     serialNumber: document.getElementById('fSerial').value,
     imageUrl: document.getElementById('fImage').value.trim(),
     notes: document.getElementById('fNotes').value,
-    pickupPoints: _modalPickupPoints || [],
+    pickupPoints: getInvSelectedPickupPoints(),
     vatType: document.getElementById('fVatType').value,
     isUnlimited: document.getElementById('fUnlimited').checked,
     packSize: parseInt(document.getElementById('fPackSize').value) || 1,
