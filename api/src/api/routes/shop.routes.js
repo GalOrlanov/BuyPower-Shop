@@ -1543,6 +1543,63 @@ router.post('/orders/close-week', async (req, res) => {
 });
 
 // ============================================
+// BROADCAST WHATSAPP
+// ============================================
+
+router.post('/broadcast-whatsapp', async (req, res) => {
+  try {
+    const db = await getDb();
+    const { message, weekOnly } = req.body;
+    if (!message) return res.status(400).json({ error: 'message required' });
+
+    let phones = [];
+
+    if (weekOnly) {
+      const now = new Date();
+      const day = now.getDay();
+      const mondayOffset = day === 0 ? -6 : 1 - day;
+      const monday = new Date(now);
+      monday.setDate(now.getDate() + mondayOffset);
+      monday.setHours(0, 0, 0, 0);
+
+      const orders = await db.collection('shop_orders').find({
+        status: { $in: ['paid', 'confirmed', 'ready'] },
+        createdAt: { $gte: monday }
+      }).toArray();
+
+      const phoneSet = new Set();
+      for (const o of orders) {
+        const p = o.phone || o.customerPhone;
+        if (p) phoneSet.add(p.replace(/\D/g, '').replace(/^0/, '972'));
+      }
+      phones = Array.from(phoneSet);
+    }
+
+    if (!phones.length) {
+      return res.json({ ok: true, sent: 0, message: 'אין לקוחות לשליחה' });
+    }
+
+    const axios = require('axios');
+    let sent = 0;
+    const errors = [];
+
+    for (const phone of phones) {
+      try {
+        await axios.post('http://localhost:3001/api/send-message', { phone, message });
+        sent++;
+        await new Promise(r => setTimeout(r, 300));
+      } catch (e) {
+        errors.push(phone);
+      }
+    }
+
+    res.json({ ok: true, sent, total: phones.length, errors });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ============================================
 // PICKUP TRACKING
 // ============================================
 
