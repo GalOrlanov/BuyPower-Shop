@@ -156,7 +156,7 @@
       </div>
       <div class="form-row">
         <label>קטגוריה *</label>
-        <select id="fCategory">
+        <select id="fCategory" onchange="onCategoryChange(this.value)">
           <option value="כללי">כללי</option>
         </select>
         <div style="margin-top:6px"><button class="btn btn-outline btn-sm" onclick="promptNewCategory()" type="button">+ קטגוריה חדשה</button></div>
@@ -396,6 +396,15 @@ function toggleUnlimitedStock() {
     qtyInput.disabled = unlimited;
     qtyInput.style.opacity = unlimited ? '0.4' : '1';
     if (unlimited) qtyInput.value = '999999';
+  }
+}
+
+const VAT_EXEMPT_CATEGORIES = ['פירות וירקות', 'ירקות', 'פירות', 'פירות', 'ירקות ופירות', 'פירות וירקות'];
+
+function onCategoryChange(cat) {
+  var isExempt = VAT_EXEMPT_CATEGORIES.some(function(c) { return cat.includes(c) || c.includes(cat); });
+  if (isExempt) {
+    setVat('exempt');
   }
 }
 
@@ -707,7 +716,11 @@ function openEditModal(id) {
   document.getElementById('fSerial').value = item.serialNumber||'';
   document.getElementById('fImage').value = item.imageUrl||'';
   document.getElementById('fNotes').value = item.notes||'';
-  setVat(item.vatType||'exempt');
+  // פירות וירקות = תמיד פטור
+  var vatVal = item.vatType || 'exempt';
+  var isFruitVeg = (item.category||'').includes('פירות') || (item.category||'').includes('ירקות');
+  if (isFruitVeg) vatVal = 'exempt';
+  setVat(vatVal);
   loadInventoryPickupPoints(item.pickupPoints||[]);
   document.getElementById('fUnlimited').checked = item.isUnlimited || false;
   document.getElementById('fPackSize').value = item.packSize || 1;
