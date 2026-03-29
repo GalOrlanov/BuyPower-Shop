@@ -114,8 +114,11 @@ router.get('/products', async (req, res) => {
     const results = inventoryItems.map(inv => {
       const prod = inv.shopProductId ? shopProdById[inv.shopProductId.toString()] : null;
 
-      // pickupPoints on product = internal/logistics only, NOT a visibility filter
-      // All products are visible to all customers regardless of pickupPoints
+      // pickupPoint filter — if product has pickupPoints, show only to matching customers
+      if (req.query.pickupPoint) {
+        const pp = (prod && prod.pickupPoints) || inv.pickupPoints || [];
+        if (pp.length > 0 && !pp.includes(req.query.pickupPoint)) return null;
+      }
 
       return {
         _id: (prod && prod._id) || inv._id,
