@@ -831,7 +831,11 @@ async function saveItem() {
     if (!res.ok) { showErr(data.error||'שגיאה'); return; }
     const savedId = data.id || data._id || editingId;
     const existingItem = editingId ? allItems.find(i=>i._id===editingId) : null;
-    await syncToShop({ ...body, _id: savedId, shopProductId: (existingItem||{}).shopProductId || data.shopProductId || null, isActive: body.isActive !== false });
+    const mergedItem = { ...body, _id: savedId, shopProductId: (existingItem||{}).shopProductId || data.shopProductId || null, isActive: body.isActive !== false };
+    // Only sync to shop if item is active — prevent creating duplicate shop products
+    if (mergedItem.isActive) {
+      await syncToShop(mergedItem);
+    }
     closeModal();
     loadInventory();
   } catch(e) { showErr(e.message); }
