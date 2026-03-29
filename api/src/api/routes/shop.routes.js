@@ -93,6 +93,8 @@ async function sendSMS(phone, message) {
 // ─── PRODUCTS ────────────────────────────────────────────────────────────────
 
 router.get('/products', async (req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.set('Pragma', 'no-cache');
   try {
     const db = await getDb();
     // SINGLE SOURCE OF TRUTH: shop_inventory
@@ -1507,6 +1509,8 @@ router.post('/pickup/:token/confirm', async (req, res) => {
 
 // GET /api/shop/inventory — list all inventory items
 router.get('/inventory', async (req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.set('Pragma', 'no-cache');
   try {
     const db = await getDb();
     const { category, search } = req.query;

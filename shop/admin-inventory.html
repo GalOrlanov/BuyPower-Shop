@@ -506,9 +506,10 @@ function populateQuantityDeals(deals) {
 
 async function loadInventory() {
   try {
+    const ts = '?_=' + Date.now();
     const [itemsRes, catsRes] = await Promise.all([
-      fetch(API + '/inventory'),
-      fetch(API + '/inventory/categories')
+      fetch(API + '/inventory' + ts, {cache: 'no-store'}),
+      fetch(API + '/inventory/categories' + ts, {cache: 'no-store'})
     ]);
     const rawItems = await itemsRes.json();
     // Deduplicate by _id before rendering
