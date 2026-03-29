@@ -1523,6 +1523,20 @@ router.post('/inventory', async (req, res) => {
     const db = await getDb();
     const { name, quantity, purchasePrice, sellingPrice, unit, category, imageUrl, supplier, lowStockAlert, expiryDate, serialNumber, notes } = req.body;
     if (!name || quantity == null) return res.status(400).json({ error: 'שם וכמות הם שדות חובה' });
+
+    // Prevent duplicates — if item with same name exists, update it instead
+    const existing = await db.collection('shop_inventory').findOne({ name });
+    if (existing) {
+      const update = {
+        quantity: parseInt(quantity), purchasePrice: parseFloat(purchasePrice)||0,
+        sellingPrice: parseFloat(sellingPrice)||0, unit: unit||existing.unit||'יח\'',
+        category: category||existing.category||'כללי', imageUrl: imageUrl||existing.imageUrl||'',
+        supplier: supplier||existing.supplier||'', updatedAt: new Date()
+      };
+      await db.collection('shop_inventory').updateOne({ _id: existing._id }, { $set: update });
+      return res.json({ ...existing, ...update, _id: existing._id });
+    }
+
     const item = {
       name, quantity: parseInt(quantity), purchasePrice: parseFloat(purchasePrice)||0,
       sellingPrice: parseFloat(sellingPrice)||0, unit: unit||'יח\'',

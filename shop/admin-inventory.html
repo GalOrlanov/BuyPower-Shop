@@ -732,6 +732,7 @@ function openEditModal(id) {
 function closeModal() {
   document.getElementById('itemModal').classList.remove('open');
   document.getElementById('modalErr').style.display = 'none';
+  editingId = null;
 }
 
 function clearForm() {
