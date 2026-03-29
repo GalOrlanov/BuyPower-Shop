@@ -870,21 +870,15 @@ async function syncToShop(item) {
       const r = await fetch('/api/shop/products/' + productId, { method: 'PUT', headers, body: JSON.stringify(prodBody) });
       if (r.ok) { showToast('✅ מוצר עודכן בחנות', '#15803d'); return; }
     }
-    // No productId or failed — find by name (exact or fuzzy)
+    // No productId — find by exact name only (no fuzzy, prevents duplicates)
     const allProds = await fetch('/api/shop/products', { headers: { 'x-admin-password': 'yedidya2024' } }).then(r => r.json());
-    // Try exact match first, then partial match
-    function fuzzyMatch(a, b) {
-      if (!a || !b) return false;
-      const norm = s => s.replace(/[\s'׳״\-\(\)]/g,'').toLowerCase();
-      return norm(a) === norm(b) || norm(a).includes(norm(b)) || norm(b).includes(norm(a));
-    }
-    const existing = allProds.find(p => p.name === item.name) || allProds.find(p => fuzzyMatch(p.name, item.name));
+    const existing = allProds.find(p => p.name === item.name);
     if (existing) {
       await fetch('/api/shop/products/' + existing._id, { method: 'PUT', headers, body: JSON.stringify(prodBody) });
       if (item._id) fetch('/api/shop/inventory/' + item._id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shopProductId: existing._id }) }).catch(()=>{});
       showToast('✅ מוצר עודכן בחנות', '#15803d');
     } else {
-      // Create new
+      // Create new only if no exact match exists
       const resp = await fetch('/api/shop/products', { method: 'POST', headers, body: JSON.stringify(prodBody) });
       const newProd = await resp.json();
       const newId = newProd.productId || newProd._id;
