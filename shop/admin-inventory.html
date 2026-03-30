@@ -198,7 +198,7 @@
 
           <!-- ① מחיר שוק — ימין -->
           <div style="flex:1;min-width:95px;background:white;border:1.5px solid #d1d5db;border-radius:10px;padding:10px 8px;text-align:center">
-            <div style="font-size:.68rem;color:#6b7280;margin-bottom:3px;white-space:nowrap">① מחיר שוק</div>
+            <div style="font-size:.68rem;color:#9ca3af;margin-bottom:3px;white-space:nowrap">① מחיר שוק</div>
             <input type="number" id="fMarketPriceCalc" min="0" step="0.01" placeholder="0"
               style="width:100%;border:none;text-align:center;font-size:.95rem;font-weight:700;color:#111;font-family:inherit;outline:none;padding:2px 0"
               oninput="calcPriceWidget()">
@@ -206,12 +206,12 @@
           </div>
 
           <!-- ② מחיר קנייה -->
-          <div style="flex:1;min-width:95px;background:white;border:1.5px solid #d1d5db;border-radius:10px;padding:10px 8px;text-align:center">
-            <div style="font-size:.68rem;color:#6b7280;margin-bottom:3px;white-space:nowrap">② מחיר קנייה</div>
-            <input type="number" id="fBuyPrice" min="0" step="0.01" placeholder="0"
-              style="width:100%;border:none;text-align:center;font-size:.95rem;font-weight:700;color:#111;font-family:inherit;outline:none;padding:2px 0"
+          <div style="flex:1;min-width:95px;background:#f0fdf4;border:2px solid #15803d;border-radius:10px;padding:10px 8px;text-align:center">
+            <div style="font-size:.68rem;color:#15803d;font-weight:800;margin-bottom:3px;white-space:nowrap">② מחיר קנייה ★</div>
+            <input type="number" id="fBuyPrice" min="0" step="0.01" placeholder="הזן כאן"
+              style="width:100%;border:none;text-align:center;font-size:.95rem;font-weight:700;color:#111;font-family:inherit;outline:none;padding:2px 0;background:transparent"
               oninput="calcPriceWidget()">
-            <div style="font-size:.62rem;color:#9ca3af;margin-top:2px">מחיר ספק</div>
+            <div style="font-size:.62rem;color:#15803d;font-weight:700;margin-top:2px">מחיר ספק ← הזן כאן</div>
             <div id="buyPriceWithVat" style="display:none;font-size:.65rem;color:#2563eb;font-weight:700;margin-top:3px;white-space:nowrap"></div>
           </div>
 
@@ -390,17 +390,21 @@ if (localStorage.getItem('shopAdminAuth') !== 'ok') {
 })();
 async function loadInventoryPickupPoints(selected) {
   try {
-    const pts = await fetch('/api/shop/pickup-points').then(r=>r.json());
+    // Use already-loaded pickup points to avoid name mismatch from two fetches
+    const pts = window._allPickupPoints && window._allPickupPoints.length
+      ? window._allPickupPoints
+      : await fetch('/api/shop/pickup-points').then(r=>r.json());
+    if (!window._allPickupPoints) window._allPickupPoints = pts;
     const container = document.getElementById('fPickupPointsContainer');
     if (!container) return;
     container.innerHTML = pts.map(p => {
       const name = p.name || p;
-      const id = 'ipp_' + name.replace(/[^a-zA-Z֐-׿]/g,'_');
+      const id = 'ipp_' + name.replace(/[^a-zA-Z\u05D0-\u05EA]/g,'_');
       const checked = selected && selected.includes(name) ? 'checked' : '';
       return '<label style="display:flex;align-items:center;gap:6px;font-size:.85rem;cursor:pointer;background:#fff;padding:7px 10px;border-radius:8px;border:1.5px solid #d1fae5">'+
         '<input type="checkbox" id="'+id+'" value="'+name+'" '+checked+' style="width:15px;height:15px;accent-color:#15803d"> '+name+'</label>';
     }).join('');
-  } catch(e) {}
+  } catch(e) { console.warn('loadInventoryPickupPoints error', e); }
 }
 
 function getInvSelectedPickupPoints() {
@@ -472,6 +476,8 @@ function calcPriceWidget() {
   var base = buy * (1 + pct / 100);
   if (vat === 'included' || vat === 'excluded') base = base * 1.18;
   var rounded = Math.ceil(base * 2) / 2;
+  // Always update sell price when buy price or profit % changes
+  // But NOT when we're editing an existing item (editingId is set) and user hasn't touched buy price
   document.getElementById('fSellPrice').value = base.toFixed(2);
   if (preview) preview.textContent = '→ ₪' + base.toFixed(2) + ' (עגול: ₪' + rounded.toFixed(1) + ')';
 }
@@ -915,7 +921,14 @@ async function saveItem() {
     serialNumber: document.getElementById('fSerial').value,
     imageUrl: document.getElementById('fImage').value.trim(),
     notes: document.getElementById('fNotes').value,
-    pickupPoints: getInvSelectedPickupPoints(),
+    pickupPoints: (function() {
+      var pts = getInvSelectedPickupPoints();
+      // Normalize: always use full name from _allPickupPoints
+      return pts.map(function(pt) {
+        var match = (window._allPickupPoints || []).find(function(p) { return p.name === pt || p.name.startsWith(pt) || pt.startsWith(p.name.split('"')[0]); });
+        return match ? match.name : pt;
+      });
+    })(),
     vatType: document.getElementById('fVatType').value,
     isUnlimited: document.getElementById('fUnlimited').checked,
     packSize: parseInt(document.getElementById('fPackSize').value) || 1,

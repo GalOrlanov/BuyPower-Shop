@@ -88,26 +88,100 @@ function formatDate(d) {
 }
 
 function renderOrder(order) {
-  var items = (order.items || []).map(function(i) {
-    var line = '• ' + i.name;
-    if (i.variant) line += ' — ' + i.variant;
-    line += ' × ' + i.qty;
-    return line;
-  }).join('<br>');
   var total = order.totalAmount || (order.items || []).reduce(function(s,i){ return s + i.price * i.qty; }, 0) || '';
-  var confirmed = order.confirmed || order.status === 'confirmed';
-  return '<div class="order-card">' +
+  var isPaid = ['paid','handled','confirmed'].includes(order.status);
+  var isCollected = order.status === 'collected';
+  var orderItems = order.items || [];
+  var collectedCount = orderItems.filter(function(i){ return i.collected; }).length;
+  var allCollected = orderItems.length > 0 && collectedCount === orderItems.length;
+
+  // Build item rows — with checkboxes for paid orders
+  var itemsHtml = orderItems.map(function(i, idx) {
+    var label = i.name + (i.variant ? ' — ' + i.variant : '');
+    var qty = i.qty || i.quantity || 1;
+    var done = !!i.collected;
+    if (isPaid && order._id && order.source !== 'grow') {
+      return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f3f4f6">' +
+        '<input type="checkbox" ' + (done ? 'checked' : '') + ' ' +
+        'onchange="collectItem('' + order._id + '',' + idx + ',this.checked,this)" ' +
+        'style="width:22px;height:22px;accent-color:#15803d;cursor:pointer;flex-shrink:0">' +
+        '<span style="flex:1;font-weight:600;' + (done ? 'text-decoration:line-through;color:#9ca3af' : '') + '">' + label + '</span>' +
+        '<span style="background:' + (done ? '#f3f4f6' : '#dcfce7') + ';color:' + (done ? '#9ca3af' : '#14532d') + ';font-weight:800;font-size:.82rem;padding:3px 10px;border-radius:10px;white-space:nowrap">x' + qty + '</span>' +
+        '</div>';
+    } else {
+      var doneMark = (isCollected || done) ? '✅ ' : '• ';
+      return '<div style="padding:5px 0;color:' + (done||isCollected?'#9ca3af':'#374151') + ';' + (done||isCollected?'text-decoration:line-through':'') + '">' + doneMark + label + ' × ' + qty + '</div>';
+    }
+  }).join('');
+
+  // Progress bar for paid orders
+  var progressHtml = '';
+  if (isPaid && orderItems.length > 0 && order.source !== 'grow') {
+    var pct = Math.round(collectedCount / orderItems.length * 100);
+    progressHtml = '<div style="margin:10px 0 4px">' +
+      '<div style="height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden">' +
+      '<div style="height:100%;width:' + pct + '%;background:linear-gradient(90deg,#15803d,#16a34a);border-radius:3px;transition:width .3s" id="progress_' + order._id + '"></div></div>' +
+      '<div style="font-size:.75rem;color:#6b7280;margin-top:3px" id="progress_text_' + order._id + '">' + collectedCount + ' מתוך ' + orderItems.length + ' פריטים נאספו</div></div>';
+  }
+
+  // Done banner
+  var doneBanner = (allCollected && !isCollected) ?
+    '<div style="background:#f0fdf4;border:2px solid #86efac;border-radius:10px;padding:12px;text-align:center;margin-top:10px">' +
+    '<div style="font-size:1.5rem">🎉</div><div style="font-weight:800;color:#14532d">כל המוצרים נאספו!</div></div>' : '';
+
+  return '<div class="order-card" id="order_card_' + (order._id||'') + '">' +
     '<div class="order-header"><div class="order-date">' + formatDate(order.createdAt) + '</div>' +
     '<div class="order-status ' + statusClass(order.status) + '">' + statusLabel(order.status) + '</div></div>' +
-    '<div class="order-items">' + (items || '(פרטים לא זמינים)') + '</div>' +
-    '<div class="order-total">💰 סה"כ: ' + total + ' ₪</div>' +
-    (order.timeSlot ? '<div style="font-size:.82rem;color:#6b7280;margin-top:4px">🕐 שעת איסוף מועדפת: <strong>' + order.timeSlot + '</strong></div>' : '') +
-    '<div class="order-pickup">📍 ' + (order.pickupLocation || 'העגלה החברתית') + '</div>' +
-    (['paid','handled','confirmed'].includes(order.status) && order._id && order.source !== 'grow'
-      ? '<button class="collect-btn" onclick="openCollectModal('' + order._id + '')">' +
-        (order.status === 'collected' ? '✅ נאסף' : '🧺 איסוף הזמנה') + '</button>'
-      : '') +
+    '<div class="order-pickup" style="margin-bottom:8px">📍 ' + (order.pickupLocation || 'העגלה החברתית') + '</div>' +
+    (isPaid && order.source !== 'grow' ? '<div style="font-size:.82rem;font-weight:700;color:#374151;margin-bottom:4px">סמן ✓ ליד כל מוצר שאספת:</div>' : '') +
+    '<div>' + (itemsHtml || '(פרטים לא זמינים)') + '</div>' +
+    progressHtml +
+    doneBanner +
+    '<div class="order-total" style="margin-top:10px">💰 סה"כ: ' + total + ' ₪</div>' +
+    (order.timeSlot ? '<div style="font-size:.82rem;color:#6b7280;margin-top:4px">🕐 שעת איסוף: <strong>' + order.timeSlot + '</strong></div>' : '') +
     '</div>';
+}
+
+async function collectItem(orderId, itemIndex, collected, checkbox) {
+  // Optimistic UI update
+  var row = checkbox.parentElement;
+  var label = row.querySelector('span:nth-child(2)');
+  var qty = row.querySelector('span:nth-child(3)');
+  if (label) { label.style.textDecoration = collected ? 'line-through' : ''; label.style.color = collected ? '#9ca3af' : ''; }
+  if (qty) { qty.style.background = collected ? '#f3f4f6' : '#dcfce7'; qty.style.color = collected ? '#9ca3af' : '#14532d'; }
+
+  // Update server
+  var token = localStorage.getItem('shopToken') || '';
+  var res = await fetch('/api/shop/orders/' + orderId + '/collect-item', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'Authorization': token ? 'Bearer ' + token : '' },
+    body: JSON.stringify({ itemIndex: itemIndex, collected: collected })
+  });
+  var data = await res.json();
+
+  // Update progress bar
+  var card = document.getElementById('order_card_' + orderId);
+  if (card) {
+    var checkboxes = card.querySelectorAll('input[type=checkbox]');
+    var total = checkboxes.length;
+    var done = Array.from(checkboxes).filter(function(c){ return c.checked; }).length;
+    var pct = total ? Math.round(done/total*100) : 0;
+    var bar = document.getElementById('progress_' + orderId);
+    var txt = document.getElementById('progress_text_' + orderId);
+    if (bar) bar.style.width = pct + '%';
+    if (txt) txt.textContent = done + ' מתוך ' + total + ' פריטים נאספו';
+    // Show done banner if all collected
+    if (data.allCollected) {
+      var existing = card.querySelector('.done-banner');
+      if (!existing) {
+        var banner = document.createElement('div');
+        banner.className = 'done-banner';
+        banner.style.cssText = 'background:#f0fdf4;border:2px solid #86efac;border-radius:10px;padding:12px;text-align:center;margin-top:10px';
+        banner.innerHTML = '<div style="font-size:1.5rem">🎉</div><div style="font-weight:800;color:#14532d">כל המוצרים נאספו!</div>';
+        card.appendChild(banner);
+      }
+    }
+  }
 }
 
 function statusLabel(s) {

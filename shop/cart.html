@@ -801,11 +801,7 @@ async function submitGrowForm() {
         payment_type: 'Payments',
         max_or_custom: 'Max Payments',
         products: cart.map(item => {
-          // Map our vatType string to Grow numeric: 1=חייב, 2=פטור
-          // Default to 2 (פטור) — most products are fruits/vegetables/exempt
-          let growVatType = 2;
-          if (item.vatType === 'included' || item.vatType === 'excluded') growVatType = 1;
-          else if (typeof item.vatType === 'number') growVatType = item.vatType;
+          let growVatType = 1; // Always 1 per Make/Meshulam requirement
           return {
             catalog_number: item._id || item.id || item.productId || (item.cartKey ? item.cartKey.split('_')[0] : '1'),
             name: item.name + (item.variant ? ' - ' + item.variant : '') + (item.qty > 1 ? ' ×' + item.qty : ''),

@@ -12,7 +12,7 @@ const path = require('path');
 const fs = require('fs');
 
 const UPLOADS_DIR = process.env.UPLOADS_DIR || '/var/www/grouppurchase/uploads';
-const UPLOADS_URL_BASE = process.env.UPLOADS_URL_BASE || 'https://buypower.co.il/uploads';
+const UPLOADS_URL_BASE = process.env.UPLOADS_URL_BASE || 'https://shop.buypower.co.il/uploads';
 
 // Ensure uploads dir exists
 try { if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true }); } catch(e) {}
@@ -1170,7 +1170,7 @@ router.post('/payment/create', async (req, res) => {
         quantity: Number(p.quantity) || 1,
         minimum_quantity: Number(p.minimum_quantity) || 1,
         productUrl: p.productUrl || p.imageUrl || '',
-        vatType: p.vatType !== undefined ? p.vatType : 1
+        vatType: 1
       }))
     };
 

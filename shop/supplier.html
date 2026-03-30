@@ -228,11 +228,9 @@ function openAddModal() {
   document.getElementById('sName').value = '';
   document.getElementById('sPhone').value = '';
   document.getElementById('sAgent').value = '';
-  document.getElementById('sCompany').value = '';
   document.getElementById('sTaxId').value = '';
   document.getElementById('sAddress').value = '';
   document.getElementById('sEmail').value = '';
-  document.getElementById('sContact').value = '';
   document.getElementById('sPayment').value = '';
   document.getElementById('sNotes').value = '';
   document.getElementById('modalErr').style.display = 'none';
@@ -245,11 +243,9 @@ function openEditModal(s) {
   document.getElementById('sName').value = s.name || '';
   document.getElementById('sPhone').value = s.phone || '';
   document.getElementById('sAgent').value = s.agentName || '';
-  document.getElementById('sCompany').value = s.companyName || '';
   document.getElementById('sTaxId').value = s.taxId || '';
   document.getElementById('sAddress').value = s.address || '';
   document.getElementById('sEmail').value = s.email || '';
-  document.getElementById('sContact').value = s.contactName || '';
   document.getElementById('sPayment').value = s.paymentTerms || '';
   document.getElementById('sNotes').value = s.notes || '';
   document.getElementById('modalErr').style.display = 'none';
@@ -267,11 +263,7 @@ async function saveSupplier() {
     name,
     phone: document.getElementById('sPhone').value.trim(),
     agentName: document.getElementById('sAgent').value.trim(),
-    companyName: document.getElementById('sCompany').value.trim(),
     taxId: document.getElementById('sTaxId').value.trim(),
-    address: document.getElementById('sAddress').value.trim(),
-    taxId: document.getElementById('sTaxId').value.trim(),
-    agentName: document.getElementById('sAgent').value.trim(),
     address: document.getElementById('sAddress').value.trim(),
     email: document.getElementById('sEmail').value.trim(),
     paymentTerms: document.getElementById('sPayment').value,

@@ -824,9 +824,11 @@ async function loadNextPickupBar() {
     }
     // Per-location dates take priority (global pickupInfoDate is legacy fallback)
     var locs = (s.pickupLocations || []);
+    var now = new Date();
+    now.setHours(0,0,0,0);
     var withDate = locs.filter(function(l){return l.collectionDate;})
       .map(function(l){l._d=new Date(l.collectionDate);return l;})
-      .filter(function(l){return !isNaN(l._d.getTime());})
+      .filter(function(l){return !isNaN(l._d.getTime()) && l._d >= now;})
       .sort(function(a,b){return a._d-b._d;});
     if (withDate.length) {
       var loc = withDate[0];
