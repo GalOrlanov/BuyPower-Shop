@@ -492,15 +492,34 @@ function addAllToCart() {
   setTimeout(function(){ window.location.href = 'cart.html'; }, 1000);
 }
 
+var novarQty = 1;
+function novarChangeQty(delta) {
+  var minQ = (currentProduct && currentProduct.minQuantity) || 1;
+  novarQty = Math.max(minQ, novarQty + delta);
+  var el = document.getElementById('novar-qty');
+  if (el) el.textContent = novarQty;
+  var btn = document.getElementById('novar-minus');
+  if (btn) btn.disabled = (novarQty <= minQ);
+}
+
 function addSingleToCart() {
   if (!currentProduct) return;
   var mainImg = (currentProduct.imageUrls && currentProduct.imageUrls.length)
     ? currentProduct.imageUrls[0] : (currentProduct.imageUrl || '');
   var cartKey = currentProduct._id;
+  var qty = novarQty || 1;
+  var effectivePrice = currentProduct.shopPrice;
+  if (currentProduct.quantityDeals && currentProduct.quantityDeals.length) {
+    var sorted = currentProduct.quantityDeals.slice().sort(function(a,b){ return b.qty - a.qty; });
+    for (var di=0; di<sorted.length; di++) {
+      if (qty >= sorted[di].qty) { effectivePrice = sorted[di].price / sorted[di].qty; break; }
+    }
+  }
   var existing = cart.find(function(i){ return i.cartKey === cartKey; });
-  if (existing) existing.qty++;
+  if (existing) { existing.qty = qty; existing.price = effectivePrice; }
   else cart.push({ cartKey: cartKey, productId: currentProduct._id, name: currentProduct.name,
-    price: currentProduct.shopPrice, imageUrl: mainImg, qty: 1, variant: null, vatType: currentProduct.vatType || 'excluded' });
+    price: effectivePrice, imageUrl: mainImg, qty: qty, variant: null,
+    vatType: currentProduct.vatType || 'excluded', quantityDeals: currentProduct.quantityDeals || [] });
   saveCart();
   showToast('\u2705 ' + currentProduct.name + ' \u05e0\u05d5\u05e1\u05e3 \u05dc\u05e2\u05d2\u05dc\u05d4');
   setTimeout(function(){ window.location.href = 'cart.html'; }, 1000);
@@ -573,7 +592,12 @@ function renderProduct(p) {
       '<button id="goCartBtn" onclick="window.location.href=\'cart.html\'" style="display:none;width:100%;padding:15px;background:#f97316;color:white;border:none;border-radius:14px;font-size:1rem;font-weight:800;cursor:pointer;font-family:inherit">🛒 עבור לעגלה</button>' +
       '</div>';
   } else {
-    variantsHtml = '<button class="no-variants-add-btn" onclick="addSingleToCart()">\u05d4\u05d5\u05e1\u05e3 \u05dc\u05e2\u05d2\u05dc\u05d4 \uD83D\uDED2</button>';
+    variantsHtml = '<div style="display:flex;align-items:center;gap:12px;margin-top:16px">' +
+      '<button onclick="novarChangeQty(-1)" id="novar-minus" disabled style="width:44px;height:44px;font-size:1.3rem;border:2px solid #15803d;border-radius:10px;background:white;color:#15803d;cursor:pointer;font-weight:700;font-family:inherit">−</button>' +
+      '<span id="novar-qty" style="font-size:1.3rem;font-weight:800;min-width:32px;text-align:center">1</span>' +
+      '<button onclick="novarChangeQty(1)" style="width:44px;height:44px;font-size:1.3rem;border:2px solid #15803d;border-radius:10px;background:white;color:#15803d;cursor:pointer;font-weight:700;font-family:inherit">+</button>' +
+      '</div>' +
+      '<button class="no-variants-add-btn" onclick="addSingleToCart()" style="margin-top:12px">הוסף לעגלה 🛒</button>';
   }
 
   document.getElementById('productContent').innerHTML =
@@ -583,7 +607,7 @@ function renderProduct(p) {
     '<div class="product-name">' + p.name + '</div>' +
     (p.description ? '<div class="product-desc">' + p.description + '</div>' : '') +
     priceInfoHtml +
-    (p.quantityDeals && p.quantityDeals.length > 1 ? '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">' +
+    (p.quantityDeals && p.quantityDeals.length > 0 ? '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">' +
       p.quantityDeals.map(function(d) {
         return '<div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:5px 12px;font-size:.82rem;font-weight:800;color:#15803d">' +
           d.qty + ' יח\' = ₪' + d.price + '</div>';
