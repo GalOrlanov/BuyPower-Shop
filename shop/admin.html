@@ -308,7 +308,7 @@ input:checked + .slider::before { transform: translateX(20px); }
       <button class="tab-btn" onclick="showTab('announcements')">📢 הודעות</button>
       <button class="tab-btn" onclick="showTab('settings')">⚙️ הגדרות</button>
       <button class="tab-btn" onclick="showTab('users'); loadUsers();">👥 משתמשים</button>
-      <button class="tab-btn" onclick="showTab('payment')">💳 תשלום Grow</button>
+      <button class="tab-btn" onclick="showTab('payment');setPayDateRange('month')">💳 תשלום Grow</button>
       <button class="tab-btn" onclick="showTab('pricing');loadPricing()">📊 מחירון שבועי</button>
       <button class="tab-btn" onclick="showTab('finance');initFinanceTab()">💰 פיננסים</button>
       <button class="tab-btn" onclick="showTab('crm');loadCrm()">👥 לקוחות</button>
@@ -656,6 +656,29 @@ input:checked + .slider::before { transform: translateX(20px); }
             <div>יוצר קישור תשלום...</div>
           </div>
         </div>
+      </div>
+
+      <!-- Payment History -->
+      <div style="margin-top:32px;border-top:2px solid #e2e8f0;padding-top:24px">
+        <h2 style="margin:0 0 16px;font-size:1.2rem">📋 היסטוריית תשלומים מ-Grow</h2>
+        <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:16px;background:#f8fafc;padding:14px;border-radius:10px;border:1px solid #e2e8f0">
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <label style="font-size:.8rem;font-weight:600;color:#6b7280">מתאריך</label>
+            <input type="date" id="payFromDate" style="padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-family:inherit">
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <label style="font-size:.8rem;font-weight:600;color:#6b7280">עד תאריך</label>
+            <input type="date" id="payToDate" style="padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-family:inherit">
+          </div>
+          <button onclick="setPayDateRange('today')" style="background:#15803d;color:white;border:none;padding:9px 14px;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700;font-size:.85rem">היום</button>
+          <button onclick="setPayDateRange('week')" style="background:#0369a1;color:white;border:none;padding:9px 14px;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700;font-size:.85rem">שבועי</button>
+          <button onclick="setPayDateRange('month')" style="background:#7c3aed;color:white;border:none;padding:9px 14px;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700;font-size:.85rem">חודשי</button>
+          <button onclick="loadGrowPayments(1)" style="background:#1d4ed8;color:white;border:none;padding:9px 14px;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700;font-size:.85rem">🔍 חפש</button>
+          <button onclick="document.getElementById('payFromDate').value='';document.getElementById('payToDate').value='';loadGrowPayments(1)" style="background:#f3f4f6;color:#374151;border:none;padding:9px 14px;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:600;font-size:.85rem">הכל</button>
+          <div id="growPaymentsCount" style="margin-right:auto;font-size:.9rem;font-weight:700;color:#1d4ed8"></div>
+        </div>
+        <div id="growPaymentsList" style="color:#9ca3af;text-align:center;padding:20px">לחץ חפש לטעינת תשלומים</div>
+        <div id="growPagination" style="display:none;text-align:center;margin-top:14px;display:flex;justify-content:center;gap:8px;flex-wrap:wrap"></div>
       </div>
     </div>
 
@@ -3331,6 +3354,107 @@ async function removePickup(idx) {
 </script>
 
 <script>
+function setPayDateRange(range) {
+  var today = new Date();
+  var to = today.toISOString().split('T')[0];
+  var from = to;
+  if (range === 'week') {
+    var d = new Date(today);
+    d.setDate(d.getDate() - 7);
+    from = d.toISOString().split('T')[0];
+  } else if (range === 'month') {
+    var d = new Date(today);
+    d.setMonth(d.getMonth() - 1);
+    from = d.toISOString().split('T')[0];
+  }
+  document.getElementById('payFromDate').value = from;
+  document.getElementById('payToDate').value = to;
+  loadGrowPayments(1);
+}
+
+async function loadGrowPayments(page) {
+  page = page || 1;
+  var container = document.getElementById('growPaymentsList');
+  container.innerHTML = '<div style="text-align:center;padding:20px;color:#9ca3af">טוען...</div>';
+  try {
+    var from = document.getElementById('payFromDate').value;
+    var to = document.getElementById('payToDate').value;
+    var url = API + '/payments?page=' + page + '&perPage=20';
+    if (from) url += '&from=' + from;
+    if (to) url += '&to=' + to;
+    var res = await fetch(url);
+    var data = await res.json();
+    var payments = data.payments || [];
+    var total = data.total || 0;
+    var totalPages = data.totalPages || 1;
+
+    document.getElementById('growPaymentsCount').textContent = '📊 ' + total + ' תשלומים' + (from||to ? ' (מסונן)' : '');
+
+    if (!payments.length) {
+      container.innerHTML = '<div style="text-align:center;padding:20px;color:#9ca3af">אין תשלומים בתקופה שנבחרה</div>';
+      document.getElementById('growPagination').style.display = 'none';
+      return;
+    }
+    var html = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.85rem">';
+    html += '<thead><tr style="background:#f0f9ff;border-bottom:2px solid #bfdbfe">';
+    html += '<th style="padding:10px 8px;text-align:right">תאריך</th>';
+    html += '<th style="padding:10px 8px;text-align:right">שם</th>';
+    html += '<th style="padding:10px 8px;text-align:right">טלפון</th>';
+    html += '<th style="padding:10px 8px;text-align:right">סכום</th>';
+    html += '<th style="padding:10px 8px;text-align:right">מוצרים</th>';
+    html += '<th style="padding:10px 8px;text-align:right">אמצעי</th>';
+    html += '<th style="padding:10px 8px;text-align:right">כרטיס</th>';
+    html += '<th style="padding:10px 8px;text-align:right">אסמכתא</th>';
+    html += '<th style="padding:10px 8px;text-align:right">קבלה</th>';
+    html += '</tr></thead><tbody>';
+    payments.forEach(function(p) {
+      var date = p.createdAt ? new Date(p.createdAt).toLocaleString('he-IL', {day:'numeric',month:'numeric',year:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
+      var name = p.customerName || '—';
+      var phone = p.payerPhone || p.phone || '—';
+      var email = p.payerEmail || '';
+      var amount = p.totalAmount || '—';
+      var method = p.paymentMethod || '';
+      var card = p.cardSuffix ? ((p.cardBrand||'') + ' •••• ' + p.cardSuffix) : '';
+      var asmachta = p.growRef || '';
+      var invoiceUrl = p.invoiceUrl || '';
+      var invoiceBtn = invoiceUrl ? '<a href="'+invoiceUrl+'" target="_blank" style="color:#1d4ed8;text-decoration:underline;font-weight:600">📄 הורד</a>' : '<span style="color:#d1d5db">—</span>';
+      var methodIcon = method === 'Bit' ? '📱' : method === 'PayBox' ? '📦' : method === 'Gpay' ? '🅖' : method ? '💳' : '';
+      var items = (p.items||[]).map(function(i){return (i.name||'?') + ' x' + (i.qty||1)}).join(', ');
+      html += '<tr style="border-bottom:1px solid #f1f5f9">';
+      html += '<td style="padding:8px">' + date + '</td>';
+      html += '<td style="padding:8px;font-weight:600">' + name + '</td>';
+      html += '<td style="padding:8px;direction:ltr;text-align:right">' + phone + '</td>';
+      html += '<td style="padding:8px;font-weight:700;color:#15803d">₪' + (typeof amount==='number'?amount.toFixed(2):amount) + '</td>';
+      html += '<td style="padding:8px;font-size:.8rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+items+'">' + (items||'—') + '</td>';
+      html += '<td style="padding:8px">' + (method ? methodIcon + ' ' + method : '—') + '</td>';
+      html += '<td style="padding:8px;direction:ltr;text-align:right;font-family:monospace">' + (card||'—') + '</td>';
+      html += '<td style="padding:8px;font-family:monospace;font-size:.8rem">' + (asmachta||'—') + '</td>';
+      html += '<td style="padding:8px">' + invoiceBtn + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
+
+    // Pagination
+    var pagDiv = document.getElementById('growPagination');
+    if (totalPages > 1) {
+      var ph = '';
+      if (page > 1) ph += '<button onclick="loadGrowPayments('+(page-1)+')" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:white;cursor:pointer;font-family:inherit">→ הקודם</button>';
+      for (var i = 1; i <= totalPages; i++) {
+        var active = i === page;
+        ph += '<button onclick="loadGrowPayments('+i+')" style="padding:6px 12px;border:1px solid '+(active?'#1d4ed8':'#d1d5db')+';border-radius:6px;background:'+(active?'#1d4ed8':'white')+';color:'+(active?'white':'#374151')+';cursor:pointer;font-weight:'+(active?'700':'400')+';font-family:inherit">'+i+'</button>';
+      }
+      if (page < totalPages) ph += '<button onclick="loadGrowPayments('+(page+1)+')" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:white;cursor:pointer;font-family:inherit">הבא ←</button>';
+      pagDiv.innerHTML = ph;
+      pagDiv.style.display = 'flex';
+    } else {
+      pagDiv.style.display = 'none';
+    }
+  } catch(e) {
+    container.innerHTML = '<div style="color:#dc2626;padding:20px;text-align:center">שגיאה בטעינת תשלומים</div>';
+  }
+}
+
 async function createGrowPayment() {
   const title = document.getElementById('pay-title').value.trim();
   const name = document.getElementById('pay-name').value.trim();

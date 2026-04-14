@@ -568,6 +568,65 @@ router.post('/orders', async (req, res) => {
   }
 });
 
+// GET /api/shop/payments — Admin: list paid orders + Grow payment details, with date filter + pagination
+router.get('/payments', async (req, res) => {
+  try {
+    const db = await getDb();
+    const page = parseInt(req.query.page) || 1;
+    const perPage = parseInt(req.query.perPage) || 20;
+    const skip = (page - 1) * perPage;
+
+    // Query paid orders
+    const query = { status: { $in: ['paid', 'handled', 'confirmed'] } };
+    if (req.query.from) query.createdAt = { $gte: new Date(req.query.from) };
+    if (req.query.to) {
+      const toDate = new Date(req.query.to);
+      toDate.setHours(23, 59, 59, 999);
+      query.createdAt = { ...query.createdAt, $lte: toDate };
+    }
+
+    const [orders, total] = await Promise.all([
+      db.collection('shop_orders').find(query).sort({ createdAt: -1 }).skip(skip).limit(perPage).toArray(),
+      db.collection('shop_orders').countDocuments(query)
+    ]);
+
+    // Enrich with Grow payment data where available
+    const phones = orders.map(o => (o.phone || '').replace(/\D/g, '').slice(-9)).filter(Boolean);
+    const growPayments = phones.length ? await db.collection('grow_payments').find({
+      $or: phones.map(p => ({ 'rawBody.payerPhone': { $regex: p } }))
+    }).sort({ createdAt: -1 }).toArray() : [];
+
+    const enriched = orders.map(o => {
+      const orderPhone = (o.phone || '').replace(/\D/g, '').slice(-9);
+      const gp = growPayments.find(g => {
+        const gpPhone = ((g.rawBody && g.rawBody.payerPhone) || '').replace(/\D/g, '').slice(-9);
+        return gpPhone === orderPhone;
+      });
+      return {
+        _id: o._id,
+        customerName: o.customerName,
+        phone: o.phone,
+        totalAmount: o.totalAmount,
+        pickupLocation: o.pickupLocation,
+        status: o.status,
+        items: o.items,
+        invoiceUrl: o.invoiceUrl || (gp && gp.rawBody && gp.rawBody.invoiceURL) || '',
+        createdAt: o.createdAt,
+        growRef: o.growRef || (gp && gp.asmachta) || '',
+        cardSuffix: (gp && (gp.cardSuffix || (gp.rawBody && gp.rawBody.cardSuffix))) || '',
+        cardBrand: (gp && gp.rawBody && gp.rawBody.cardBrand) || '',
+        paymentMethod: (gp && gp.rawBody && gp.rawBody.transactionType) || '',
+        payerEmail: (gp && gp.rawBody && gp.rawBody.payerEmail) || '',
+        payerPhone: (gp && gp.rawBody && gp.rawBody.payerPhone) || o.phone || '',
+      };
+    });
+
+    res.json({ payments: enriched, total, page, perPage, totalPages: Math.ceil(total / perPage) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.get('/payments/my', async (req, res) => {
   try {
     const db = await getDb();
