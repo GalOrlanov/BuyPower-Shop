@@ -1,0 +1,22 @@
+name: Deploy to shop.buypower.co.il
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: 64.23.156.254
+          username: root
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd /root/.openclaw/workspace/BuyPower-Shop
+            git pull origin main
+            cp shop/*.html /var/www/shop/
+            systemctl restart buypower-shop
+            echo "✅ Deploy complete"
