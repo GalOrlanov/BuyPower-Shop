@@ -2428,15 +2428,18 @@ router.post('/payment/webhook', async (req, res) => {
     const db = await getDb();
     console.log('[GROW WEBHOOK] received:', JSON.stringify(req.body));
 
-    const { orderId, order_id, status, amount, reference, phone, full_name, name,
-            asmachta, cardSuffix, cardBrand, cardType, transactionType, payerPhone, payerEmail,
-            paymentSum, paymentDesc, webhookKey, transactionCode, invoiceURL, invoiceName } = req.body;
+    // Grow sends data nested in req.body.data
+    const raw = req.body.data || req.body;
+    const { orderId, order_id, status, amount, reference, phone, full_name, fullName, name,
+            asmachta, cardSuffix, cardBrand, cardType, transactionType, transactionTypeId, payerPhone, payerEmail,
+            paymentSum, sum, paymentDesc, description, webhookKey, transactionCode, transactionId,
+            invoiceURL, invoiceName, processId, paymentLinkProcessId, productData } = raw;
 
-    const id = orderId || order_id;
-    const ref = reference || asmachta || transactionCode || null;
-    const paidAmount = amount || paymentSum || null;
+    const id = orderId || order_id || null;
+    const ref = asmachta || reference || transactionId || transactionCode || null;
+    const paidAmount = sum || amount || paymentSum || null;
     const customerPhone = payerPhone || phone || '';
-    const customerName = full_name || name || '';
+    const customerName = fullName || full_name || name || '';
 
     // Save raw payment data to grow_payments
     await db.collection('grow_payments').insertOne({
@@ -2592,11 +2595,13 @@ router.post('/payment/notify-invoice', async (req, res) => {
   try {
     const db = await getDb();
     console.log('[INVOICE NOTIFY] received:', JSON.stringify(req.body));
-    const { orderId, order_id, invoice_url, invoiceUrl, invoice_number, invoiceNumber, transaction_id, reference, phone } = req.body;
-    const id = orderId || order_id;
+    // Data may be nested in req.body or req.body directly (Grow sends flat for invoice notify)
+    const raw = req.body;
+    const { orderId, order_id, invoice_url, invoiceUrl, invoice_number, invoiceNumber, transaction_id, transactionId, reference, phone, processId } = raw;
+    const id = orderId || order_id || null;
     const url = invoice_url || invoiceUrl || '';
     const invNum = invoice_number || invoiceNumber || '';
-    const ref = transaction_id || reference || '';
+    const ref = transaction_id || transactionId || reference || processId || '';
 
     // Store invoice data
     await db.collection('grow_payments').insertOne({
