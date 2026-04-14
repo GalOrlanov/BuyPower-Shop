@@ -20,11 +20,10 @@ jobs:
             git reset --hard origin/main
             cp api/src/api/routes/*.js api/dist/api/routes/ 2>/dev/null || true
             cp -v shop/*.html /var/www/shop/
-            cat /etc/nginx/sites-enabled/shop.buypower.co.il
-            echo "=== NODE APP STATIC FILES ==="
-            find /root/.openclaw/workspace/BuyPower-Shop/api -name "admin.html" 2>/dev/null | while read f; do echo "$f: $(wc -c < $f)"; done
-            find /root/.openclaw/workspace/BuyPower-Shop -path "*/dist/*" -name "admin.html" 2>/dev/null | while read f; do echo "$f: $(wc -c < $f)"; done
-            find /root/.openclaw/workspace/BuyPower-Shop -path "*/public/*" -name "admin.html" 2>/dev/null | while read f; do echo "$f: $(wc -c < $f)"; done
+            echo "BEFORE restart: $(wc -c < /var/www/shop/admin.html) | md5: $(md5sum /var/www/shop/admin.html | cut -d' ' -f1)"
             systemctl restart buypower-shop
+            sleep 3
+            echo "AFTER restart: $(wc -c < /var/www/shop/admin.html) | md5: $(md5sum /var/www/shop/admin.html | cut -d' ' -f1)"
+            cat /etc/systemd/system/buypower-shop.service 2>/dev/null || systemctl cat buypower-shop 2>/dev/null
             nginx -s reload
             echo "✅ Deploy complete"
