@@ -19,6 +19,8 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
             cp api/src/api/routes/*.js api/dist/api/routes/ 2>/dev/null || true
-            cp shop/*.html /var/www/shop/
+            cp -v shop/*.html /var/www/shop/
+            echo "admin.html size in git: $(wc -c < shop/admin.html) bytes"
+            echo "admin.html size in www: $(wc -c < /var/www/shop/admin.html) bytes"
             systemctl restart buypower-shop
             echo "✅ Deploy complete"
