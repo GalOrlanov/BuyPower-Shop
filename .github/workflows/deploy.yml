@@ -16,7 +16,8 @@ jobs:
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script: |
             cd /root/.openclaw/workspace/BuyPower-Shop
-            git pull origin main
+            git fetch origin main
+            git reset --hard origin/main
             cp api/src/api/routes/*.js api/dist/api/routes/ 2>/dev/null || true
             cp shop/*.html /var/www/shop/
             systemctl restart buypower-shop
