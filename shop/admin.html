@@ -3405,6 +3405,7 @@ async function loadGrowPayments(page) {
     html += '<th style="padding:10px 8px;text-align:right">אמצעי</th>';
     html += '<th style="padding:10px 8px;text-align:right">כרטיס</th>';
     html += '<th style="padding:10px 8px;text-align:right">אסמכתא</th>';
+    html += '<th style="padding:10px 8px;text-align:right">webhook</th>';
     html += '<th style="padding:10px 8px;text-align:right">קבלה</th>';
     html += '</tr></thead><tbody>';
     payments.forEach(function(p) {
@@ -3429,6 +3430,8 @@ async function loadGrowPayments(page) {
       html += '<td style="padding:8px">' + (method ? methodIcon + ' ' + method : '—') + '</td>';
       html += '<td style="padding:8px;direction:ltr;text-align:right;font-family:monospace">' + (card||'—') + '</td>';
       html += '<td style="padding:8px;font-family:monospace;font-size:.8rem">' + (asmachta||'—') + '</td>';
+      var hasWebhook = !!(p.growRef || p.cardSuffix || p.paymentMethod);
+      html += '<td style="padding:8px;text-align:center">' + (hasWebhook ? '<span style="background:#dcfce7;color:#15803d;padding:3px 8px;border-radius:6px;font-size:.75rem;font-weight:700">✓ התקבל</span>' : '<span style="background:#fef2f2;color:#dc2626;padding:3px 8px;border-radius:6px;font-size:.75rem;font-weight:700">✗ לא התקבל</span>') + '</td>';
       html += '<td style="padding:8px">' + invoiceBtn + '</td>';
       html += '</tr>';
     });
