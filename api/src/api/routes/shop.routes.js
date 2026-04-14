@@ -71,20 +71,54 @@ async function getDb() {
   return cachedClient.db('shop_prod');
 }
 
+const INFORU_API_TOKEN = process.env.INFORU_API_TOKEN || 'Ym95cG93ZXI6ZjA2MDYwNTMtZjY2OS00NGQzLTkzNjAtMDYzNmNiNDE2NzVh';
+const INFORU_SENDER = process.env.INFORU_SENDER || 'BuyPower';
+
 async function sendSMS(phone, message) {
-  const smsUser = process.env.SMS_USER;
-  const smsPassword = process.env.SMS_PASSWORD;
-  const smsSender = process.env.SMS_SENDER || 'NilchamIM';
-  if (!smsUser || !smsPassword) {
-    console.log(`[OTP] Phone: ${phone} Code: ${message}`);
-    return;
-  }
+  // Format phone: ensure it starts with 972
+  let formattedPhone = phone.replace(/\D/g, '');
+  if (formattedPhone.startsWith('0')) formattedPhone = '972' + formattedPhone.slice(1);
+  if (!formattedPhone.startsWith('972')) formattedPhone = '972' + formattedPhone;
+
+  console.log(`[SMS Inforu] Sending to ${formattedPhone}: ${message}`);
+
   try {
-    const url = `https://www.019sms.co.il/api?action=SendMessage&username=${encodeURIComponent(smsUser)}&password=${encodeURIComponent(smsPassword)}&from=${encodeURIComponent(smsSender)}&to=${phone}&msg=${encodeURIComponent(message)}`;
     const https = require('https');
-    await new Promise((resolve, reject) => {
-      https.get(url, (res) => { resolve(res); }).on('error', reject);
+    const payload = JSON.stringify({
+      Data: {
+        Message: message,
+        Recipients: [{ Phone: formattedPhone }],
+        Settings: { Sender: INFORU_SENDER }
+      }
     });
+
+    const result = await new Promise((resolve, reject) => {
+      const options = {
+        hostname: 'capi.inforu.co.il',
+        path: '/api/v2/SMS/SendSms',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Basic ' + INFORU_API_TOKEN,
+          'Content-Length': Buffer.byteLength(payload)
+        }
+      };
+      const req = https.request(options, (resp) => {
+        let data = '';
+        resp.on('data', chunk => data += chunk);
+        resp.on('end', () => {
+          console.log('[SMS Inforu] Response:', data);
+          resolve(data);
+        });
+      });
+      req.on('error', (e) => {
+        console.error('[SMS Inforu] Error:', e.message);
+        reject(e);
+      });
+      req.write(payload);
+      req.end();
+    });
+    return result;
   } catch(e) {
     console.error('SMS send failed:', e.message);
   }
@@ -1091,45 +1125,62 @@ router.post('/users/forgot-password', async (req, res) => {
   try {
     await client.connect();
     const db = client.db('groupPurchase');
+    const method = req.body.method || 'email'; // 'email' or 'sms'
     const email = (req.body.email||'').trim().toLowerCase();
-    if (!email) return res.status(400).json({ error: 'נא להזין כתובת מייל' });
-    const user = await db.collection('shop_users').findOne({ email });
-    if (!user) return res.json({ ok: true }); // Don't reveal if email exists
-    
+    const phone = (req.body.phone||'').replace(/[^0-9]/g, '');
+
+    let user = null;
+    if (method === 'sms') {
+      if (!phone || phone.length < 9) return res.status(400).json({ error: 'נא להזין מספר טלפון תקין' });
+      user = await db.collection('shop_users').findOne({ phone });
+    } else {
+      if (!email) return res.status(400).json({ error: 'נא להזין כתובת מייל' });
+      user = await db.collection('shop_users').findOne({ email });
+    }
+
+    // Don't reveal if user exists
+    if (!user) return res.json({ ok: true });
+
     const crypto = require('crypto');
     const token = crypto.randomBytes(32).toString('hex');
     const expires = new Date(Date.now() + 60*60*1000); // 1 hour
     await db.collection('shop_users').updateOne({ _id: user._id }, { $set: { resetToken: token, resetExpires: expires } });
-    
-    // Send email if SMTP configured
-    const resetUrl = (process.env.BASE_URL || 'http://64.23.156.254:8082') + '/shop/reset-password.html?token=' + token;
-    
-    const nodemailer = require('nodemailer');
-    if (process.env.SMTP_HOST) {
-      const transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST, port: parseInt(process.env.SMTP_PORT||'587'),
-        auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
-      });
-      await transporter.sendMail({
-        from: process.env.SMTP_FROM || process.env.SMTP_USER,
-        to: email,
-        subject: 'איפוס סיסמה — נלחמים ביוקר המחיה',
-        html: (() => {
-          try {
-            const fs = require('fs');
-            const tmplPath = require('path').join(__dirname, '../../email-templates/reset-password.html');
-            let html = fs.readFileSync(tmplPath, 'utf8');
-            html = html.replace(/{{name}}/g, user.name || 'לקוח יקר');
-            html = html.replace(/{{resetUrl}}/g, resetUrl);
-            return html;
-          } catch(e) {
-            return '<div dir="rtl" style="font-family:Arial"><h2>איפוס סיסמה</h2><p>לחץ: <a href="' + resetUrl + '">' + resetUrl + '</a></p><p>תקף לשעה.</p></div>';
-          }
-        })()
-      });
+
+    const resetUrl = (process.env.BASE_URL || 'https://buypower.co.il') + '/shop/reset-password.html?token=' + token;
+
+    if (method === 'sms') {
+      // Send SMS via Inforu
+      const smsMessage = `איפוס סיסמה - BuyPower\nלחץ על הקישור לאיפוס:\n${resetUrl}\nתקף לשעה אחת.`;
+      await sendSMS(phone, smsMessage);
+      console.log('[FORGOT PASSWORD] SMS sent to', phone);
     } else {
-      // Log reset URL for manual sending
-      console.log('PASSWORD RESET URL for', email, ':', resetUrl);
+      // Send email
+      const nodemailer = require('nodemailer');
+      if (process.env.SMTP_HOST) {
+        const transporter = nodemailer.createTransport({
+          host: process.env.SMTP_HOST, port: parseInt(process.env.SMTP_PORT||'587'),
+          auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+        });
+        await transporter.sendMail({
+          from: process.env.SMTP_FROM || process.env.SMTP_USER,
+          to: user.email || email,
+          subject: 'איפוס סיסמה — BuyPower',
+          html: (() => {
+            try {
+              const fs = require('fs');
+              const tmplPath = require('path').join(__dirname, '../../email-templates/reset-password.html');
+              let html = fs.readFileSync(tmplPath, 'utf8');
+              html = html.replace(/\{\{name\}\}/g, user.name || 'לקוח יקר');
+              html = html.replace(/\{\{resetUrl\}\}/g, resetUrl);
+              return html;
+            } catch(e) {
+              return '<div dir="rtl" style="font-family:Arial"><h2>איפוס סיסמה</h2><p>לחץ: <a href="' + resetUrl + '">' + resetUrl + '</a></p><p>תקף לשעה.</p></div>';
+            }
+          })()
+        });
+      } else {
+        console.log('PASSWORD RESET URL for', email, ':', resetUrl);
+      }
     }
     res.json({ ok: true });
   } catch(e) { console.error(e); res.status(500).json({ error: e.message }); }
@@ -1171,6 +1222,8 @@ router.post('/payment/create', async (req, res) => {
       products = [],
       success_url: custom_success_url,
       fail_url: custom_fail_url,
+      notify_url: custom_notify_url,
+      notify_invoice_url: custom_notify_invoice_url,
     } = req.body;
 
     // Resolve chargeType (numeric) and charge_type (string label) from either input
@@ -1197,6 +1250,8 @@ router.post('/payment/create', async (req, res) => {
       max_or_custom,
       success_url: custom_success_url || `${BASE_URL_PAY}/shop/success.html`,
       fail_url: custom_fail_url || `${BASE_URL_PAY}/shop/cart.html?error=1`,
+      notify_url: custom_notify_url || `${BASE_URL_PAY}/api/shop/payment/notify`,
+      notify_invoice_url: custom_notify_invoice_url || `${BASE_URL_PAY}/api/shop/payment/notify-invoice`,
       products: products.map(p => ({
         catalog_number: p.catalog_number || p.id || '0',
         name: p.name,
