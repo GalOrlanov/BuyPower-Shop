@@ -1486,8 +1486,10 @@ async function openOrderModal(id) {
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-green btn-sm" style="flex:1" onclick="saveOrderChanges('${o._id}')">💾 שמור שינויים</button>
+      <button class="btn btn-sm" style="background:#dbeafe;color:#1d4ed8" onclick="downloadInvoice('${o._id}')">🧾 קבלה</button>
       <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626" onclick="deleteOrder('${o._id}','${o.customerName||'הזמנה'}')">🗑️</button>
     </div>
+    ${o.invoiceUrl ? '<div style="margin-top:8px"><a href="'+o.invoiceUrl+'" target="_blank" style="font-size:.82rem;color:#1d4ed8;text-decoration:underline">📄 צפה בקבלה / חשבונית</a></div>' : ''}
     <div id="orderSaveMsg" style="display:none;margin-top:8px;font-size:.82rem;color:#15803d;font-weight:700"></div>`;
   document.getElementById('orderModal').style.display = 'flex';
 }
@@ -1552,6 +1554,20 @@ async function saveOrderChanges(id) {
 
 function closeOrderModal() {
   document.getElementById('orderModal').style.display = 'none';
+}
+
+async function downloadInvoice(id) {
+  try {
+    const res = await fetch(API + '/orders/' + id + '/invoice');
+    const d = await res.json();
+    if (d.invoiceUrl) {
+      window.open(d.invoiceUrl, '_blank');
+    } else {
+      alert('לא נמצאה קבלה להזמנה זו');
+    }
+  } catch(e) {
+    alert('שגיאה בטעינת קבלה');
+  }
 }
 
 async function deleteOrder(id, name) {

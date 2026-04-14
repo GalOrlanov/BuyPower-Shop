@@ -1236,7 +1236,7 @@ router.post('/payment/create', async (req, res) => {
       return res.status(400).json({ error: 'חסרים שדות חובה: title, full_name, phone, products' });
     }
 
-    const BASE_URL_PAY = process.env.BASE_URL || 'https://buypower.co.il';
+    const BASE_URL_PAY = process.env.SHOP_URL || 'https://shop.buypower.co.il';
     const payload = {
       message_text,
       full_name,
@@ -1249,8 +1249,8 @@ router.post('/payment/create', async (req, res) => {
       title,
       payment_type,
       max_or_custom,
-      success_url: custom_success_url || `${BASE_URL_PAY}/shop/success.html`,
-      fail_url: custom_fail_url || `${BASE_URL_PAY}/shop/cart.html?error=1`,
+      success_url: custom_success_url || `${BASE_URL_PAY}/success.html`,
+      fail_url: custom_fail_url || `${BASE_URL_PAY}/cart.html?error=1`,
       notify_url: custom_notify_url || `${BASE_URL_PAY}/api/shop/payment/notify`,
       notify_invoice_url: custom_notify_invoice_url || `${BASE_URL_PAY}/api/shop/payment/notify-invoice`,
       products: products.map(p => ({
@@ -2390,6 +2390,117 @@ router.post('/payment/webhook', async (req, res) => {
   }
 });
 
+
+// POST /api/shop/payment/notify — Grow calls this when payment is completed
+router.post('/payment/notify', async (req, res) => {
+  try {
+    const db = await getDb();
+    console.log('[PAYMENT NOTIFY] received:', JSON.stringify(req.body));
+    const { orderId, order_id, transaction_id, status, amount, reference, phone, full_name } = req.body;
+    const id = orderId || order_id;
+
+    // Store the notification
+    await db.collection('grow_payments').insertOne({
+      type: 'notify',
+      orderId: id,
+      transactionId: transaction_id || reference,
+      status,
+      amount,
+      phone,
+      fullName: full_name,
+      rawBody: req.body,
+      createdAt: new Date()
+    });
+
+    // Update order status if orderId provided
+    if (id) {
+      const { ObjectId } = require('mongodb');
+      try {
+        await db.collection('shop_orders').updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { status: 'paid', paidAt: new Date(), growRef: reference || transaction_id || null, paidAmount: amount || null } }
+        );
+      } catch(e) { console.log('[PAYMENT NOTIFY] invalid orderId:', id); }
+    }
+
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[PAYMENT NOTIFY] error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/shop/payment/notify-invoice — Grow calls this with invoice/receipt URL
+router.post('/payment/notify-invoice', async (req, res) => {
+  try {
+    const db = await getDb();
+    console.log('[INVOICE NOTIFY] received:', JSON.stringify(req.body));
+    const { orderId, order_id, invoice_url, invoiceUrl, invoice_number, invoiceNumber, transaction_id, reference, phone } = req.body;
+    const id = orderId || order_id;
+    const url = invoice_url || invoiceUrl || '';
+    const invNum = invoice_number || invoiceNumber || '';
+    const ref = transaction_id || reference || '';
+
+    // Store invoice data
+    await db.collection('grow_payments').insertOne({
+      type: 'invoice',
+      orderId: id,
+      invoiceUrl: url,
+      invoiceNumber: invNum,
+      transactionId: ref,
+      phone,
+      rawBody: req.body,
+      createdAt: new Date()
+    });
+
+    // Update order with invoice URL
+    if (id) {
+      const { ObjectId } = require('mongodb');
+      try {
+        await db.collection('shop_orders').updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { invoiceUrl: url, invoiceNumber: invNum } }
+        );
+      } catch(e) {}
+    }
+
+    // Also try to match by phone or reference
+    if (!id && (phone || ref)) {
+      const query = {};
+      if (phone) {
+        const cleanPhone = phone.replace(/\D/g, '').replace(/^972/, '0');
+        query.$or = [{ phone: cleanPhone }, { customerPhone: cleanPhone }];
+      }
+      if (ref) query.growRef = ref;
+      const order = await db.collection('shop_orders').findOne(query, { sort: { createdAt: -1 } });
+      if (order) {
+        await db.collection('shop_orders').updateOne(
+          { _id: order._id },
+          { $set: { invoiceUrl: url, invoiceNumber: invNum } }
+        );
+      }
+    }
+
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[INVOICE NOTIFY] error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/shop/orders/:id/invoice — Get invoice URL for an order
+router.get('/orders/:id/invoice', async (req, res) => {
+  try {
+    const db = await getDb();
+    const { ObjectId } = require('mongodb');
+    const order = await db.collection('shop_orders').findOne({ _id: new ObjectId(req.params.id) });
+    if (!order) return res.status(404).json({ error: 'הזמנה לא נמצאה' });
+    if (!order.invoiceUrl) return res.status(404).json({ error: 'לא נמצאה קבלה להזמנה זו' });
+    res.json({ invoiceUrl: order.invoiceUrl, invoiceNumber: order.invoiceNumber || '' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // ============================================
 // PICKUP SMS SYSTEM
