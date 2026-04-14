@@ -1398,30 +1398,48 @@ router.post('/payment/create', async (req, res) => {
     const paymentUrl = growData?.data?.url || null;
     const paymentLinkProcessId = growData?.data?.paymentLinkProcessId || null;
 
-    // Save order + payment link to DB
+    // Save payment link to existing pending order (don't create a duplicate!)
     const db = await getDb();
-    const orderDoc = {
-      customerName: full_name,
-      phone: phone.replace(/\D/g, ''),
-      email: email || '',
-      invoiceName: invoice_name || '',
-      items: products.map(p => ({ name: p.name, price: Number(p.price), qty: Number(p.quantity) || 1 })),
-      totalAmount: products.reduce((s, p) => s + Number(p.price) * (Number(p.quantity) || 1), 0),
-      status: 'pending_payment',
-      source: 'grow_link',
-      paymentUrl,
-      paymentLinkProcessId,
-      chargeType: chargeTypeLabel,
-      createdAt: new Date(),
-    };
-    const inserted = await db.collection('shop_orders').insertOne(orderDoc);
-    console.log('[PAYMENT CREATE] Order saved:', inserted.insertedId);
+    const cleanPhone = phone.replace(/\D/g, '');
+    const existingOrder = await db.collection('shop_orders').findOne(
+      { phone: cleanPhone, status: 'pending_payment' },
+      { sort: { createdAt: -1 } }
+    );
+    let orderId;
+    if (existingOrder) {
+      // Update existing order with payment link info
+      await db.collection('shop_orders').updateOne(
+        { _id: existingOrder._id },
+        { $set: { paymentUrl, paymentLinkProcessId, source: 'grow_link', chargeType: chargeTypeLabel } }
+      );
+      orderId = existingOrder._id;
+      console.log('[PAYMENT CREATE] Updated existing order:', orderId);
+    } else {
+      // No existing order — create one (e.g. admin-created payment links)
+      const orderDoc = {
+        customerName: full_name,
+        phone: cleanPhone,
+        email: email || '',
+        invoiceName: invoice_name || '',
+        items: products.map(p => ({ name: p.name, price: Number(p.price), qty: Number(p.quantity) || 1 })),
+        totalAmount: products.reduce((s, p) => s + Number(p.price) * (Number(p.quantity) || 1), 0),
+        status: 'pending_payment',
+        source: 'grow_link',
+        paymentUrl,
+        paymentLinkProcessId,
+        chargeType: chargeTypeLabel,
+        createdAt: new Date(),
+      };
+      const inserted = await db.collection('shop_orders').insertOne(orderDoc);
+      orderId = inserted.insertedId;
+      console.log('[PAYMENT CREATE] New order saved:', orderId);
+    }
 
     res.json({
       ok: true,
       paymentUrl,
       paymentLinkProcessId,
-      orderId: inserted.insertedId,
+      orderId,
       raw: growData
     });
   } catch(e) {
@@ -2623,14 +2641,17 @@ router.post('/payment/notify', async (req, res) => {
       createdAt: new Date()
     });
 
-    // Update order status if orderId provided
+    // Update order status if orderId provided (only if not already paid)
     if (id) {
       const { ObjectId } = require('mongodb');
       try {
-        await db.collection('shop_orders').updateOne(
-          { _id: new ObjectId(id) },
+        const updated = await db.collection('shop_orders').updateOne(
+          { _id: new ObjectId(id), status: { $nin: ['paid', 'handled', 'confirmed'] } },
           { $set: { status: 'paid', paidAt: new Date(), growRef: reference || transaction_id || null, paidAmount: amount || null } }
         );
+        if (updated.modifiedCount === 0) {
+          console.log('[PAYMENT NOTIFY] order already paid or not found, skipping:', id);
+        }
       } catch(e) { console.log('[PAYMENT NOTIFY] invalid orderId:', id); }
     }
 
