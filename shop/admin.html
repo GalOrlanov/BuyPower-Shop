@@ -1199,7 +1199,7 @@ function sortUsers(col) {
   renderUsersTable();
 }
 
-function openEditUser(id) {
+async function openEditUser(id) {
   var u = _allUsers.find(function(x){ return x._id === id; });
   if (!u) return;
   document.getElementById('editUserId').value = id;
@@ -1207,14 +1207,24 @@ function openEditUser(id) {
   document.getElementById('editUserEmail').value = u.email || '';
   document.getElementById('editUserPhone').value = u.phone || '';
   var locSel = document.getElementById('editUserPickupLocation');
-  if (locSel && typeof currentSettings !== 'undefined' && currentSettings && currentSettings.pickupLocations) {
+  if (locSel) {
     while (locSel.options.length > 1) locSel.remove(1);
-    currentSettings.pickupLocations.forEach(function(loc) {
+    // Try settings first, fallback to pickup-points API
+    var locations = (typeof currentSettings !== 'undefined' && currentSettings && currentSettings.pickupLocations && currentSettings.pickupLocations.length)
+      ? currentSettings.pickupLocations
+      : [];
+    if (!locations.length) {
+      try {
+        var pts = await fetch(API + '/pickup-points').then(function(r){ return r.json(); });
+        if (Array.isArray(pts)) locations = pts;
+      } catch(e) {}
+    }
+    locations.forEach(function(loc) {
       var opt = document.createElement('option');
-      opt.value = loc.name; opt.textContent = loc.name;
+      opt.value = loc.name; opt.textContent = '📍 ' + loc.name;
       locSel.appendChild(opt);
     });
-    locSel.value = u.pickupLocation || '';
+    locSel.value = u.pickupPoint || u.pickupLocation || '';
   }
   document.getElementById('editUserModal').style.display = 'flex';
 }
@@ -1226,16 +1236,18 @@ function closeEditUserModal() {
 async function saveUserEdit() {
   var id = document.getElementById('editUserId').value;
   var pickupLocEl = document.getElementById('editUserPickupLocation');
+  var pickupVal = pickupLocEl ? pickupLocEl.value : '';
   var data = {
     name: document.getElementById('editUserName').value,
     email: document.getElementById('editUserEmail').value,
     phone: document.getElementById('editUserPhone').value,
-    pickupLocation: pickupLocEl ? pickupLocEl.value : undefined,
+    pickupLocation: pickupVal,
+    pickupPoint: pickupVal,
   };
   try {
     await fetch(API + '/users/' + id, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
     var u = _allUsers.find(function(x){ return x._id === id; });
-    if (u) { Object.assign(u, data); if (data.pickupLocation !== undefined) u.pickupLocation = data.pickupLocation; }
+    if (u) { Object.assign(u, data); }
     closeEditUserModal();
     renderUsersTable();
     if(typeof showToast==='function') showToast('משתמש עודכן');

@@ -560,6 +560,17 @@ async function loadPickupInfo() {
     pickupInfoText = settings.pickupInfo || '';
     minOrderAmount = parseFloat(settings.minOrderAmount) || 0;
 
+    // Fallback: if no pickupLocations in settings, load from /pickup-points
+    if (!pickupLocations.length) {
+      try {
+        const ptsRes = await fetch(API + '/pickup-points');
+        const pts = await ptsRes.json();
+        if (Array.isArray(pts) && pts.length) {
+          pickupLocations = pts.map(p => ({ name: p.name, address: p.address, days: p.days, hours: p.hours, collectionDate: p.collectionDate, collectionTimeFrom: p.collectionTimeFrom, collectionTimeTo: p.collectionTimeTo }));
+        }
+      } catch(e2) { console.warn('Failed to load pickup-points fallback', e2); }
+    }
+
     // Pickup info is now per-location (shown inline in each radio option)
     const textEl = document.getElementById('pickupInfoText');
     if (textEl) textEl.textContent = '';

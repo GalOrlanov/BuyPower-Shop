@@ -388,9 +388,23 @@ router.delete('/announcements/:id', async (req, res) => {
 router.get('/settings', async (req, res) => {
   try {
     const db = await getDb();
-    let settings = await db.collection('shop_settings').findOne({});
-    if (!settings) {
-      settings = { pickupLocations: [] };
+    let settings = await db.collection('shop_settings').findOne({ key: { $exists: false } }) || {};
+    if (!settings.pickupLocations) settings.pickupLocations = [];
+
+    // Sync: if pickupLocations is empty, merge from the pickupPoints document (source of truth)
+    if (!settings.pickupLocations.length) {
+      const ppDoc = await db.collection('shop_settings').findOne({ key: 'pickupPoints' });
+      if (ppDoc && Array.isArray(ppDoc.points) && ppDoc.points.length) {
+        settings.pickupLocations = ppDoc.points.map(p => ({
+          name: p.name || '',
+          address: p.address || '',
+          days: p.days || '',
+          hours: p.hours || '',
+          collectionDate: p.collectionDate || null,
+          collectionTimeFrom: p.collectionTimeFrom || '',
+          collectionTimeTo: p.collectionTimeTo || '',
+        }));
+      }
     }
     res.json(settings);
   } catch (e) {
@@ -465,6 +479,11 @@ router.post('/orders', async (req, res) => {
   try {
     const db = await getDb();
     const { customerName, phone, items, pickupLocation, pickupDate } = req.body;
+
+    // Validate pickup location
+    if (!pickupLocation || !pickupLocation.trim()) {
+      return res.status(400).json({ error: 'נא לבחור נקודת איסוף' });
+    }
 
     // Calculate total
     let totalAmount = 0;
