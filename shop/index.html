@@ -1301,7 +1301,7 @@ loadPickupLocations();
 // Force pickup point selection if user doesn't have one
 (function() {
   var u = JSON.parse(localStorage.getItem('shopUser') || '{}');
-  if (!u.pickupPoint || !u.pickupPoint.trim()) {
+  if (!u.isGuest && u.phone && (!u.pickupPoint || !u.pickupPoint.trim())) {
     setTimeout(function() { openPickupSelector(true); }, 500);
   }
 })();
