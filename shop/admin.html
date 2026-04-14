@@ -1107,12 +1107,21 @@ function renderUsersTable() {
     if (o.phone && o.pickupLocation) phoneToLoc[o.phone] = o.pickupLocation;
   });
 
-  // Populate location dropdown
+  // Populate location dropdown from users + orders + settings
   if (locFilterEl && locFilterEl.options.length <= 1) {
-    const locs = [...new Set(Object.values(phoneToLoc))].sort();
-    locs.forEach(function(loc) {
+    const allLocs = new Set(Object.values(phoneToLoc));
+    // Also collect from user pickupPoint/pickupLocation fields
+    (_allUsers||[]).forEach(function(u) {
+      if (u.pickupPoint) allLocs.add(u.pickupPoint);
+      if (u.pickupLocation) allLocs.add(u.pickupLocation);
+    });
+    // Also add from settings
+    if (typeof currentSettings !== 'undefined' && currentSettings && currentSettings.pickupLocations) {
+      currentSettings.pickupLocations.forEach(function(loc) { if (loc.name) allLocs.add(loc.name); });
+    }
+    [...allLocs].sort().forEach(function(loc) {
       const opt = document.createElement('option');
-      opt.value = loc; opt.textContent = loc;
+      opt.value = loc; opt.textContent = '📍 ' + loc;
       locFilterEl.appendChild(opt);
     });
   }
@@ -1120,7 +1129,7 @@ function renderUsersTable() {
   let users = _allUsers.filter(function(u) {
     const matchQ = !q || (u.name||'').toLowerCase().includes(q) || (u.phone||'').includes(q) || (u.email||'').toLowerCase().includes(q);
     const matchF = filter === 'all' || (filter === 'blocked' ? u.isBlocked : !u.isBlocked);
-    const userLoc = u.pickupLocation || phoneToLoc[u.phone] || '';
+    const userLoc = u.pickupPoint || u.pickupLocation || phoneToLoc[u.phone] || '';
     const matchL = !locFilter || userLoc === locFilter;
     const regDate = u.createdAt ? new Date(u.createdAt) : null;
     const matchDate = (!dateFrom || (regDate && regDate >= dateFrom)) && (!dateTo || (regDate && regDate <= dateTo));
