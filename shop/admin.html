@@ -1638,10 +1638,12 @@ function getSelectedKeys() {
 
 function populatePickupProductChips(byProduct) {
   const keys = Object.keys(byProduct);
-  // Group by category
+  // Group by category (skip test/junk products)
   const byCat = {};
+  const junkPattern = /טסט|בדיקה|נסיון|מוצר לדוגמא|מוצר_טסט|מוצר חדש לבדיקה|מוצר \d+/;
   keys.forEach(key => {
     const p = byProduct[key];
+    if (junkPattern.test(p.name)) return; // skip test products
     const cat = p.category || 'כללי';
     if (!byCat[cat]) byCat[cat] = [];
     byCat[cat].push(key);
@@ -1836,16 +1838,29 @@ async function renderPickup() {
     return;
   }
 
-  // Enrich product categories
+  // Enrich product categories — build lookup from catalog + inventory
   let productCats = {};
+  let catalogNames = [];
   try {
     const [products, inv] = await Promise.all([
       fetch('/api/shop/products').then(r=>r.json()),
       fetch('/api/shop/inventory').then(r=>r.json()).catch(()=>[])
     ]);
-    products.forEach(p => { if (p.name && p.category) productCats[p.name.trim()] = p.category; });
-    inv.forEach(i => { if (i.name && i.category && !productCats[i.name.trim()]) productCats[i.name.trim()] = i.category; });
+    products.forEach(p => { if (p.name && p.category) { productCats[p.name.trim()] = p.category; catalogNames.push(p.name.trim()); } });
+    inv.forEach(i => { if (i.name && i.category && !productCats[i.name.trim()]) { productCats[i.name.trim()] = i.category; catalogNames.push(i.name.trim()); } });
   } catch(e) {}
+  // Sort longest-first so specific names match before generic ones
+  catalogNames.sort((a, b) => b.length - a.length);
+  // Helper: find category for order item name (supports variants/suffixes in name)
+  function findCategory(itemName) {
+    const name = (itemName || '').trim();
+    if (productCats[name]) return productCats[name];
+    // Try matching by base name (item name may include variant suffix like "- חסה" or "×2")
+    for (const catName of catalogNames) {
+      if (name.startsWith(catName)) return productCats[catName];
+    }
+    return 'כללי';
+  }
 
   // ── GROUP BY PICKUP LOCATION ──
   // Collect all pickup points from orders
@@ -1859,7 +1874,7 @@ async function renderPickup() {
     locOrders.forEach(o => {
       (o.items||[]).forEach(i => {
         const key = i.name + (i.variant ? '___' + i.variant : '');
-        if (!byProduct[key]) byProduct[key] = { name: i.name, variant: i.variant||'', total: 0, customers: [], category: productCats[i.name.trim()] || 'כללי' };
+        if (!byProduct[key]) byProduct[key] = { name: i.name, variant: i.variant||'', total: 0, customers: [], category: findCategory(i.name) };
         byProduct[key].total += i.qty;
         byProduct[key].customers.push({ id: o._id, name: o.customerName||'לא ידוע', phone: o.phone||'', qty: i.qty, status: o.status });
       });
