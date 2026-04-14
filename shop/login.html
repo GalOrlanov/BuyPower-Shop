@@ -155,7 +155,7 @@ h1 { font-size: 2rem; font-weight: 900; color: #15803d; margin-bottom: 6px; }
   </div>
 
   <div style="margin-top:16px;text-align:center">
-    <a href="/shop/accessibility.html" style="font-size:14px;color:#6b7280;text-decoration:underline">הצהרת נגישות</a>
+    <a href="/accessibility.html" style="font-size:14px;color:#6b7280;text-decoration:underline">הצהרת נגישות</a>
   </div>
 </div>
 </main>
@@ -200,7 +200,7 @@ async function doLogin() {
     if (!d.user) return showError(d.error || 'טלפון או סיסמה שגויים');
     localStorage.setItem('shopUser', JSON.stringify(d.user));
     if (d.token) localStorage.setItem('shopToken', d.token);
-    var next = new URLSearchParams(location.search).get('next') || localStorage.getItem('afterLoginRedirect') || '/shop/';
+    var next = new URLSearchParams(location.search).get('next') || localStorage.getItem('afterLoginRedirect') || '/';
     localStorage.removeItem('afterLoginRedirect');
     window.location.href = next;
   } catch(e) { showError('שגיאה — נסה שוב'); }
@@ -287,7 +287,7 @@ async function doRegister() {
     var user = d.user || { name: name, phone: phone, email: email };
     if (regPP && !user.pickupPoint) user.pickupPoint = regPP;
     localStorage.setItem('shopUser', JSON.stringify(user));
-    var next = new URLSearchParams(location.search).get('next') || localStorage.getItem('afterLoginRedirect') || '/shop/';
+    var next = new URLSearchParams(location.search).get('next') || localStorage.getItem('afterLoginRedirect') || '/';
     localStorage.removeItem('afterLoginRedirect');
     window.location.href = next;
   } catch(e) { showError('שגיאה — נסה שוב'); }
@@ -367,13 +367,13 @@ async function doVerifyOtp() {
     if (_otpTimer) clearInterval(_otpTimer);
     localStorage.setItem('shopUser', JSON.stringify(d.user));
     if (d.token) localStorage.setItem('shopToken', d.token);
-    var next = new URLSearchParams(location.search).get('next') || '/shop/';
+    var next = new URLSearchParams(location.search).get('next') || '/';
     window.location.href = next;
   } catch(e) { showError('שגיאה — נסה שוב'); }
 }
 
 var _su = localStorage.getItem('shopUser');
-if (_su) { try { if (!JSON.parse(_su).isGuest) { const nextUrl = new URLSearchParams(location.search).get('next'); window.location.href = nextUrl || '/shop/'; } } catch(e){} }
+if (_su) { try { if (!JSON.parse(_su).isGuest) { const nextUrl = new URLSearchParams(location.search).get('next'); window.location.href = nextUrl || '/'; } } catch(e){} }
 
 function togglePwd(id, btn) {
   var inp = document.getElementById(id);

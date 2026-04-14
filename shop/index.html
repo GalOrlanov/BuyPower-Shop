@@ -630,7 +630,7 @@ footer { background: #14532d; color: #bbf7d0; padding: 24px 16px; margin-top: 20
     <div id="pickupLocations"><div style="opacity:0.6;font-size:.85rem">טוען...</div></div>
     
   </div>
-  <div style="text-align:center;padding:12px;background:#f9fafb;border-top:1px solid #e5e7eb;font-size:.8rem"><a href="/shop/accessibility.html" style="color:#6b7280;text-decoration:none">♿ הצהרת נגישות</a> &nbsp;|&nbsp; <span style="color:#9ca3af">&copy; 2026 BuyPower</span></div>
+  <div style="text-align:center;padding:12px;background:#f9fafb;border-top:1px solid #e5e7eb;font-size:.8rem"><a href="/accessibility.html" style="color:#6b7280;text-decoration:none">♿ הצהרת נגישות</a> &nbsp;|&nbsp; <span style="color:#9ca3af">&copy; 2026 BuyPower</span></div>
 </footer>
 <div class="toast" id="toast"></div>
 <div class="related-popup" id="relatedPopup">
@@ -652,13 +652,13 @@ function initAuthBtn() {
   var user = localStorage.getItem('shopUser');
   var parsedUser = user ? JSON.parse(user) : null;
   if (!user || (parsedUser && parsedUser.isGuest)) {
-    container.innerHTML = '<a href="/shop/login.html" class="auth-pill">כניסה / הרשמה</a>';
+    container.innerHTML = '<a href="/login.html" class="auth-pill">כניסה / הרשמה</a>';
   } else {
     var u = JSON.parse(user);
     var firstName = (u.name||'').split(' ')[0];
     container.innerHTML = '<button class="auth-pill" onclick="toggleAuthDropdown()" style="font-size:0.82rem;font-weight:800;background:#f0fdf4;border:1px solid #86efac;color:#15803d;border-radius:20px;padding:6px 12px;cursor:pointer;font-family:inherit">שלום 👋 ' + firstName + ' ▾</button>' +
       '<div class="auth-dropdown" id="authDropdown">' +
-      '<a href="/shop/my-orders.html" style="display:block;padding:6px 0;color:#15803d;font-weight:700;text-decoration:none">📦 היסטוריית ההזמנות</a>' +
+      '<a href="/my-orders.html" style="display:block;padding:6px 0;color:#15803d;font-weight:700;text-decoration:none">📦 היסטוריית ההזמנות</a>' +
       '<button onclick="logoutUser()">התנתק</button>' +
       '</div>';
   }
@@ -783,7 +783,7 @@ function addToCart(pid, pname, pprice, pimg, variantSelectId) {
   if (!u || !u.phone || u.isGuest) {
     // Save intended destination and redirect to register
     localStorage.setItem('afterLoginRedirect', window.location.href);
-    window.location.href = '/shop/login.html?tab=register&msg=יש+להירשם+כדי+להוסיף+מוצרים+לעגלה';
+    window.location.href = '/login.html?tab=register&msg=יש+להירשם+כדי+להוסיף+מוצרים+לעגלה';
     return;
   }
   var variantName = null;
