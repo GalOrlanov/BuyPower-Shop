@@ -925,7 +925,7 @@ function filterProducts() {
       // Show only featured in grid when featured tab selected
       matchCat = isFeat;
     } else if (activeCategory) {
-      // Show only that category, no featured in grid
+      // Show all products in that category (including featured)
       matchCat = (cat === activeCategory);
     } else {
       // No category selected: show all NON-featured (featured already shown in top section)
@@ -1508,13 +1508,16 @@ function patchFilterForDividers() {
   var origFilter = window.filterProducts;
   window.filterProducts = function() {
     origFilter();
-    // עדכן dividers visibility
+    // עדכן dividers visibility + count
     document.querySelectorAll('.cat-divider[data-cat-div]').forEach(function(div) {
       var catVal = div.getAttribute('data-cat-div');
       var grid = document.getElementById('productGrid');
-      var hasVisible = Array.from(grid.querySelectorAll('.product-card[data-cat="' + catVal + '"]'))
-        .some(function(c){ return c.style.display !== 'none'; });
-      div.style.display = hasVisible ? '' : 'none';
+      var visibleCards = Array.from(grid.querySelectorAll('.product-card[data-cat="' + catVal + '"]'))
+        .filter(function(c){ return c.style.display !== 'none'; });
+      div.style.display = visibleCards.length ? '' : 'none';
+      // Update count to show only visible products
+      var countEl = div.querySelector('.cat-divider-count');
+      if (countEl) countEl.textContent = visibleCards.length;
     });
   };
 }
