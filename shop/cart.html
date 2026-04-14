@@ -581,30 +581,10 @@ async function loadPickupInfo() {
       if (el) el.innerHTML = '<div style="color:#9ca3af;font-size:.9rem">אין נקודות איסוף מוגדרות</div>';
       return;
     }
-    // Pre-select user's saved pickup point
+    // Pre-select user's saved pickup point but show all options
     const userPickup = (JSON.parse(localStorage.getItem('shopUser') || '{}').pickupPoint || '').trim();
-    // If user has a saved pickup point, lock to it — don't show other options
-    if (userPickup) {
-      const matchedPt = pickupLocations.find(l => l.name === userPickup) || { name: userPickup };
-      selectedPickup = matchedPt.name;
-      if (el) el.innerHTML =
-        (function() {
-        var dayNames2 = ['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'];
-        var dtStr = '';
-        if (matchedPt.collectionDate) {
-          var d2 = new Date(matchedPt.collectionDate);
-          var ts2 = (matchedPt.collectionTimeFrom && matchedPt.collectionTimeTo) ? ' בין ' + matchedPt.collectionTimeFrom + '–' + matchedPt.collectionTimeTo : '';
-          dtStr = '<span style="display:block;font-size:.78rem;color:#15803d;font-weight:700;margin-top:2px">📅 יום ' + dayNames2[d2.getDay()] + ' ' + d2.getDate() + '/' + (d2.getMonth()+1) + ts2 + '</span>';
-        }
-        return '<label class="pickup-option selected" style="pointer-events:none;opacity:.9">' +
-          '<input type="radio" name="pickup" value="' + matchedPt.name + '" checked>' +
-          '<span>' + matchedPt.name + ' ✓' + dtStr + '</span>' +
-          '</label>';
-      })();
-    } else {
-      // No saved pickup point — show all options but DON'T pre-select any
-      // Force user to actively pick their location
-      selectedPickup = '';
+    {
+      selectedPickup = userPickup || '';
       var dayNames = ['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'];
       function fmtLocDate(loc) {
         if (!loc.collectionDate) return '';
@@ -612,14 +592,17 @@ async function loadPickupInfo() {
         var ts = (loc.collectionTimeFrom && loc.collectionTimeTo) ? ' בין ' + loc.collectionTimeFrom + '–' + loc.collectionTimeTo : (loc.collectionTimeFrom ? ' משעה ' + loc.collectionTimeFrom : '');
         return '<span style="display:block;font-size:.78rem;color:#15803d;font-weight:700;margin-top:2px">📅 יום ' + dayNames[d.getDay()] + ' ' + d.getDate() + '/' + (d.getMonth()+1) + ts + '</span>';
       }
-      if (el) el.innerHTML =
-        '<div style="background:#fef3c7;border:1.5px solid #f59e0b;border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:.88rem;font-weight:700;color:#92400e">⚠️ נא לבחור נקודת איסוף</div>' +
-        pickupLocations.map((loc, i) =>
-          '<label class="pickup-option" id="pickup_' + i + '" onclick="selectPickup(' + i + ')">' +
-          '<input type="radio" name="pickup" value="' + loc.name + '">' +
-          '<span>' + loc.name + fmtLocDate(loc) + '</span>' +
-          '</label>'
-        ).join('');
+      if (el) {
+        var radioHtml = (!selectedPickup ? '<div style="background:#fef3c7;border:1.5px solid #f59e0b;border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:.88rem;font-weight:700;color:#92400e">⚠️ נא לבחור נקודת איסוף</div>' : '');
+        radioHtml += pickupLocations.map((loc, i) => {
+          var isSelected = loc.name === selectedPickup;
+          return '<label class="pickup-option' + (isSelected ? ' selected' : '') + '" id="pickup_' + i + '" onclick="selectPickup(' + i + ')">' +
+            '<input type="radio" name="pickup" value="' + loc.name + '"' + (isSelected ? ' checked' : '') + '>' +
+            '<span>' + loc.name + (isSelected ? ' ✓' : '') + fmtLocDate(loc) + '</span>' +
+            '</label>';
+        }).join('');
+        el.innerHTML = radioHtml;
+      }
     }
   } catch(e) {}
 }
@@ -815,9 +798,9 @@ async function submitGrowForm() {
           let growVatType = 1; // Always 1 per Make/Meshulam requirement
           return {
             catalog_number: item._id || item.id || item.productId || (item.cartKey ? item.cartKey.split('_')[0] : '1'),
-            name: item.name + (item.variant ? ' - ' + item.variant : '') + (item.qty > 1 ? ' ×' + item.qty : ''),
-            price: calcItemTotal(item),
-            quantity: 1,
+            name: item.name + (item.variant ? ' (' + item.variant + ')' : ''),
+            price: item.price,
+            quantity: item.qty || 1,
             minimum_quantity: 1,
             productUrl: item.imageUrl || '',
             vatType: growVatType,

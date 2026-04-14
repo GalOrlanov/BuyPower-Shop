@@ -1866,6 +1866,13 @@ async function renderPickup() {
   // Collect all pickup points from orders
   const allLocs = [...new Set(filtered.map(o => o.pickupLocation || 'לא צוינה נקודה'))];
   
+  // Helper: build a unique key for an order item using productId when available
+  function itemKey(i) {
+    const pid = i.productId || i.id || '';
+    if (pid) return pid + (i.variant ? '___' + i.variant : '');
+    return i.name + (i.variant ? '___' + i.variant : '');
+  }
+
   // Per-location summaries
   const perLocation = {};
   allLocs.forEach(loc => {
@@ -1873,7 +1880,7 @@ async function renderPickup() {
     const byProduct = {};
     locOrders.forEach(o => {
       (o.items||[]).forEach(i => {
-        const key = i.name + (i.variant ? '___' + i.variant : '');
+        const key = itemKey(i);
         if (!byProduct[key]) byProduct[key] = { name: i.name, variant: i.variant||'', total: 0, customers: [], category: findCategory(i.name) };
         byProduct[key].total += i.qty;
         byProduct[key].customers.push({ id: o._id, name: o.customerName||'לא ידוע', phone: o.phone||'', qty: i.qty, status: o.status });
@@ -1886,8 +1893,8 @@ async function renderPickup() {
   const globalByProduct = {};
   filtered.forEach(o => {
     (o.items||[]).forEach(i => {
-      const key = i.name + (i.variant ? '___' + i.variant : '');
-      if (!globalByProduct[key]) globalByProduct[key] = { name: i.name, variant: i.variant||'', total: 0, customers: [], category: productCats[i.name.trim()]||'כללי' };
+      const key = itemKey(i);
+      if (!globalByProduct[key]) globalByProduct[key] = { name: i.name, variant: i.variant||'', total: 0, customers: [], category: findCategory(i.name) };
       globalByProduct[key].total += i.qty;
       globalByProduct[key].customers.push({ id: o._id, name: o.customerName||'לא ידוע', phone: o.phone||'', qty: i.qty, status: o.status, loc: o.pickupLocation||'—' });
     });
