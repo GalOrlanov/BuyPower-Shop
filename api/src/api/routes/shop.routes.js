@@ -1146,7 +1146,7 @@ router.post('/users/forgot-password', async (req, res) => {
     const expires = new Date(Date.now() + 60*60*1000); // 1 hour
     await db.collection('shop_users').updateOne({ _id: user._id }, { $set: { resetToken: token, resetExpires: expires } });
 
-    const resetUrl = (process.env.BASE_URL || 'https://buypower.co.il') + '/shop/reset-password.html?token=' + token;
+    const resetUrl = (process.env.SHOP_URL || 'https://shop.buypower.co.il') + '/reset-password.html?token=' + token;
 
     if (method === 'sms') {
       // Send SMS via Inforu
