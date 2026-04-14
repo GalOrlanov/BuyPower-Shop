@@ -941,22 +941,32 @@ router.post('/users/register', async (req, res) => {
     const db = client.db('groupPurchase');
     const { name, phone, email, city, idNumber, password } = req.body;
     let bcrypt; try { bcrypt = require('bcryptjs'); } catch(e) { bcrypt = null; }
+    const pickupPoint = (req.body.pickupPoint || '').trim();
     const cleanPhone = (phone||'').replace(/[^0-9]/g,'');
     if (!name || cleanPhone.length < 9) return res.status(400).json({ error: 'פרטים חסרים' });
+
+    // Validate pickup point is required and must be a valid location
+    if (!pickupPoint) return res.status(400).json({ error: 'נא לבחור נקודת איסוף' });
+    const ppDoc = await db.collection('shop_settings').findOne({ key: 'pickupPoints' });
+    const validPoints = ppDoc && Array.isArray(ppDoc.points) ? ppDoc.points.map(p => p.name) : [];
+    if (validPoints.length && !validPoints.includes(pickupPoint)) {
+      return res.status(400).json({ error: 'נקודת האיסוף שנבחרה אינה קיימת' });
+    }
+
     const existingUser = await db.collection('shop_users').findOne({ phone: cleanPhone });
     if (existingUser) return res.status(409).json({ error: 'מספר הטלפון כבר רשום במערכת' });
     let passwordHash = '';
     if (password && bcrypt) passwordHash = await bcrypt.hash(password, 10);
     const existing = await db.collection('shop_users').findOne({ phone: cleanPhone });
     if (existing) {
-      // Update password if provided
-      if (passwordHash) {
-        await db.collection('shop_users').updateOne({ _id: existing._id }, { $set: { passwordHash, email: email||existing.email||'' } });
-      }
-      const { passwordHash: ph, ...safeExisting } = { ...existing, email: email||existing.email||'' };
+      // Update password and pickup point if provided
+      const updateFields = { passwordHash: passwordHash || existing.passwordHash, email: email||existing.email||'' };
+      if (pickupPoint) { updateFields.pickupPoint = pickupPoint; updateFields.pickupLocation = pickupPoint; }
+      await db.collection('shop_users').updateOne({ _id: existing._id }, { $set: updateFields });
+      const { passwordHash: ph, ...safeExisting } = { ...existing, ...updateFields };
       return res.json({ user: safeExisting });
     }
-    const user = { name, phone: cleanPhone, email: email||'', city: city||'', idNumber: idNumber||'', passwordHash, createdAt: new Date() };
+    const user = { name, phone: cleanPhone, email: email||'', city: city||'', idNumber: idNumber||'', pickupPoint, pickupLocation: pickupPoint, passwordHash, createdAt: new Date() };
     const result = await db.collection('shop_users').insertOne(user);
     user._id = result.insertedId;
     const { passwordHash: _ph, ...safeUser } = user;
