@@ -928,8 +928,8 @@ function filterProducts() {
       // Show all products in that category (including featured)
       matchCat = (cat === activeCategory);
     } else {
-      // No category selected: show all NON-featured (featured already shown in top section)
-      matchCat = !isFeat;
+      // No category selected: show all products (featured shown both in top section AND in grid)
+      matchCat = true;
     }
     card.style.display = (matchQ && matchCat) ? '' : 'none';
   });
