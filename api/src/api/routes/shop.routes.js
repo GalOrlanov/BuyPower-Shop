@@ -981,7 +981,8 @@ router.post('/users/register', async (req, res) => {
 
     // Validate pickup point is required and must be a valid location
     if (!pickupPoint) return res.status(400).json({ error: 'נא לבחור נקודת איסוף' });
-    const ppDoc = await db.collection('shop_settings').findOne({ key: 'pickupPoints' });
+    const shopDb = await getDb();
+    const ppDoc = await shopDb.collection('shop_settings').findOne({ key: 'pickupPoints' });
     const validPoints = ppDoc && Array.isArray(ppDoc.points) ? ppDoc.points.map(p => p.name) : [];
     if (validPoints.length && !validPoints.includes(pickupPoint)) {
       return res.status(400).json({ error: 'נקודת האיסוף שנבחרה אינה קיימת' });
