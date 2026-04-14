@@ -2691,7 +2691,12 @@ router.post('/payment/notify-invoice', async (req, res) => {
       createdAt: new Date()
     });
 
-    // Try to match order and update with invoice URL
+    // Only try to match and update order if we actually have an invoice URL
+    if (!url) {
+      console.log('[INVOICE NOTIFY] no invoiceUrl — skipping order update (payment notification, not invoice)');
+      return res.json({ ok: true, skipped: true });
+    }
+
     const { ObjectId } = require('mongodb');
     let matched = false;
 
