@@ -66,7 +66,7 @@ h1 { font-size: 2rem; font-weight: 900; color: #15803d; margin-bottom: 6px; }
   <div class="tabs" role="tablist">
     <button class="tab active" role="tab" aria-selected="true" aria-controls="loginForm" onclick="showTab('login')">כניסה</button>
     <button class="tab" role="tab" aria-selected="false" aria-controls="registerForm" onclick="showTab('register')">הרשמה</button>
-    <button class="tab" role="tab" aria-selected="false" aria-controls="otpForm" onclick="showTab('otp')" style="display:none">📱 קוד SMS</button>
+    <button class="tab" role="tab" aria-selected="false" aria-controls="otpForm" onclick="showTab('otp')">📱 קוד חד פעמי</button>
   </div>
 
   <div id="loginForm" role="tabpanel">
@@ -126,7 +126,7 @@ h1 { font-size: 2rem; font-weight: 900; color: #15803d; margin-bottom: 6px; }
       <input type="tel" id="otpPhone" name="phone" placeholder="050-0000000" dir="ltr" autocomplete="tel" aria-required="true">
     </div>
     <button class="btn" id="otpSendBtn" onclick="doQueryOtp()">שלח קוד ←</button>
-    <div id="otpMethodPicker" style="display:none;margin-top:14px;display:none">
+    <div id="otpMethodPicker" style="display:none;margin-top:14px">
       <p style="font-size:17px;color:#374151;margin-bottom:12px;text-align:center">כיצד לשלוח את הקוד?</p>
       <button class="btn" id="otpSmsBtnMethod" onclick="doSendOtp('sms')" style="margin-bottom:10px">📱 שלח SMS לטלפון</button>
       <button class="btn" id="otpEmailBtnMethod" onclick="doSendOtp('email')" style="background:linear-gradient(135deg,#1d4ed8,#2563eb);display:none">📧 שלח למייל</button>
