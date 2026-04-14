@@ -20,11 +20,7 @@ jobs:
             git reset --hard origin/main
             cp api/src/api/routes/*.js api/dist/api/routes/ 2>/dev/null || true
             cp -v shop/*.html /var/www/shop/
-            echo "=== nginx config ==="
-            grep -r "root\|location.*shop" /etc/nginx/sites-enabled/ 2>/dev/null || grep -r "root\|location.*shop" /etc/nginx/conf.d/ 2>/dev/null
-            echo "=== find admin.html ==="
-            find / -name "admin.html" -path "*/shop/*" 2>/dev/null | head -10
-            echo "=== sizes ==="
-            for f in $(find / -name "admin.html" -path "*/shop/*" 2>/dev/null); do echo "$f: $(wc -c < $f) bytes"; done
             systemctl restart buypower-shop
+            nginx -s reload
+            echo "admin.html: $(wc -c < /var/www/shop/admin.html) bytes"
             echo "✅ Deploy complete"
