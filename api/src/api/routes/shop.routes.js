@@ -592,16 +592,46 @@ router.get('/payments', async (req, res) => {
 
     // Enrich with Grow payment data where available
     const phones = orders.map(o => (o.phone || '').replace(/\D/g, '').slice(-9)).filter(Boolean);
-    const growPayments = phones.length ? await db.collection('grow_payments').find({
-      $or: phones.map(p => ({ 'rawBody.payerPhone': { $regex: p } }))
-    }).sort({ createdAt: -1 }).toArray() : [];
+    const orderIds = orders.map(o => o._id.toString());
+    // Get the date range of orders to scope the invoice search
+    const oldestOrder = orders.length ? orders[orders.length - 1].createdAt : new Date();
+    const invoiceSince = new Date(oldestOrder.getTime() - 24 * 60 * 60 * 1000); // 1 day before oldest order
+    const [growPayments, growInvoices] = await Promise.all([
+      phones.length ? db.collection('grow_payments').find({
+        type: { $ne: 'invoice' },
+        $or: phones.flatMap(p => [
+          { 'rawBody.data.payerPhone': { $regex: p } },
+          { 'rawBody.payerPhone': { $regex: p } },
+          { customerPhone: { $regex: p } }
+        ])
+      }).sort({ createdAt: -1 }).toArray() : [],
+      // Fetch all invoice records in date range — match in JS by processId/transactionId
+      db.collection('grow_payments').find({
+        type: 'invoice',
+        createdAt: { $gte: invoiceSince }
+      }).sort({ createdAt: -1 }).toArray()
+    ]);
 
     const enriched = orders.map(o => {
       const orderPhone = (o.phone || '').replace(/\D/g, '').slice(-9);
       const gp = growPayments.find(g => {
-        const gpPhone = ((g.rawBody && g.rawBody.payerPhone) || '').replace(/\D/g, '').slice(-9);
+        const rb = g.rawBody || {};
+        const gpPhone = (rb.payerPhone || (rb.data && rb.data.payerPhone) || g.customerPhone || '').replace(/\D/g, '').slice(-9);
         return gpPhone === orderPhone;
       });
+      // Find invoice record by orderId, phone, or processId/transactionId
+      const gpProcessId = gp && gp.rawBody && gp.rawBody.data && gp.rawBody.data.processId;
+      const gpTxId = gp && gp.rawBody && gp.rawBody.data && gp.rawBody.data.transactionId;
+      const inv = growInvoices.find(g =>
+        (g.orderId && g.orderId === o._id.toString()) ||
+        (g.phone && g.phone.replace(/\D/g, '').slice(-9) === orderPhone) ||
+        (gpProcessId && (g.processId === gpProcessId || (g.rawBody && g.rawBody.processId === gpProcessId))) ||
+        (gpTxId && (g.transactionId === gpTxId || (g.rawBody && g.rawBody.transactionId === gpTxId)))
+      );
+      const rawBody = gp && gp.rawBody ? gp.rawBody : {};
+      const raw = rawBody.data || rawBody;
+      const invoiceUrl = o.invoiceUrl || (inv && inv.invoiceUrl) || raw.invoiceURL || '';
+      const invoiceNumber = o.invoiceNumber || (inv && inv.invoiceNumber) || '';
       return {
         _id: o._id,
         customerName: o.customerName,
@@ -610,14 +640,16 @@ router.get('/payments', async (req, res) => {
         pickupLocation: o.pickupLocation,
         status: o.status,
         items: o.items,
-        invoiceUrl: o.invoiceUrl || (gp && gp.rawBody && gp.rawBody.invoiceURL) || '',
+        invoiceUrl,
+        invoiceNumber,
         createdAt: o.createdAt,
-        growRef: o.growRef || (gp && gp.asmachta) || '',
-        cardSuffix: (gp && (gp.cardSuffix || (gp.rawBody && gp.rawBody.cardSuffix))) || '',
-        cardBrand: (gp && gp.rawBody && gp.rawBody.cardBrand) || '',
-        paymentMethod: (gp && gp.rawBody && gp.rawBody.transactionType) || '',
-        payerEmail: (gp && gp.rawBody && gp.rawBody.payerEmail) || '',
-        payerPhone: (gp && gp.rawBody && gp.rawBody.payerPhone) || o.phone || '',
+        growRef: o.growRef || (gp && gp.asmachta) || raw.asmachta || '',
+        cardSuffix: o.cardSuffix || (gp && gp.cardSuffix) || raw.cardSuffix || '',
+        cardBrand: o.cardBrand || raw.cardBrand || '',
+        paymentMethod: o.paymentMethod || raw.transactionType || ({ '1': 'כרטיס אשראי', '2': 'הוראת קבע', '3': 'זיכוי', '6': 'Bit', '7': 'Apple Pay', '8': 'PayPal', '9': 'Google Pay', '10': 'מזומן', '11': 'העברה בנקאית', '13': 'Google Pay', '14': 'Apple Pay' }[raw.transactionTypeId] || ''),
+        payerEmail: o.payerEmail || raw.payerEmail || '',
+        payerPhone: raw.payerPhone || o.phone || '',
+        webhookData: raw,
       };
     });
 
@@ -2489,6 +2521,14 @@ router.post('/payment/webhook', async (req, res) => {
     // Try by phone if no order found by ID
     if (!order && customerPhone) {
       const cleanPhone = customerPhone.replace(/\D/g, '').replace(/^972/, '0');
+      // Skip if another order with same asmachta already marked paid (prevent double-submit duplicates)
+      if (ref) {
+        const alreadyPaid = await db.collection('shop_orders').findOne({ growRef: ref, status: { $in: ['paid', 'handled', 'confirmed'] } });
+        if (alreadyPaid) {
+          console.log('[GROW WEBHOOK] skipping duplicate — asmachta already used:', ref);
+          return res.json({ ok: true, duplicate: true });
+        }
+      }
       order = await db.collection('shop_orders').findOne(
         { phone: cleanPhone, status: 'pending_payment' },
         { sort: { createdAt: -1 } }
@@ -2496,6 +2536,17 @@ router.post('/payment/webhook', async (req, res) => {
       if (order) {
         await db.collection('shop_orders').updateOne({ _id: order._id }, { $set: updateData });
         console.log('[GROW WEBHOOK] updated by phone:', cleanPhone);
+      }
+    }
+
+    // Cancel other pending orders for the same phone (prevents double-submit duplicates)
+    if (order && order.phone) {
+      const cancelled = await db.collection('shop_orders').updateMany(
+        { phone: order.phone, status: 'pending_payment', _id: { $ne: order._id } },
+        { $set: { status: 'cancelled_duplicate', cancelledAt: new Date() } }
+      );
+      if (cancelled.modifiedCount > 0) {
+        console.log('[GROW WEBHOOK] cancelled', cancelled.modifiedCount, 'duplicate pending orders for', order.phone);
       }
     }
 
@@ -2595,51 +2646,84 @@ router.post('/payment/notify-invoice', async (req, res) => {
   try {
     const db = await getDb();
     console.log('[INVOICE NOTIFY] received:', JSON.stringify(req.body));
-    // Data may be nested in req.body or req.body directly (Grow sends flat for invoice notify)
-    const raw = req.body;
-    const { orderId, order_id, invoice_url, invoiceUrl, invoice_number, invoiceNumber, transaction_id, transactionId, reference, phone, processId } = raw;
-    const id = orderId || order_id || null;
-    const url = invoice_url || invoiceUrl || '';
-    const invNum = invoice_number || invoiceNumber || '';
-    const ref = transaction_id || transactionId || reference || processId || '';
+    // Data may be nested in req.body.data (like main webhook) or flat at req.body
+    const nested = req.body.data || {};
+    const flat = req.body;
+    const orderId = flat.orderId || flat.order_id || nested.orderId || null;
+    const url = flat.invoice_url || flat.invoiceUrl || nested.invoiceUrl || nested.invoice_url || '';
+    const invNum = flat.invoice_number || flat.invoiceNumber || nested.invoiceNumber || nested.invoice_number || '';
+    const txId = flat.transactionId || flat.transaction_id || nested.transactionId || '';
+    const procId = flat.processId || nested.processId || '';
+    const ref = flat.reference || nested.asmachta || txId || procId || '';
+    const phone = flat.phone || flat.payerPhone || nested.payerPhone || null;
 
     // Store invoice data
     await db.collection('grow_payments').insertOne({
       type: 'invoice',
-      orderId: id,
+      orderId: orderId,
       invoiceUrl: url,
       invoiceNumber: invNum,
-      transactionId: ref,
+      transactionId: txId,
+      processId: procId,
       phone,
       rawBody: req.body,
       createdAt: new Date()
     });
 
-    // Update order with invoice URL
-    if (id) {
-      const { ObjectId } = require('mongodb');
+    // Try to match order and update with invoice URL
+    const { ObjectId } = require('mongodb');
+    let matched = false;
+
+    // 1. Try by orderId
+    if (orderId) {
       try {
-        await db.collection('shop_orders').updateOne(
-          { _id: new ObjectId(id) },
+        const res = await db.collection('shop_orders').updateOne(
+          { _id: new ObjectId(orderId) },
           { $set: { invoiceUrl: url, invoiceNumber: invNum } }
         );
+        if (res.modifiedCount > 0) matched = true;
       } catch(e) {}
     }
 
-    // Also try to match by phone or reference
-    if (!id && (phone || ref)) {
-      const query = {};
+    // 2. Try by processId/transactionId via grow_payments → order phone
+    if (!matched && (procId || txId)) {
+      const paymentRecord = await db.collection('grow_payments').findOne({
+        type: { $ne: 'invoice' },
+        $or: [
+          ...(procId ? [{ 'rawBody.data.processId': procId }] : []),
+          ...(txId ? [{ 'rawBody.data.transactionId': txId }] : [])
+        ]
+      });
+      if (paymentRecord && paymentRecord.customerPhone) {
+        const cleanPhone = paymentRecord.customerPhone.replace(/\D/g, '').replace(/^972/, '0');
+        const order = await db.collection('shop_orders').findOne(
+          { phone: cleanPhone, status: { $in: ['paid', 'handled', 'confirmed'] } },
+          { sort: { createdAt: -1 } }
+        );
+        if (order && url) {
+          await db.collection('shop_orders').updateOne({ _id: order._id }, { $set: { invoiceUrl: url, invoiceNumber: invNum } });
+          matched = true;
+          console.log('[INVOICE NOTIFY] matched by processId to order:', order._id.toString());
+        }
+      }
+    }
+
+    // 3. Try by phone or growRef directly
+    if (!matched && (phone || ref)) {
+      const query = { status: { $in: ['paid', 'handled', 'confirmed'] } };
       if (phone) {
         const cleanPhone = phone.replace(/\D/g, '').replace(/^972/, '0');
-        query.$or = [{ phone: cleanPhone }, { customerPhone: cleanPhone }];
+        query.phone = cleanPhone;
+      } else if (ref) {
+        query.growRef = ref;
       }
-      if (ref) query.growRef = ref;
       const order = await db.collection('shop_orders').findOne(query, { sort: { createdAt: -1 } });
-      if (order) {
+      if (order && url) {
         await db.collection('shop_orders').updateOne(
           { _id: order._id },
           { $set: { invoiceUrl: url, invoiceNumber: invNum } }
         );
+        console.log('[INVOICE NOTIFY] matched by phone/ref to order:', order._id.toString());
       }
     }
 

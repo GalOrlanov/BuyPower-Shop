@@ -3408,27 +3408,30 @@ async function loadGrowPayments(page) {
     html += '<th style="padding:10px 8px;text-align:right">webhook</th>';
     html += '<th style="padding:10px 8px;text-align:right">קבלה</th>';
     html += '</tr></thead><tbody>';
-    payments.forEach(function(p) {
+    // Store full payment data for detail modal
+    window._payFullData = {};
+    payments.forEach(function(p, idx) {
+      window._payFullData[idx] = p;
       var date = p.createdAt ? new Date(p.createdAt).toLocaleString('he-IL', {day:'numeric',month:'numeric',year:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
       var name = p.customerName || '—';
       var phone = p.payerPhone || p.phone || '—';
-      var email = p.payerEmail || '';
       var amount = p.totalAmount || '—';
       var method = p.paymentMethod || '';
       var card = p.cardSuffix ? ((p.cardBrand||'') + ' •••• ' + p.cardSuffix) : '';
       var asmachta = p.growRef || '';
       var invoiceUrl = p.invoiceUrl || '';
-      var invoiceBtn = invoiceUrl ? '<a href="'+invoiceUrl+'" target="_blank" style="color:#1d4ed8;text-decoration:underline;font-weight:600">📄 הורד</a>' : '<span style="color:#d1d5db">—</span>';
+      var invoiceNum = p.invoiceNumber || '';
+      var invoiceBtn = invoiceUrl ? '<a href="'+invoiceUrl+'" target="_blank" style="color:#1d4ed8;text-decoration:underline;font-weight:600" onclick="event.stopPropagation()">📄 הורד</a>' + (invoiceNum ? '<div style="font-size:.7rem;color:#6b7280;margin-top:2px">#' + invoiceNum + '</div>' : '') : '<span style="color:#d1d5db">—</span>';
       var methodIcon = method === 'Bit' ? '📱' : method === 'PayBox' ? '📦' : method === 'Gpay' ? '🅖' : method ? '💳' : '';
       var items = (p.items||[]).map(function(i){return (i.name||'?') + ' x' + (i.qty||1)}).join(', ');
-      html += '<tr style="border-bottom:1px solid #f1f5f9">';
+      html += '<tr style="border-bottom:1px solid #f1f5f9;cursor:pointer" onclick="togglePayDetail('+idx+')">';
       html += '<td style="padding:8px">' + date + '</td>';
       html += '<td style="padding:8px;font-weight:600">' + name + '</td>';
       html += '<td style="padding:8px;direction:ltr;text-align:right">' + phone + '</td>';
       html += '<td style="padding:8px;font-weight:700;color:#15803d">₪' + (typeof amount==='number'?amount.toFixed(2):amount) + '</td>';
       html += '<td style="padding:8px;font-size:.8rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+items+'">' + (items||'—') + '</td>';
-      html += '<td style="padding:8px">' + (method ? methodIcon + ' ' + method : '—') + '</td>';
-      html += '<td style="padding:8px;direction:ltr;text-align:right;font-family:monospace">' + (card||'—') + '</td>';
+      html += '<td style="padding:8px">' + (method ? methodIcon + ' ' + method : '<span style="color:#d1d5db">—</span>') + '</td>';
+      html += '<td style="padding:8px;direction:ltr;text-align:right;font-family:monospace">' + (card||'<span style="color:#d1d5db">—</span>') + '</td>';
       html += '<td style="padding:8px;font-family:monospace;font-size:.8rem">' + (asmachta||'—') + '</td>';
       var hasWebhook = !!(p.growRef || p.cardSuffix || p.paymentMethod);
       html += '<td style="padding:8px;text-align:center">' + (hasWebhook ? '<span style="background:#dcfce7;color:#15803d;padding:3px 8px;border-radius:6px;font-size:.75rem;font-weight:700">✓ התקבל</span>' : '<span style="background:#fef2f2;color:#dc2626;padding:3px 8px;border-radius:6px;font-size:.75rem;font-weight:700">✗ לא התקבל</span>') + '</td>';
@@ -3456,6 +3459,100 @@ async function loadGrowPayments(page) {
   } catch(e) {
     container.innerHTML = '<div style="color:#dc2626;padding:20px;text-align:center">שגיאה בטעינת תשלומים</div>';
   }
+}
+
+function togglePayDetail(idx) {
+  var p = window._payFullData[idx];
+  if (!p) return;
+  var wd = p.webhookData || {};
+  var labelMap = {asmachta:'אסמכתא',cardSuffix:'ספרות אחרונות',cardBrand:'מותג כרטיס',cardType:'סוג כרטיס',transactionType:'אמצעי תשלום',transactionTypeId:'קוד אמצעי',payerPhone:'טלפון משלם',payerEmail:'אימייל משלם',paymentSum:'סכום',sum:'סכום (sum)',paymentDesc:'תיאור תשלום',description:'תיאור',transactionCode:'קוד עסקה',transactionId:'מזהה עסקה',invoiceURL:'קישור קבלה',invoiceName:'שם חשבונית',processId:'מזהה תהליך',paymentLinkProcessId:'מזהה לינק תשלום',productData:'נתוני מוצר',full_name:'שם מלא',fullName:'שם מלא',status:'סטטוס',amount:'סכום',reference:'אסמכתא (ref)',order_id:'מזהה הזמנה',orderId:'מזהה הזמנה',webhookKey:'מפתח webhook'};
+
+  // Build modal HTML
+  var h = '<div id="payDetailOverlay" onclick="if(event.target===this)this.remove()" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px">';
+  h += '<div style="background:white;border-radius:16px;max-width:800px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)">';
+
+  // Header
+  var date = p.createdAt ? new Date(p.createdAt).toLocaleString('he-IL',{day:'numeric',month:'numeric',year:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
+  h += '<div style="padding:20px 24px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center">';
+  h += '<div><div style="font-size:1.2rem;font-weight:700">פרטי תשלום</div><div style="color:#6b7280;font-size:.85rem;margin-top:2px">' + date + '</div></div>';
+  h += '<button onclick="document.getElementById(\'payDetailOverlay\').remove()" style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:#9ca3af;padding:4px 8px">✕</button>';
+  h += '</div>';
+
+  h += '<div style="padding:24px">';
+
+  // Customer info section
+  h += '<div style="margin-bottom:20px">';
+  h += '<div style="font-weight:700;font-size:.9rem;color:#1e40af;margin-bottom:10px;border-bottom:2px solid #dbeafe;padding-bottom:4px">פרטי לקוח</div>';
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">';
+  h += '<div style="background:#f8fafc;border-radius:8px;padding:10px"><div style="font-size:.7rem;color:#6b7280">שם</div><div style="font-weight:600">' + (p.customerName||'—') + '</div></div>';
+  h += '<div style="background:#f8fafc;border-radius:8px;padding:10px"><div style="font-size:.7rem;color:#6b7280">טלפון</div><div style="font-weight:600;direction:ltr;text-align:right">' + (p.payerPhone||p.phone||'—') + '</div></div>';
+  h += '<div style="background:#f8fafc;border-radius:8px;padding:10px"><div style="font-size:.7rem;color:#6b7280">אימייל</div><div style="font-weight:600;font-size:.85rem">' + (p.payerEmail||'—') + '</div></div>';
+  h += '</div></div>';
+
+  // Payment info section
+  var method = p.paymentMethod || '';
+  var methodIcon = method === 'Bit' ? '📱' : method === 'PayBox' ? '📦' : method === 'Gpay' ? '🅖' : method ? '💳' : '';
+  var card = p.cardSuffix ? ((p.cardBrand||'') + ' •••• ' + p.cardSuffix) : '—';
+  h += '<div style="margin-bottom:20px">';
+  h += '<div style="font-weight:700;font-size:.9rem;color:#15803d;margin-bottom:10px;border-bottom:2px solid #dcfce7;padding-bottom:4px">פרטי תשלום</div>';
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px">';
+  h += '<div style="background:#f0fdf4;border-radius:8px;padding:10px"><div style="font-size:.7rem;color:#6b7280">סכום</div><div style="font-weight:700;color:#15803d;font-size:1.1rem">₪' + (typeof p.totalAmount==='number'?p.totalAmount.toFixed(2):(p.totalAmount||'—')) + '</div></div>';
+  h += '<div style="background:#f0fdf4;border-radius:8px;padding:10px"><div style="font-size:.7rem;color:#6b7280">אמצעי</div><div style="font-weight:600">' + (method ? methodIcon + ' ' + method : '—') + '</div></div>';
+  h += '<div style="background:#f0fdf4;border-radius:8px;padding:10px"><div style="font-size:.7rem;color:#6b7280">כרטיס</div><div style="font-weight:600;font-family:monospace">' + card + '</div></div>';
+  h += '<div style="background:#f0fdf4;border-radius:8px;padding:10px"><div style="font-size:.7rem;color:#6b7280">אסמכתא</div><div style="font-weight:600;font-family:monospace;font-size:.85rem">' + (p.growRef||'—') + '</div></div>';
+  h += '</div></div>';
+
+  // Invoice/Receipt
+  if (p.invoiceUrl) {
+    h += '<div style="margin-bottom:20px">';
+    h += '<div style="font-weight:700;font-size:.9rem;color:#7c3aed;margin-bottom:10px;border-bottom:2px solid #ede9fe;padding-bottom:4px">קבלה</div>';
+    h += '<a href="' + p.invoiceUrl + '" target="_blank" style="display:inline-flex;align-items:center;gap:8px;background:#f5f3ff;color:#7c3aed;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:600">📄 הורד קבלה' + (p.invoiceNumber ? ' (#' + p.invoiceNumber + ')' : '') + '</a>';
+    h += '</div>';
+  }
+
+  // Products section
+  var items = p.items || [];
+  if (items.length) {
+    h += '<div style="margin-bottom:20px">';
+    h += '<div style="font-weight:700;font-size:.9rem;color:#b45309;margin-bottom:10px;border-bottom:2px solid #fef3c7;padding-bottom:4px">מוצרים (' + items.length + ')</div>';
+    h += '<div style="display:grid;gap:8px">';
+    items.forEach(function(item) {
+      h += '<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center">';
+      h += '<div style="font-weight:600">' + (item.name||'?') + '</div>';
+      h += '<div style="display:flex;gap:16px;align-items:center">';
+      h += '<span style="color:#6b7280;font-size:.85rem">x' + (item.qty||1) + '</span>';
+      if (item.price) h += '<span style="font-weight:700;color:#b45309">₪' + (typeof item.price==='number'?item.price.toFixed(2):item.price) + '</span>';
+      h += '</div></div>';
+    });
+    h += '</div></div>';
+  }
+
+  // Webhook raw data section
+  var wdKeys = Object.keys(wd).filter(function(k){ return wd[k] !== null && wd[k] !== undefined && wd[k] !== ''; });
+  if (wdKeys.length) {
+    h += '<div>';
+    h += '<div style="font-weight:700;font-size:.9rem;color:#6b7280;margin-bottom:10px;border-bottom:2px solid #e5e7eb;padding-bottom:4px">נתוני Webhook גולמיים</div>';
+    h += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">';
+    wdKeys.forEach(function(key) {
+      var val = wd[key];
+      if (typeof val === 'object') val = JSON.stringify(val);
+      var label = labelMap[key] || key;
+      h += '<div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;padding:8px 12px">';
+      h += '<div style="font-size:.65rem;color:#9ca3af;margin-bottom:2px">' + label + ' <span style="font-family:monospace">(' + key + ')</span></div>';
+      h += '<div style="font-size:.8rem;font-weight:600;word-break:break-all">' + val + '</div>';
+      h += '</div>';
+    });
+    h += '</div></div>';
+  } else {
+    h += '<div style="color:#9ca3af;text-align:center;padding:16px;background:#f8fafc;border-radius:8px">אין נתוני webhook זמינים להזמנה זו</div>';
+  }
+
+  h += '</div></div></div>';
+
+  // Remove existing overlay if open
+  var existing = document.getElementById('payDetailOverlay');
+  if (existing) existing.remove();
+  document.body.insertAdjacentHTML('beforeend', h);
 }
 
 async function createGrowPayment() {
