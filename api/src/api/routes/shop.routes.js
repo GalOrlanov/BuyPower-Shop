@@ -1364,11 +1364,32 @@ router.post('/payment/create', async (req, res) => {
     console.log('[PAYMENT CREATE] Make.com response:', JSON.stringify(result, null, 2));
     const growData = result.body;
     const paymentUrl = growData?.data?.url || null;
+    const paymentLinkProcessId = growData?.data?.paymentLinkProcessId || null;
+
+    // Save order + payment link to DB
+    const db = await getDb();
+    const orderDoc = {
+      customerName: full_name,
+      phone: phone.replace(/\D/g, ''),
+      email: email || '',
+      invoiceName: invoice_name || '',
+      items: products.map(p => ({ name: p.name, price: Number(p.price), qty: Number(p.quantity) || 1 })),
+      totalAmount: products.reduce((s, p) => s + Number(p.price) * (Number(p.quantity) || 1), 0),
+      status: 'pending_payment',
+      source: 'grow_link',
+      paymentUrl,
+      paymentLinkProcessId,
+      chargeType: chargeTypeLabel,
+      createdAt: new Date(),
+    };
+    const inserted = await db.collection('shop_orders').insertOne(orderDoc);
+    console.log('[PAYMENT CREATE] Order saved:', inserted.insertedId);
 
     res.json({
       ok: true,
       paymentUrl,
-      paymentLinkProcessId: growData?.data?.paymentLinkProcessId,
+      paymentLinkProcessId,
+      orderId: inserted.insertedId,
       raw: growData
     });
   } catch(e) {
