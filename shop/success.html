@@ -74,11 +74,7 @@ p { color: #6b7280; margin-bottom: 24px; line-height: 1.5; }
 <script>
 localStorage.removeItem('yedidya_cart');
 const orderId = new URLSearchParams(location.search).get('orderId');
-if (orderId) {
-  fetch('/api/shop/orders/' + orderId + '/confirm', { method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}' }).catch(() => {});
-} else {
-
-}
+// Payment confirmation is handled by Grow webhook only — not here
 </script>
 
 <script>

@@ -1310,7 +1310,7 @@ router.post('/payment/create', async (req, res) => {
       max_or_custom,
       success_url: custom_success_url || `${BASE_URL_PAY}/success.html`,
       fail_url: custom_fail_url || `${BASE_URL_PAY}/cart.html?error=1`,
-      notify_url: custom_notify_url || `${BASE_URL_PAY}/api/shop/payment/notify`,
+      notify_url: custom_notify_url || `${BASE_URL_PAY}/api/shop/payment/webhook`,
       notify_invoice_url: custom_notify_invoice_url || `${BASE_URL_PAY}/api/shop/payment/notify-invoice`,
       products: products.map(p => ({
         catalog_number: p.catalog_number || p.id || '0',
@@ -2422,45 +2422,122 @@ router.get('/admin/staff/:id/report', verifyShopToken, async (req, res) => {
 
 // ─── GROW PAYMENT WEBHOOK ────────────────────────────────────────────────────
 // POST /api/shop/payment/webhook — Grow/Make.com calls this after successful payment
+// This is the ONLY place where orders get marked as paid
 router.post('/payment/webhook', async (req, res) => {
   try {
     const db = await getDb();
     console.log('[GROW WEBHOOK] received:', JSON.stringify(req.body));
 
-    // Grow/Make sends: orderId, status, amount, reference, phone, name
-    const { orderId, order_id, status, amount, reference, phone, full_name, name } = req.body;
+    const { orderId, order_id, status, amount, reference, phone, full_name, name,
+            asmachta, cardSuffix, cardBrand, cardType, transactionType, payerPhone, payerEmail,
+            paymentSum, paymentDesc, webhookKey, transactionCode, invoiceURL, invoiceName } = req.body;
 
     const id = orderId || order_id;
+    const ref = reference || asmachta || transactionCode || null;
+    const paidAmount = amount || paymentSum || null;
+    const customerPhone = payerPhone || phone || '';
+    const customerName = full_name || name || '';
 
-    // If orderId provided - update by ID
+    // Save raw payment data to grow_payments
+    await db.collection('grow_payments').insertOne({
+      source: 'grow',
+      orderId: id,
+      asmachta: asmachta || ref,
+      cardSuffix: cardSuffix || '',
+      cardBrand: cardBrand || '',
+      cardType: cardType || '',
+      status: 'paid',
+      totalAmount: paidAmount ? Number(paidAmount) : 0,
+      customerName,
+      customerPhone,
+      customerEmail: payerEmail || '',
+      rawBody: req.body,
+      createdAt: new Date()
+    });
+
+    // Find and update the order
+    let order = null;
+    const updateData = {
+      status: 'paid',
+      paidAt: new Date(),
+      growRef: ref,
+      paidAmount: paidAmount ? Number(paidAmount) : null,
+      cardSuffix: cardSuffix || '',
+      cardBrand: cardBrand || '',
+      paymentMethod: transactionType || '',
+      payerEmail: payerEmail || '',
+      invoiceUrl: invoiceURL || '',
+      invoiceName: invoiceName || ''
+    };
+
+    // Try by orderId first
     if (id) {
-      const { ObjectId } = require('mongodb');
       try {
-        const result = await db.collection('shop_orders').updateOne(
-          { _id: new ObjectId(id), status: { $ne: 'paid' } },
-          { $set: { status: 'paid', paidAt: new Date(), growRef: reference || null, paidAmount: amount || null } }
-        );
-        console.log('[GROW WEBHOOK] updated by id:', id, 'modified:', result.modifiedCount);
+        order = await db.collection('shop_orders').findOne({ _id: new ObjectId(id), status: { $ne: 'paid' } });
+        if (order) {
+          await db.collection('shop_orders').updateOne({ _id: order._id }, { $set: updateData });
+          console.log('[GROW WEBHOOK] updated by id:', id);
+        }
       } catch(e) {
         console.log('[GROW WEBHOOK] invalid orderId:', id);
       }
     }
 
-    // If phone provided - update latest pending_payment by phone
-    if (phone && !id) {
-      const cleanPhone = phone.replace(/\D/g, '').replace(/^972/, '0');
-      const result = await db.collection('shop_orders').updateMany(
-        {
-          $or: [
-            { phone: cleanPhone },
-            { customerPhone: cleanPhone },
-            { customerName: full_name || name || '' }
-          ],
-          status: 'pending_payment'
-        },
-        { $set: { status: 'paid', paidAt: new Date(), growRef: reference || null, paidAmount: amount || null } }
+    // Try by phone if no order found by ID
+    if (!order && customerPhone) {
+      const cleanPhone = customerPhone.replace(/\D/g, '').replace(/^972/, '0');
+      order = await db.collection('shop_orders').findOne(
+        { phone: cleanPhone, status: 'pending_payment' },
+        { sort: { createdAt: -1 } }
       );
-      console.log('[GROW WEBHOOK] updated by phone:', cleanPhone, 'modified:', result.modifiedCount);
+      if (order) {
+        await db.collection('shop_orders').updateOne({ _id: order._id }, { $set: updateData });
+        console.log('[GROW WEBHOOK] updated by phone:', cleanPhone);
+      }
+    }
+
+    // Decrease stock + send WhatsApp notification
+    if (order) {
+      // Decrease stock
+      for (const item of (order.items || [])) {
+        const prodId = item.productId || item.id;
+        if (!prodId) continue;
+        try {
+          const prod = await db.collection('shop_products').findOne(
+            { _id: new ObjectId(prodId) },
+            { projection: { inventoryId: 1, hasUnlimitedStock: 1 } }
+          );
+          if (!prod || prod.hasUnlimitedStock) continue;
+          await db.collection('shop_products').updateOne(
+            { _id: new ObjectId(prodId) },
+            { $inc: { stock: -(item.qty || 1) } }
+          );
+          if (prod.inventoryId) {
+            const invItem = await db.collection('shop_inventory').findOne({ _id: new ObjectId(prod.inventoryId) }, { projection: { hasUnlimitedStock: 1 } });
+            if (!invItem || !invItem.hasUnlimitedStock) {
+              await db.collection('shop_inventory').updateOne(
+                { _id: new ObjectId(prod.inventoryId) },
+                { $inc: { quantity: -(item.qty || 1) } }
+              );
+            }
+          }
+        } catch (_) {}
+      }
+
+      // WhatsApp notification
+      try {
+        const axios = require('axios');
+        const itemsList = (order.items || []).map(i => `${i.name}${i.variant ? ' ('+i.variant+')' : ''} x${i.qty}`).join(', ');
+        const msg = `🛒 הזמנה חדשה שולמה!\nשם: ${order.customerName}\nטלפון: ${order.phone}\nמוצרים: ${itemsList}\nסכום: ₪${order.totalAmount}\nאיסוף: ${order.pickupLocation || ''}\n💳 ${transactionType || ''} ${cardSuffix ? '****'+cardSuffix : ''}`;
+        await axios.post('http://localhost:3001/api/send-message', {
+          phone: '972538286227',
+          message: msg,
+        }).catch(() => {});
+      } catch (_) {}
+
+      console.log('[GROW WEBHOOK] order fully processed:', order._id);
+    } else {
+      console.log('[GROW WEBHOOK] no matching order found for phone:', customerPhone);
     }
 
     res.json({ ok: true });
