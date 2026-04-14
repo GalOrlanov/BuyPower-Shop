@@ -480,9 +480,14 @@ router.post('/orders', async (req, res) => {
     const db = await getDb();
     const { customerName, phone, items, pickupLocation, pickupDate } = req.body;
 
-    // Validate pickup location
+    // Validate pickup location exists and is a valid pickup point
     if (!pickupLocation || !pickupLocation.trim()) {
       return res.status(400).json({ error: 'נא לבחור נקודת איסוף' });
+    }
+    const ppDoc = await db.collection('shop_settings').findOne({ key: 'pickupPoints' });
+    const validPoints = ppDoc && Array.isArray(ppDoc.points) ? ppDoc.points.map(p => p.name) : [];
+    if (validPoints.length && !validPoints.includes(pickupLocation.trim())) {
+      return res.status(400).json({ error: 'נקודת האיסוף שנבחרה אינה קיימת. נא לבחור נקודה מהרשימה.' });
     }
 
     // Calculate total
