@@ -346,6 +346,10 @@ input:checked + .slider::before { transform: translateX(20px); }
               <option value="not_paid">לא שולם</option>
             </select>
           </div>
+          <div>
+            <div style="font-size:.78rem;font-weight:700;color:#374151;margin-bottom:4px">חיפוש</div>
+            <input type="text" id="orderSearchInput" placeholder="שם / טלפון..." oninput="filterOrdersTable()" style="padding:8px 10px;border:2px solid #d1fae5;border-radius:10px;font-family:inherit;font-size:.9rem;outline:none;width:140px">
+          </div>
           <button class="btn btn-green btn-sm" onclick="loadOrders()" style="padding:10px 18px">🔍 סנן</button>
           <button class="btn btn-outline btn-sm" onclick="setOrdersThisWeek()" style="padding:10px 18px">השבוע</button>
         </div>
@@ -675,6 +679,10 @@ input:checked + .slider::before { transform: translateX(20px); }
           <button onclick="setPayDateRange('month')" style="background:#7c3aed;color:white;border:none;padding:9px 14px;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700;font-size:.85rem">חודשי</button>
           <button onclick="loadGrowPayments(1)" style="background:#1d4ed8;color:white;border:none;padding:9px 14px;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700;font-size:.85rem">🔍 חפש</button>
           <button onclick="document.getElementById('payFromDate').value='';document.getElementById('payToDate').value='';loadGrowPayments(1)" style="background:#f3f4f6;color:#374151;border:none;padding:9px 14px;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:600;font-size:.85rem">הכל</button>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <label style="font-size:.8rem;font-weight:600;color:#6b7280">חיפוש</label>
+            <input type="text" id="paySearchInput" placeholder="שם / טלפון..." oninput="filterPaymentsTable()" style="padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-family:inherit;width:140px">
+          </div>
           <div id="growPaymentsCount" style="margin-right:auto;font-size:.9rem;font-weight:700;color:#1d4ed8"></div>
         </div>
         <div id="growPaymentsList" style="color:#9ca3af;text-align:center;padding:20px">לחץ חפש לטעינת תשלומים</div>
@@ -2729,6 +2737,31 @@ function setOrdersThisWeek() {
   if (fromEl) fromEl.value = fmt(monday);
   if (toEl) toEl.value = fmt(sunday);
   loadOrders();
+}
+
+function filterOrdersTable() {
+  const q = (document.getElementById('orderSearchInput')?.value || '').trim().toLowerCase();
+  const rows = document.querySelectorAll('#ordersTbody tr');
+  rows.forEach(row => {
+    if (!q) { row.style.display = ''; return; }
+    const text = row.textContent.toLowerCase();
+    row.style.display = text.includes(q) ? '' : 'none';
+  });
+}
+
+function filterPaymentsTable() {
+  const q = (document.getElementById('paySearchInput')?.value || '').trim().toLowerCase();
+  const container = document.getElementById('growPaymentsList');
+  const rows = container.querySelectorAll('table tbody tr');
+  let shown = 0;
+  rows.forEach(row => {
+    // Skip detail rows (modal is separate now, but just in case)
+    if (!q) { row.style.display = ''; shown++; return; }
+    const text = row.textContent.toLowerCase();
+    const match = text.includes(q);
+    row.style.display = match ? '' : 'none';
+    if (match) shown++;
+  });
 }
 
 async function loadOrders() {
