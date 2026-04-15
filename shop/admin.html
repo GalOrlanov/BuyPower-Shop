@@ -323,6 +323,13 @@ input:checked + .slider::before { transform: translateX(20px); }
       <div class="card" style="margin-bottom:12px">
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
           <div>
+            <div style="font-size:.78rem;font-weight:700;color:#374151;margin-bottom:4px">לפי תאריך</div>
+            <select id="orderDateType" style="padding:8px 10px;border:2px solid #d1fae5;border-radius:10px;font-family:inherit;font-size:.9rem;background:white;outline:none">
+              <option value="createdAt">תאריך רכישה</option>
+              <option value="paidAt">תאריך תשלום</option>
+            </select>
+          </div>
+          <div>
             <div style="font-size:.78rem;font-weight:700;color:#374151;margin-bottom:4px">מתאריך</div>
             <input type="date" id="orderFromDate" style="padding:8px 10px;border:2px solid #d1fae5;border-radius:10px;font-family:inherit;font-size:.9rem;outline:none">
           </div>
@@ -366,11 +373,11 @@ input:checked + .slider::before { transform: translateX(20px); }
           <table id="ordersTable">
             <thead>
               <tr>
-                <th>שם</th><th>טלפון</th><th>מוצרים</th><th>סכום</th><th>איסוף</th><th>תאריך</th><th>סטטוס</th><th>פעולה</th>
+                <th>ת. רכישה</th><th>ת. תשלום</th><th>שם</th><th>טלפון</th><th>מוצרים</th><th>סכום</th><th>איסוף</th><th>סטטוס</th><th>פעולה</th>
               </tr>
             </thead>
             <tbody id="ordersTbody">
-              <tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:24px">טוען...</td></tr>
+              <tr><td colspan="9" style="text-align:center;color:#9ca3af;padding:24px">טוען...</td></tr>
             </tbody>
           </table>
         </div>
@@ -666,6 +673,13 @@ input:checked + .slider::before { transform: translateX(20px); }
       <div style="margin-top:32px;border-top:2px solid #e2e8f0;padding-top:24px">
         <h2 style="margin:0 0 16px;font-size:1.2rem">📋 היסטוריית תשלומים מ-Grow</h2>
         <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:16px;background:#f8fafc;padding:14px;border-radius:10px;border:1px solid #e2e8f0">
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <label style="font-size:.8rem;font-weight:600;color:#6b7280">לפי תאריך</label>
+            <select id="payDateType" style="padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-family:inherit">
+              <option value="createdAt">תאריך רכישה</option>
+              <option value="paidAt">תאריך תשלום</option>
+            </select>
+          </div>
           <div style="display:flex;flex-direction:column;gap:4px">
             <label style="font-size:.8rem;font-weight:600;color:#6b7280">מתאריך</label>
             <input type="date" id="payFromDate" style="padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-family:inherit">
@@ -2766,6 +2780,7 @@ function filterPaymentsTable() {
 
 async function loadOrders() {
   try {
+    const dateType = document.getElementById('orderDateType')?.value || 'createdAt';
     const fromDate = document.getElementById('orderFromDate')?.value;
     const toDate = document.getElementById('orderToDate')?.value;
     const pickupFilter = document.getElementById('orderPickupFilter')?.value || '';
@@ -2774,6 +2789,7 @@ async function loadOrders() {
     const params = [];
     if (fromDate) params.push('since=' + encodeURIComponent(fromDate));
     if (toDate) params.push('until=' + encodeURIComponent(toDate + 'T23:59:59'));
+    if (dateType === 'paidAt') params.push('dateField=paidAt');
     if (params.length) url += '?' + params.join('&');
     const token = localStorage.getItem('shopAdminToken') || localStorage.getItem('shopToken') || '';
     const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
@@ -2799,17 +2815,18 @@ async function loadOrders() {
     renderPickup();
     const tbody = document.getElementById('ordersTbody');
     if (!orders.length) {
-      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:24px">אין הזמנות השבוע</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#9ca3af;padding:24px">אין הזמנות השבוע</td></tr>';
       return;
     }
     tbody.innerHTML = orders.map(o =>
       '<tr>' +
+      '<td style="font-size:0.8rem;white-space:nowrap">' + formatDateTime(o.createdAt) + '</td>' +
+      '<td style="font-size:0.8rem;white-space:nowrap">' + (o.paidAt ? formatDateTime(o.paidAt) : '<span style="color:#d1d5db">—</span>') + '</td>' +
       '<td><strong>' + (o.customerName||'') + '</strong></td>' +
       '<td>' + (o.phone||'') + '</td>' +
       '<td style="max-width:180px">' + (o.items||[]).map(i => i.name + ' x' + i.qty).join('<br>') + '</td>' +
       '<td><strong>₪' + (o.totalAmount||0).toFixed(2) + '</strong></td>' +
       '<td style="font-size:0.8rem">' + (o.pickupLocation||'—') + '</td>' +
-      '<td style="font-size:0.8rem">' + formatDateTime(o.createdAt) + '</td>' +
       '<td>' + statusBadge(o.status) + '</td>' +
       '<td style="white-space:nowrap">' +
         '<button class="btn btn-sm" style="background:#e0f2fe;color:#0369a1;margin-left:4px" onclick="openOrderModal(\'' + o._id + '\')">👁️ פרטים</button>' +
@@ -3434,9 +3451,11 @@ async function loadGrowPayments(page) {
   try {
     var from = document.getElementById('payFromDate').value;
     var to = document.getElementById('payToDate').value;
+    var dateType = document.getElementById('payDateType')?.value || 'createdAt';
     var url = API + '/payments?page=' + page + '&perPage=20';
     if (from) url += '&from=' + from;
     if (to) url += '&to=' + to;
+    if (dateType === 'paidAt') url += '&dateField=paidAt';
     var res = await fetch(url);
     var data = await res.json();
     var payments = data.payments || [];
@@ -3452,7 +3471,8 @@ async function loadGrowPayments(page) {
     }
     var html = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.85rem">';
     html += '<thead><tr style="background:#f0f9ff;border-bottom:2px solid #bfdbfe">';
-    html += '<th style="padding:10px 8px;text-align:right">תאריך</th>';
+    html += '<th style="padding:10px 8px;text-align:right">ת. רכישה</th>';
+    html += '<th style="padding:10px 8px;text-align:right">ת. תשלום</th>';
     html += '<th style="padding:10px 8px;text-align:right">שם</th>';
     html += '<th style="padding:10px 8px;text-align:right">טלפון</th>';
     html += '<th style="padding:10px 8px;text-align:right">סכום</th>';
@@ -3468,6 +3488,7 @@ async function loadGrowPayments(page) {
     payments.forEach(function(p, idx) {
       window._payFullData[idx] = p;
       var date = p.createdAt ? new Date(p.createdAt).toLocaleString('he-IL', {day:'numeric',month:'numeric',year:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
+      var paidDate = p.paidAt ? new Date(p.paidAt).toLocaleString('he-IL', {day:'numeric',month:'numeric',year:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
       var name = p.customerName || '—';
       var phone = p.payerPhone || p.phone || '—';
       var amount = p.totalAmount || '—';
@@ -3480,7 +3501,8 @@ async function loadGrowPayments(page) {
       var methodIcon = method === 'Bit' ? '📱' : method === 'PayBox' ? '📦' : method === 'Gpay' ? '🅖' : method ? '💳' : '';
       var items = (p.items||[]).map(function(i){return (i.name||'?') + ' x' + (i.qty||1)}).join(', ');
       html += '<tr style="border-bottom:1px solid #f1f5f9;cursor:pointer" onclick="togglePayDetail('+idx+')">';
-      html += '<td style="padding:8px">' + date + '</td>';
+      html += '<td style="padding:8px;white-space:nowrap">' + date + '</td>';
+      html += '<td style="padding:8px;white-space:nowrap">' + paidDate + '</td>';
       html += '<td style="padding:8px;font-weight:600">' + name + '</td>';
       html += '<td style="padding:8px;direction:ltr;text-align:right">' + phone + '</td>';
       html += '<td style="padding:8px;font-weight:700;color:#15803d">₪' + (typeof amount==='number'?amount.toFixed(2):amount) + '</td>';

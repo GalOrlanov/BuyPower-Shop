@@ -577,16 +577,17 @@ router.get('/payments', async (req, res) => {
     const skip = (page - 1) * perPage;
 
     // Query paid orders
+    const dateField = req.query.dateField === 'paidAt' ? 'paidAt' : 'createdAt';
     const query = { status: { $in: ['paid', 'handled', 'confirmed'] } };
-    if (req.query.from) query.createdAt = { $gte: new Date(req.query.from) };
+    if (req.query.from) query[dateField] = { $gte: new Date(req.query.from) };
     if (req.query.to) {
       const toDate = new Date(req.query.to);
       toDate.setHours(23, 59, 59, 999);
-      query.createdAt = { ...query.createdAt, $lte: toDate };
+      query[dateField] = { ...query[dateField], $lte: toDate };
     }
 
     const [orders, total] = await Promise.all([
-      db.collection('shop_orders').find(query).sort({ createdAt: -1 }).skip(skip).limit(perPage).toArray(),
+      db.collection('shop_orders').find(query).sort({ [dateField]: -1 }).skip(skip).limit(perPage).toArray(),
       db.collection('shop_orders').countDocuments(query)
     ]);
 
@@ -643,6 +644,7 @@ router.get('/payments', async (req, res) => {
         invoiceUrl,
         invoiceNumber,
         createdAt: o.createdAt,
+        paidAt: o.paidAt || null,
         growRef: o.growRef || (gp && gp.asmachta) || raw.asmachta || '',
         cardSuffix: o.cardSuffix || (gp && gp.cardSuffix) || raw.cardSuffix || '',
         cardBrand: o.cardBrand || raw.cardBrand || '',
@@ -703,12 +705,13 @@ router.get('/orders', async (req, res) => {
     defaultMonday.setDate(now.getDate() + mondayOffset);
     defaultMonday.setHours(0, 0, 0, 0);
 
+    const dateField = req.query.dateField === 'paidAt' ? 'paidAt' : 'createdAt';
     const since = req.query.since ? new Date(req.query.since) : defaultMonday;
-    const filter = { createdAt: { $gte: since }, status: { $nin: ['pending_payment', 'cancelled_duplicate'] } };
-    if (req.query.until) filter.createdAt.$lte = new Date(req.query.until);
+    const filter = { [dateField]: { $gte: since }, status: { $nin: ['pending_payment', 'cancelled_duplicate'] } };
+    if (req.query.until) filter[dateField].$lte = new Date(req.query.until);
     const orders = await db.collection('shop_orders')
       .find(filter)
-      .sort({ createdAt: -1 })
+      .sort({ [dateField]: -1 })
       .toArray();
     res.json(orders);
   } catch (e) {
