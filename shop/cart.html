@@ -798,9 +798,9 @@ async function submitGrowForm() {
           let growVatType = 1; // Always 1 per Make/Meshulam requirement
           return {
             catalog_number: item._id || item.id || item.productId || (item.cartKey ? item.cartKey.split('_')[0] : '1'),
-            name: item.name + (item.variant ? ' (' + item.variant + ')' : ''),
-            price: item.price,
-            quantity: item.qty || 1,
+            name: item.name + (item.variant ? ' (' + item.variant + ')' : '') + (item.qty > 1 ? ' x' + item.qty : ''),
+            price: calcItemTotal(item),
+            quantity: 1,
             minimum_quantity: 1,
             productUrl: item.imageUrl || '',
             vatType: growVatType,
