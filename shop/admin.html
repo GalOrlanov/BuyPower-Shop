@@ -511,6 +511,7 @@ input:checked + .slider::before { transform: translateX(20px); }
               <option value="חד פעמי">🥤 חד פעמי</option>
               <option value="מוצרי ניקיון">🧹 מוצרי ניקיון</option>
               <option value="יינות ומשקאות מיוחדים">🍷 יינות ומשקאות מיוחדים</option>
+              <option value="ציוד משרדי">✏️ ציוד משרדי</option>
               <option value="כללי">📦 כללי</option>
             </select>
           </div>
@@ -1877,7 +1878,6 @@ async function renderPickup() {
   function findCategory(itemName) {
     const name = (itemName || '').trim();
     if (productCats[name]) return productCats[name];
-    // Try matching by base name (item name may include variant suffix like "- חסה" or "×2")
     for (const catName of catalogNames) {
       if (name.startsWith(catName)) return productCats[catName];
     }
@@ -3081,27 +3081,66 @@ function clearProductForm() {
   document.getElementById('variantsList').innerHTML = '';
 }
 
-function addVariantRow(name, modifier) {
+function addVariantRow(name, modifier, imageUrl) {
   const el = document.getElementById('variantsList');
   const row = document.createElement('div');
-  row.style.cssText = 'display:flex;gap:8px;align-items:center;margin-bottom:8px';
-  row.innerHTML = '<input type="text" placeholder="שם האפשרות (למשל: אדום)" value="' + (name||'') + '" style="flex:2;padding:7px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:0.85rem">' +
+  row.style.cssText = 'border:1.5px solid #d1d5db;border-radius:12px;padding:12px;margin-bottom:10px;background:#fafafa';
+  var imgPreview = imageUrl ? '<img src="' + imageUrl + '" style="width:48px;height:48px;object-fit:cover;border-radius:8px;border:1px solid #d1d5db">' : '<div style="width:48px;height:48px;border-radius:8px;border:2px dashed #d1d5db;display:flex;align-items:center;justify-content:center;font-size:1.2rem;color:#9ca3af">📷</div>';
+  row.innerHTML = '<div style="display:flex;gap:8px;align-items:center">' +
+    '<div class="variant-img-preview" style="cursor:pointer;flex-shrink:0" onclick="this.parentElement.parentElement.querySelector(\'.variant-file-input\').click()" title="לחץ להעלאת תמונה">' + imgPreview + '</div>' +
+    '<input type="text" placeholder="שם האפשרות (למשל: אדום)" value="' + (name||'') + '" style="flex:2;padding:7px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:0.85rem">' +
     '<input type="number" placeholder="תוספת מחיר ₪" value="' + (modifier||0) + '" style="flex:1;padding:7px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:0.85rem">' +
-    '<button class="btn btn-sm btn-red" onclick="this.parentElement.remove()">✕</button>';
+    '<input type="hidden" class="variant-image-url" value="' + (imageUrl||'') + '">' +
+    '<input type="file" class="variant-file-input" accept="image/*" style="display:none" onchange="uploadVariantImage(this)">' +
+    '<button class="btn btn-sm btn-red" onclick="this.closest(\'[style*=border]\').remove()">✕</button>' +
+    '</div>';
   el.appendChild(row);
 }
 
-function getVariants() {
-  const rows = document.getElementById('variantsList').querySelectorAll('div');
-  const variants = [];
-  rows.forEach(row => {
-    const inputs = row.querySelectorAll('input');
-    if (inputs.length >= 2) {
-      const name = inputs[0].value.trim();
-      const modifier = parseFloat(inputs[1].value) || 0;
-      if (name) variants.push({ name, price_modifier: modifier });
+async function uploadVariantImage(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const row = input.closest('[style*="border"]');
+  const preview = row.querySelector('.variant-img-preview');
+  const hiddenInput = row.querySelector('.variant-image-url');
+  preview.innerHTML = '<div style="width:48px;height:48px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.7rem;color:#6b7280">⏳</div>';
+  try {
+    const formData = new FormData();
+    formData.append('image', file);
+    const res = await fetch(API + '/upload-image', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (data.ok && data.imageUrl) {
+      hiddenInput.value = data.imageUrl;
+      preview.innerHTML = '<img src="' + data.imageUrl + '" style="width:48px;height:48px;object-fit:cover;border-radius:8px;border:1px solid #d1d5db">';
+    } else {
+      alert('שגיאה בהעלאת תמונה');
+      preview.innerHTML = '<div style="width:48px;height:48px;border-radius:8px;border:2px dashed #d1d5db;display:flex;align-items:center;justify-content:center;font-size:1.2rem;color:#9ca3af">📷</div>';
     }
-  });
+  } catch(e) {
+    alert('שגיאה בהעלאת תמונה: ' + e.message);
+    preview.innerHTML = '<div style="width:48px;height:48px;border-radius:8px;border:2px dashed #d1d5db;display:flex;align-items:center;justify-content:center;font-size:1.2rem;color:#9ca3af">📷</div>';
+  }
+}
+
+function getVariants() {
+  const rows = document.getElementById('variantsList').children;
+  const variants = [];
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    var nameInput = row.querySelector('input[type="text"]');
+    var modifierInput = row.querySelector('input[type="number"]');
+    var imgInput = row.querySelector('.variant-image-url');
+    if (nameInput && modifierInput) {
+      var name = nameInput.value.trim();
+      var modifier = parseFloat(modifierInput.value) || 0;
+      var imageUrl = imgInput ? imgInput.value.trim() : '';
+      if (name) {
+        var v = { name: name, price_modifier: modifier };
+        if (imageUrl) v.imageUrl = imageUrl;
+        variants.push(v);
+      }
+    }
+  }
   return variants;
 }
 
@@ -3127,7 +3166,7 @@ function editProduct(p) {
   document.getElementById('productFormTitle').textContent = '✏️ עריכת מוצר';
   // Load variants
   document.getElementById('variantsList').innerHTML = '';
-  (p.variants || []).forEach(v => addVariantRow(v.name, v.price_modifier));
+  (p.variants || []).forEach(v => addVariantRow(v.name, v.price_modifier, v.imageUrl));
   setSelectedPickupPoints(p.pickupPoints || []);
   // Switch to products tab and scroll to form
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -5156,13 +5195,15 @@ async function doExportSupplierPDF(saveToSupplier) {
     if (!r.ok) { document.getElementById('soErr').textContent = 'שגיאה בשמירה'; document.getElementById('soErr').style.display='block'; return; }
   }
 
+  var showPrices = false;
+
   var rows = items.map(function(item,i){
     return '<tr>' +
       '<td style="padding:10px 14px;text-align:center">'+(i+1)+'</td>' +
       '<td style="padding:10px 14px;font-weight:700">'+item.name+'</td>' +
       '<td style="padding:10px 14px;text-align:center;font-weight:900;color:#14532d">'+item.qty+'</td>' +
-      '<td style="padding:10px 14px;text-align:center">'+(item.unitPrice ? '₪'+item.unitPrice.toFixed(2) : '—')+'</td>' +
-      '<td style="padding:10px 14px;text-align:center;font-weight:700">'+(item.lineTotal ? '₪'+item.lineTotal.toFixed(2) : '—')+'</td>' +
+      (showPrices ? '<td style="padding:10px 14px;text-align:center">'+(item.unitPrice ? '₪'+item.unitPrice.toFixed(2) : '—')+'</td>' +
+      '<td style="padding:10px 14px;text-align:center;font-weight:700">'+(item.lineTotal ? '₪'+item.lineTotal.toFixed(2) : '—')+'</td>' : '') +
       '</tr>';
   }).join('');
 
@@ -5175,15 +5216,15 @@ async function doExportSupplierPDF(saveToSupplier) {
     '<th style="width:40px;text-align:center">#</th>' +
     '<th>מוצר</th>' +
     '<th style="width:70px;text-align:center">כמות</th>' +
-    '<th style="width:90px;text-align:center">מחיר ליח׳</th>' +
-    '<th style="width:100px;text-align:center">סה"כ שורה</th>' +
+    (showPrices ? '<th style="width:90px;text-align:center">מחיר ליח\'</th>' +
+    '<th style="width:100px;text-align:center">סה"כ שורה</th>' : '') +
     '</tr></thead><tbody>' +
     rows +
     '<tr class="total-row">' +
     '<td colspan="2" style="padding:10px 14px">📦 סה"כ</td>' +
     '<td style="padding:10px 14px;text-align:center">'+totalUnits+'</td>' +
-    '<td style="padding:10px 14px"></td>' +
-    '<td style="padding:10px 14px;text-align:center;color:#14532d">₪'+totalCost.toFixed(2)+'</td>' +
+    (showPrices ? '<td style="padding:10px 14px"></td>' +
+    '<td style="padding:10px 14px;text-align:center;color:#14532d">₪'+totalCost.toFixed(2)+'</td>' : '') +
     '</tr></tbody></table></body></html>');
   w.document.close();
   document.getElementById('supplierOrderModal').style.display='none';

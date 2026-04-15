@@ -1063,10 +1063,8 @@ router.put('/users/:id/password', async (req, res) => {
 
 // POST /api/shop/users/register
 router.post('/users/register', async (req, res) => {
-  const client = new MongoClient(MONGODB_URI);
   try {
-    await client.connect();
-    const db = client.db('groupPurchase');
+    const db = await getDb();
     const { name, phone, email, city, idNumber, password } = req.body;
     let bcrypt; try { bcrypt = require('bcryptjs'); } catch(e) { bcrypt = null; }
     const pickupPoint = (req.body.pickupPoint || '').trim();
@@ -1100,15 +1098,13 @@ router.post('/users/register', async (req, res) => {
     user._id = result.insertedId;
     const { passwordHash: _ph, ...safeUser } = user;
     res.json({ user: safeUser });
-  } finally { await client.close(); }
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // POST /api/shop/users/login
 router.post('/users/login', async (req, res) => {
-  const client = new MongoClient(MONGODB_URI);
   try {
-    await client.connect();
-    const db = client.db('groupPurchase');
+    const db = await getDb();
     const cleanPhone = (req.body.phone||'').replace(/[^0-9]/g,'');
     const password = req.body.password || '';
     const user = await db.collection('shop_users').findOne({ phone: cleanPhone });
@@ -1129,7 +1125,7 @@ router.post('/users/login', async (req, res) => {
     safeUser.lastLogin = new Date();
     const token = jwt.sign({ userId: user._id.toString(), phone: safeUser.phone, name: safeUser.name, isAdmin: safeUser.isAdmin || false, isEmployee: user.isEmployee || user.role === 'employee' || false, pickupPoint: user.pickupPoint || '' }, JWT_SECRET, { expiresIn: '30d' });
     res.json({ user: safeUser, token });
-  } finally { await client.close(); }
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 
@@ -1144,10 +1140,8 @@ router.post('/admin/auth', async (req, res) => {
 
 // POST /api/shop/users/send-otp
 router.post('/users/send-otp', async (req, res) => {
-  const client = new MongoClient(MONGODB_URI);
   try {
-    await client.connect();
-    const db = client.db('groupPurchase');
+    const db = await getDb();
     const cleanPhone = (req.body.phone||'').replace(/[^0-9]/g,'');
     if (!cleanPhone || cleanPhone.length < 9) return res.status(400).json({ error: 'מספר טלפון לא תקין' });
     const user = await db.collection('shop_users').findOne({ phone: cleanPhone });
@@ -1190,15 +1184,12 @@ router.post('/users/send-otp', async (req, res) => {
     }
     res.json({ ok: true });
   } catch(e) { console.error(e); res.status(500).json({ error: e.message }); }
-  finally { await client.close(); }
 });
 
 // POST /api/shop/users/verify-otp
 router.post('/users/verify-otp', async (req, res) => {
-  const client = new MongoClient(MONGODB_URI);
   try {
-    await client.connect();
-    const db = client.db('groupPurchase');
+    const db = await getDb();
     const cleanPhone = (req.body.phone||'').replace(/[^0-9]/g,'');
     const otp = (req.body.otp||'').trim();
     const user = await db.collection('shop_users').findOne({ phone: cleanPhone });
@@ -1211,15 +1202,12 @@ router.post('/users/verify-otp', async (req, res) => {
     const token = jwt.sign({ userId: user._id.toString(), phone: safeUser.phone, name: safeUser.name, isAdmin: safeUser.isAdmin || false, isEmployee: user.isEmployee || user.role === 'employee' || false, pickupPoint: user.pickupPoint || '' }, JWT_SECRET, { expiresIn: '30d' });
     res.json({ user: safeUser, token });
   } catch(e) { console.error(e); res.status(500).json({ error: e.message }); }
-  finally { await client.close(); }
 });
 
 // POST /api/shop/users/forgot-password
 router.post('/users/forgot-password', async (req, res) => {
-  const client = new MongoClient(MONGODB_URI);
   try {
-    await client.connect();
-    const db = client.db('groupPurchase');
+    const db = await getDb();
     const method = req.body.method || 'email'; // 'email' or 'sms'
     const email = (req.body.email||'').trim().toLowerCase();
     const phone = (req.body.phone||'').replace(/[^0-9]/g, '');
@@ -1279,15 +1267,12 @@ router.post('/users/forgot-password', async (req, res) => {
     }
     res.json({ ok: true });
   } catch(e) { console.error(e); res.status(500).json({ error: e.message }); }
-  finally { await client.close(); }
 });
 
 // POST /api/shop/users/reset-password
 router.post('/users/reset-password', async (req, res) => {
-  const client = new MongoClient(MONGODB_URI);
   try {
-    await client.connect();
-    const db = client.db('groupPurchase');
+    const db = await getDb();
     const { token, password } = req.body;
     if (!token || !password || password.length < 6) return res.status(400).json({ error: 'פרטים לא תקינים' });
     const user = await db.collection('shop_users').findOne({ resetToken: token, resetExpires: { $gt: new Date() } });
@@ -1297,7 +1282,6 @@ router.post('/users/reset-password', async (req, res) => {
     await db.collection('shop_users').updateOne({ _id: user._id }, { $set: { passwordHash: hash }, $unset: { resetToken: '', resetExpires: '' } });
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
-  finally { await client.close(); }
 });
 
 // POST /api/shop/payment/create — Create Grow payment link via Make webhook
