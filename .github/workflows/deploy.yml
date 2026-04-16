@@ -18,7 +18,12 @@ jobs:
             cd /root/.openclaw/workspace/BuyPower-Shop
             git fetch origin main
             git reset --hard origin/main
+            # Rebuild TypeScript so new route registrations in index.ts and jobs take effect
+            cd api && npm run build && cd ..
+            # Also copy raw .js files (some routes are JS-only and not compiled by tsc)
             cp api/src/api/routes/*.js api/dist/api/routes/ 2>/dev/null || true
+            mkdir -p api/dist/jobs
+            cp api/src/jobs/*.js api/dist/jobs/ 2>/dev/null || true
             cp -v shop/*.html /var/www/shop/
             mkdir -p /var/www/shop/shop
             cp shop/*.html /var/www/shop/shop/
