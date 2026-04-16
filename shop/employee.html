@@ -354,11 +354,9 @@ function cardHtml(order) {
         ${allCollected && !order.pickedUp ? '<div style="font-size:.78rem;color:#15803d;font-weight:700;margin-top:6px">🎉 הלקוח סימן איסוף לכל הפריטים</div>' : ''}
       </div>
       <div class="order-actions">
-        <button class="btn-pickup ${order.pickedUp || allCollected ? 'done' : 'pending'}" onclick="togglePickup('${order._id}', ${!!order.pickedUp})">
-          ${order.pickedUp || allCollected ? '✅ נאסף' : '⬜ סמן איסוף'}
-        </button>
-        <button class="btn-email" onclick="sendEmail('${order._id}')">📧 פירוט הזמנה במייל</button>
-        <button class="btn-sms" onclick="sendSMS('${order._id}')">📱 SMS תזכורת לאיסוף</button>
+        ${order.pickedUp || allCollected
+          ? '<div style="background:#d1fae5;color:#065f46;padding:8px 14px;border-radius:10px;font-weight:700;font-size:.85rem;text-align:center">✅ נאסף</div>'
+          : '<div style="background:#fef3c7;color:#92400e;padding:8px 14px;border-radius:10px;font-weight:700;font-size:.85rem;text-align:center">⏳ ממתין לאיסוף</div>'}
       </div>
     </div>
   </div>`;
