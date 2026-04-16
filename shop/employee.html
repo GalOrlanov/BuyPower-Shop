@@ -130,6 +130,14 @@
           <label>נקודת איסוף</label>
           <select id="pointFilter"><option value="">כל הנקודות</option></select>
         </div>
+        <div class="fgroup" style="min-width:120px">
+          <label>סטטוס</label>
+          <select id="statusFilter" onchange="renderList()">
+            <option value="">הכל</option>
+            <option value="pending">⏳ טרם נאספו</option>
+            <option value="done">✅ נאספו</option>
+          </select>
+        </div>
         <button class="btn-green" onclick="loadData()">🔄 רענן</button>
         <button class="btn-blue" onclick="showSummary()">📊 סיכום</button>
       </div>
@@ -301,9 +309,12 @@ function renderStats(stats) {
 function renderList() {
   if (!_data) return;
   const q = (document.getElementById('searchBox').value || '').toLowerCase();
+  const statusFilter = (document.getElementById('statusFilter') || {}).value || '';
   let orders = _data.orders.filter(o => {
-    if (!q) return true;
-    return (o.customerName||'').toLowerCase().includes(q) || (o.customerPhone||'').toLowerCase().includes(q);
+    if (q && !(o.customerName||'').toLowerCase().includes(q) && !(o.customerPhone||'').toLowerCase().includes(q)) return false;
+    if (statusFilter === 'pending' && o.pickedUp) return false;
+    if (statusFilter === 'done' && !o.pickedUp) return false;
+    return true;
   });
   const pending = orders.filter(o => !o.pickedUp).sort((a,b) => (a.customerName||'').localeCompare(b.customerName||'', 'he'));
   const done = orders.filter(o => o.pickedUp).sort((a,b) => (a.customerName||'').localeCompare(b.customerName||'', 'he'));
@@ -354,9 +365,9 @@ function cardHtml(order) {
         ${allCollected && !order.pickedUp ? '<div style="font-size:.78rem;color:#15803d;font-weight:700;margin-top:6px">🎉 הלקוח סימן איסוף לכל הפריטים</div>' : ''}
       </div>
       <div class="order-actions">
-        ${order.pickedUp || allCollected
-          ? '<div style="background:#d1fae5;color:#065f46;padding:8px 14px;border-radius:10px;font-weight:700;font-size:.85rem;text-align:center">✅ נאסף</div>'
-          : '<div style="background:#fef3c7;color:#92400e;padding:8px 14px;border-radius:10px;font-weight:700;font-size:.85rem;text-align:center">⏳ ממתין לאיסוף</div>'}
+        <button class="btn-pickup ${order.pickedUp || allCollected ? 'done' : 'pending'}" onclick="togglePickup('${order._id}', ${!!order.pickedUp})">
+          ${order.pickedUp || allCollected ? '✅ נאסף' : '⬜ סמן איסוף'}
+        </button>
       </div>
     </div>
   </div>`;
