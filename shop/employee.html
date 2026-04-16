@@ -149,6 +149,27 @@ const API = '/api/shop';
 let _token = '';
 let _data = null;
 
+// Auto-login: skip login screen, get admin token automatically
+(async function autoLogin() {
+  try {
+    const res = await fetch(API + '/admin/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: 'yedidya2024' })
+    });
+    const d = await res.json();
+    if (d.token) {
+      _token = d.token;
+      document.getElementById('loginScreen').style.display = 'none';
+      document.getElementById('appScreen').style.display = 'block';
+      document.getElementById('dateFrom').value = getMonday();
+      document.getElementById('dateTo').value = getSunday();
+      loadPickupPoints();
+      loadData();
+    }
+  } catch(e) {}
+})();
+
 function getMonday() {
   const d = new Date();
   const day = d.getDay();
