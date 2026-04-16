@@ -2097,7 +2097,7 @@ router.get('/admin/pickup-tracking', verifyShopToken, async (req, res) => {
 
     const query = {
       createdAt: { $gte: weekStart, $lte: weekEnd },
-      status: { $in: ['paid', 'confirmed', 'handled'] }
+      status: { $in: ['paid', 'confirmed', 'handled', 'collected', 'ready'] }
     };
     if (req.query.pickupPoint) {
       query.pickupLocation = req.query.pickupPoint;
