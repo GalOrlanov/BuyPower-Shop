@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>🎰 הגרלה שבועית</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --green: #15803d;
+    --green-dark: #14532d;
+    --green-light: #dcfce7;
+    --gold: #f59e0b;
+    --gold-dark: #d97706;
+    --gold-light: #fef3c7;
+    --text: #1a1a1a;
+    --text-muted: #6b7280;
+    --text-light: #9ca3af;
+    --bg: #f8fafc;
+  }
+  body {
+    font-family: -apple-system, 'Segoe UI', Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    direction: rtl;
+    min-height: 100vh;
+    line-height: 1.5;
+    overflow-x: hidden;
+  }
+
+  /* Hero / Header */
+  .hero {
+    background: linear-gradient(135deg, #15803d 0%, #16a34a 50%, #f59e0b 100%);
+    color: white;
+    padding: 48px 20px 80px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      radial-gradient(circle at 20% 30%, rgba(255,255,255,.15) 0%, transparent 50%),
+      radial-gradient(circle at 80% 70%, rgba(255,255,255,.1) 0%, transparent 50%);
+    pointer-events: none;
+  }
+  .hero-emoji { font-size: 3.2rem; margin-bottom: 4px; filter: drop-shadow(0 4px 12px rgba(0,0,0,.25)); }
+  .hero-title { font-size: 2rem; font-weight: 900; margin-bottom: 6px; text-shadow: 0 2px 8px rgba(0,0,0,.2); }
+  .hero-sub { font-size: 1rem; opacity: .95; font-weight: 500; }
+
+  .wrap {
+    max-width: 560px;
+    margin: -50px auto 40px;
+    padding: 0 16px;
+    position: relative;
+    z-index: 2;
+  }
+
+  /* Card base */
+  .card {
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0 10px 40px rgba(0,0,0,.08), 0 2px 8px rgba(0,0,0,.04);
+    padding: 24px;
+    margin-bottom: 16px;
+  }
+
+  /* Winner card */
+  .winner-card {
+    background: linear-gradient(135deg, #fff 0%, #fffbeb 100%);
+    border: 3px solid var(--gold);
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    animation: winnerFadeIn .7s cubic-bezier(.2,.9,.3,1.3);
+  }
+  .winner-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 50% 0%, rgba(245,158,11,.08) 0%, transparent 60%);
+    pointer-events: none;
+  }
+  @keyframes winnerFadeIn {
+    0% { opacity: 0; transform: translateY(20px) scale(.9); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .winner-label {
+    font-size: .95rem;
+    color: var(--gold-dark);
+    font-weight: 800;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+  }
+  .winner-title {
+    font-size: 1.4rem;
+    font-weight: 900;
+    color: var(--green-dark);
+    margin-bottom: 20px;
+  }
+  .winner-number-box {
+    display: inline-block;
+    background: linear-gradient(135deg, #fff, #fef9c3);
+    border: 3px dashed var(--gold);
+    border-radius: 18px;
+    padding: 16px 24px;
+    margin: 10px 0;
+    box-shadow: 0 8px 20px rgba(245,158,11,.25);
+  }
+  .winner-digits {
+    font-family: 'SF Mono', Menlo, monospace;
+    font-size: 4rem;
+    font-weight: 900;
+    color: var(--green-dark);
+    letter-spacing: 8px;
+    line-height: 1;
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+  }
+  .winner-digits span {
+    display: inline-block;
+    min-width: 48px;
+    background: linear-gradient(180deg, #fff 0%, #f0fdf4 100%);
+    border: 2px solid var(--green);
+    border-radius: 10px;
+    padding: 6px 4px;
+    box-shadow: 0 2px 6px rgba(0,0,0,.08);
+  }
+  .winner-prize {
+    margin-top: 16px;
+    font-size: 1.05rem;
+    color: var(--text);
+    font-weight: 600;
+  }
+  .winner-entries {
+    margin-top: 8px;
+    font-size: .82rem;
+    color: var(--text-muted);
+  }
+
+  /* Countdown */
+  .countdown-card {
+    background: linear-gradient(135deg, var(--green) 0%, #166534 100%);
+    color: white;
+    text-align: center;
+  }
+  .countdown-label {
+    font-size: .92rem;
+    opacity: .9;
+    margin-bottom: 14px;
+    font-weight: 600;
+  }
+  .countdown-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .countdown-box {
+    background: rgba(255,255,255,.15);
+    backdrop-filter: blur(10px);
+    border-radius: 12px;
+    padding: 12px 4px;
+    border: 1px solid rgba(255,255,255,.15);
+  }
+  .countdown-num {
+    font-size: 1.7rem;
+    font-weight: 900;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .countdown-unit {
+    font-size: .68rem;
+    opacity: .85;
+    margin-top: 4px;
+    font-weight: 600;
+  }
+  .participants {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255,255,255,.2);
+    padding: 8px 18px;
+    border-radius: 99px;
+    font-size: .92rem;
+    font-weight: 700;
+  }
+
+  /* Form */
+  .form-title {
+    font-size: 1.25rem;
+    font-weight: 900;
+    color: var(--green-dark);
+    margin-bottom: 4px;
+  }
+  .form-sub {
+    font-size: .88rem;
+    color: var(--text-muted);
+    margin-bottom: 18px;
+  }
+  .form-sub strong { color: var(--gold-dark); }
+  .field { margin-bottom: 14px; }
+  .field label {
+    display: block;
+    font-size: .85rem;
+    font-weight: 700;
+    color: #374151;
+    margin-bottom: 6px;
+  }
+  .field input {
+    width: 100%;
+    padding: 12px 14px;
+    border: 2px solid #e5e7eb;
+    border-radius: 12px;
+    font-size: 1rem;
+    font-family: inherit;
+    direction: rtl;
+    outline: none;
+    transition: border-color .2s, box-shadow .2s;
+    background: #fafafa;
+  }
+  .field input:focus {
+    border-color: var(--green);
+    box-shadow: 0 0 0 3px rgba(21,128,61,.12);
+    background: white;
+  }
+  .separator {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-light);
+    font-size: .82rem;
+    margin: 12px 0;
+  }
+  .separator::before, .separator::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: #e5e7eb;
+  }
+
+  /* File upload */
+  .file-zone {
+    border: 2.5px dashed #d1d5db;
+    border-radius: 14px;
+    padding: 22px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: all .2s;
+    background: #fafafa;
+  }
+  .file-zone:hover {
+    border-color: var(--green);
+    background: var(--green-light);
+  }
+  .file-zone.has-file {
+    border-style: solid;
+    border-color: var(--green);
+    background: var(--green-light);
+  }
+  .file-zone-icon { font-size: 2rem; margin-bottom: 6px; }
+  .file-zone-text { font-size: .9rem; font-weight: 600; color: #374151; }
+  .file-zone-sub { font-size: .78rem; color: var(--text-muted); margin-top: 2px; }
+  .file-preview {
+    margin-top: 12px;
+    max-width: 100%;
+    max-height: 220px;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0,0,0,.1);
+    display: none;
+  }
+
+  .submit-btn {
+    width: 100%;
+    padding: 15px;
+    background: linear-gradient(135deg, var(--green), #16a34a);
+    color: white;
+    border: none;
+    border-radius: 14px;
+    font-size: 1.05rem;
+    font-weight: 800;
+    font-family: inherit;
+    cursor: pointer;
+    margin-top: 8px;
+    box-shadow: 0 6px 20px rgba(21,128,61,.35);
+    transition: transform .15s, box-shadow .15s;
+  }
+  .submit-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(21,128,61,.45); }
+  .submit-btn:active { transform: translateY(0); }
+  .submit-btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+  .error-msg {
+    background: #fef2f2;
+    color: #991b1b;
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: .88rem;
+    margin-top: 10px;
+    border-right: 4px solid #dc2626;
+    display: none;
+  }
+  .error-msg.show { display: block; }
+
+  /* Success view */
+  .success-card {
+    text-align: center;
+    animation: winnerFadeIn .6s cubic-bezier(.2,.9,.3,1.3);
+  }
+  .success-emoji { font-size: 3.5rem; margin-bottom: 6px; }
+  .success-title {
+    font-size: 1.3rem;
+    font-weight: 900;
+    color: var(--green-dark);
+    margin-bottom: 4px;
+  }
+  .success-sub { color: var(--text-muted); font-size: .92rem; margin-bottom: 18px; }
+  .my-ticket {
+    display: inline-block;
+    background: linear-gradient(135deg, #f0fdf4, #fff);
+    border: 2.5px solid var(--green);
+    border-radius: 16px;
+    padding: 14px 22px;
+    margin: 8px 0 14px;
+  }
+  .my-ticket-label {
+    font-size: .82rem;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+    font-weight: 600;
+  }
+  .my-ticket-num {
+    font-family: 'SF Mono', Menlo, monospace;
+    font-size: 2.4rem;
+    font-weight: 900;
+    color: var(--green);
+    letter-spacing: 6px;
+  }
+  .pending-badge {
+    display: inline-block;
+    background: var(--gold-light);
+    color: var(--gold-dark);
+    padding: 6px 14px;
+    border-radius: 99px;
+    font-size: .85rem;
+    font-weight: 700;
+  }
+
+  /* History */
+  .history-title {
+    font-size: 1.1rem;
+    font-weight: 900;
+    color: var(--green-dark);
+    margin-bottom: 14px;
+  }
+  .history-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 4px;
+    border-bottom: 1px solid #f3f4f6;
+  }
+  .history-item:last-child { border-bottom: none; }
+  .history-date { font-size: .85rem; color: var(--text-muted); }
+  .history-num {
+    font-family: 'SF Mono', Menlo, monospace;
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: var(--green-dark);
+    background: #f0fdf4;
+    padding: 4px 12px;
+    border-radius: 8px;
+    letter-spacing: 2px;
+  }
+
+  .footer {
+    text-align: center;
+    padding: 20px;
+    color: var(--text-light);
+    font-size: .78rem;
+  }
+
+  .loading {
+    text-align: center;
+    padding: 40px;
+    color: var(--text-light);
+  }
+
+  /* Confetti */
+  .confetti {
+    position: fixed;
+    top: -10px;
+    width: 10px;
+    height: 10px;
+    z-index: 9999;
+    pointer-events: none;
+    border-radius: 2px;
+    animation: confettiFall 3s linear forwards;
+  }
+  @keyframes confettiFall {
+    0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; }
+    100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+  }
+
+  @media (max-width: 420px) {
+    .winner-digits { font-size: 3rem; letter-spacing: 4px; }
+    .winner-digits span { min-width: 38px; }
+    .countdown-num { font-size: 1.4rem; }
+    .hero-title { font-size: 1.6rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-emoji">🎰</div>
+  <div class="hero-title">הגרלה שבועית</div>
+  <div class="hero-sub">נלחמים ביוקר המחיה</div>
+</div>
+
+<div class="wrap" id="mainWrap">
+  <div class="loading" id="initialLoading">⏳ טוען...</div>
+</div>
+
+<div class="footer">© BuyPower — הגרלה שבועית</div>
+
+<script>
+const API = '/api/raffle';
+let _status = null;
+let _myTicket = null;
+let _receiptUrl = '';
+let _countdownInterval = null;
+
+// ── LOAD ──
+async function loadStatus() {
+  try {
+    const res = await fetch(API + '/status');
+    _status = await res.json();
+    if (_status.error) throw new Error(_status.error);
+    render();
+    // Persist my ticket across page loads
+    const saved = localStorage.getItem('myRaffleTicket');
+    if (saved) {
+      try {
+        const t = JSON.parse(saved);
+        const weekStart = new Date(_status.currentWeekStart).getTime();
+        if (t.registeredAt && new Date(t.registeredAt).getTime() >= weekStart) {
+          _myTicket = t;
+          render();
+        } else {
+          localStorage.removeItem('myRaffleTicket');
+        }
+      } catch(e) {}
+    }
+  } catch (e) {
+    document.getElementById('mainWrap').innerHTML =
+      '<div class="card" style="text-align:center;color:#dc2626">❌ שגיאה בטעינה. נסה שוב מאוחר יותר.</div>';
+  }
+}
+
+async function loadHistory() {
+  try {
+    const res = await fetch(API + '/history?limit=8');
+    return await res.json();
+  } catch(e) { return []; }
+}
+
+// ── RENDER ──
+async function render() {
+  const wrap = document.getElementById('mainWrap');
+  let html = '';
+
+  // If user just registered
+  if (_myTicket) {
+    html += renderMyTicket();
+  }
+
+  // Latest winner (if drawn recently)
+  if (_status.lastWinner) {
+    html += renderWinner(_status.lastWinner);
+  }
+
+  // Countdown
+  html += renderCountdown();
+
+  // Registration form (only if not already registered)
+  if (!_myTicket && _status.enabled !== false) {
+    html += renderForm();
+  } else if (_status.enabled === false) {
+    html += '<div class="card" style="text-align:center"><div style="font-size:2rem">⏸️</div><div style="font-weight:800;color:#6b7280;margin-top:8px">ההגרלה מושהית כרגע</div></div>';
+  }
+
+  // History
+  html += '<div class="card" id="historyCard"><div class="history-title">📜 זוכים קודמים</div><div id="historyList" class="loading">טוען...</div></div>';
+
+  wrap.innerHTML = html;
+
+  startCountdown();
+  bindForm();
+
+  // Load history async
+  const history = await loadHistory();
+  const histEl = document.getElementById('historyList');
+  if (histEl) {
+    if (!history.length) {
+      histEl.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:20px">עדיין אין זוכים — אולי את/ה תהיה הראשון!</div>';
+    } else {
+      histEl.innerHTML = history.map(h => {
+        const d = new Date(h.drawnAt);
+        const date = d.toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' });
+        return '<div class="history-item">' +
+          '<div><div style="font-weight:600">' + (h.prizeDescription || 'פרס השבוע') + '</div>' +
+          '<div class="history-date">📅 ' + date + '</div></div>' +
+          '<div class="history-num">' + h.ticketNumber + '</div>' +
+          '</div>';
+      }).join('');
+    }
+  }
+}
+
+function renderWinner(w) {
+  const digits = String(w.ticketNumber).padStart(4, '0').split('').map(d =>
+    '<span>' + d + '</span>').join('');
+  const dateStr = new Date(w.drawnAt).toLocaleDateString('he-IL', {
+    day: 'numeric', month: 'long', year: 'numeric'
+  });
+  return '<div class="card winner-card">' +
+    '<div class="winner-label">🏆 זוכה אחרון</div>' +
+    '<div class="winner-title">הזוכה הוא...</div>' +
+    '<div class="winner-number-box"><div class="winner-digits">' + digits + '</div></div>' +
+    '<div class="winner-prize">' + (w.prizeDescription || 'פרס השבוע 🎁') + '</div>' +
+    '<div class="winner-entries">מתוך ' + (w.totalEntries || 0) + ' משתתפים · ' + dateStr + '</div>' +
+    '</div>';
+}
+
+function renderCountdown() {
+  const approved = _status.approvedCount || 0;
+  return '<div class="card countdown-card">' +
+    '<div class="countdown-label">⏱️ ההגרלה הבאה בעוד</div>' +
+    '<div class="countdown-grid" id="cdGrid">' +
+      '<div class="countdown-box"><div class="countdown-num" id="cdDays">--</div><div class="countdown-unit">ימים</div></div>' +
+      '<div class="countdown-box"><div class="countdown-num" id="cdHours">--</div><div class="countdown-unit">שעות</div></div>' +
+      '<div class="countdown-box"><div class="countdown-num" id="cdMin">--</div><div class="countdown-unit">דקות</div></div>' +
+      '<div class="countdown-box"><div class="countdown-num" id="cdSec">--</div><div class="countdown-unit">שניות</div></div>' +
+    '</div>' +
+    '<div class="participants">👥 ' + approved + ' משתתפים השבוע</div>' +
+    '</div>';
+}
+
+function renderForm() {
+  const minAmount = _status.minReceiptAmount || 200;
+  const prize = _status.prizeDescription || 'פרס מתוק';
+  return '<div class="card">' +
+    '<div class="form-title">🎟️ הירשם להגרלה</div>' +
+    '<div class="form-sub">קנית מעל <strong>₪' + minAmount + '</strong>? העלה תמונת קבלה וקבל מספר הגרלה ייחודי!<br>' +
+    '<span style="color:#15803d;font-weight:600">🎁 הפרס: ' + prize + '</span></div>' +
+    '<div class="field"><label>שם מלא *</label><input type="text" id="fName" placeholder="ישראל ישראלי" autocomplete="name"></div>' +
+    '<div class="field"><label>מספר טלפון</label><input type="tel" id="fPhone" placeholder="050-1234567" dir="ltr" autocomplete="tel"></div>' +
+    '<div class="separator">או</div>' +
+    '<div class="field"><label>כתובת מייל</label><input type="email" id="fEmail" placeholder="you@example.com" dir="ltr" autocomplete="email"></div>' +
+    '<div class="field"><label>📷 תמונת קבלה (חובה)</label>' +
+      '<div class="file-zone" id="fileZone" onclick="document.getElementById(\'fFile\').click()">' +
+        '<div class="file-zone-icon">📸</div>' +
+        '<div class="file-zone-text" id="fileZoneText">לחץ כאן להעלאת תמונת הקבלה</div>' +
+        '<div class="file-zone-sub">JPG/PNG עד 5MB</div>' +
+      '</div>' +
+      '<input type="file" id="fFile" accept="image/*" style="display:none">' +
+      '<img id="filePreview" class="file-preview" alt="preview">' +
+    '</div>' +
+    '<div class="error-msg" id="formError"></div>' +
+    '<button class="submit-btn" id="submitBtn" onclick="submitForm()">הירשם להגרלה →</button>' +
+    '</div>';
+}
+
+function renderMyTicket() {
+  const digits = String(_myTicket.ticketNumber).padStart(4, '0').split('').map(d =>
+    '<span style="display:inline-block;background:white;border:2px solid var(--green);border-radius:8px;padding:4px 8px;margin:0 2px;min-width:32px">' + d + '</span>').join('');
+  return '<div class="card success-card">' +
+    '<div class="success-emoji">🎉</div>' +
+    '<div class="success-title">נרשמת בהצלחה!</div>' +
+    '<div class="success-sub">שמור את המספר שלך:</div>' +
+    '<div class="my-ticket">' +
+      '<div class="my-ticket-label">המספר שלך להגרלה</div>' +
+      '<div class="my-ticket-num">' + _myTicket.ticketNumber + '</div>' +
+    '</div>' +
+    '<div><span class="pending-badge">⏳ ממתין לאישור הקבלה</span></div>' +
+    '<div style="margin-top:14px;font-size:.85rem;color:#6b7280;line-height:1.6">לאחר שהקבלה תאומת, המספר שלך ייכנס להגרלה.<br>בהצלחה! 🍀</div>' +
+    '</div>';
+}
+
+// ── COUNTDOWN ──
+function startCountdown() {
+  if (_countdownInterval) clearInterval(_countdownInterval);
+  const target = new Date(_status.nextDrawAt).getTime();
+  function update() {
+    const now = Date.now();
+    let diff = Math.max(0, target - now);
+    const days = Math.floor(diff / 86400000); diff -= days * 86400000;
+    const hrs = Math.floor(diff / 3600000); diff -= hrs * 3600000;
+    const mins = Math.floor(diff / 60000); diff -= mins * 60000;
+    const secs = Math.floor(diff / 1000);
+    const d = document.getElementById('cdDays');
+    const h = document.getElementById('cdHours');
+    const m = document.getElementById('cdMin');
+    const s = document.getElementById('cdSec');
+    if (d) d.textContent = days;
+    if (h) h.textContent = String(hrs).padStart(2, '0');
+    if (m) m.textContent = String(mins).padStart(2, '0');
+    if (s) s.textContent = String(secs).padStart(2, '0');
+  }
+  update();
+  _countdownInterval = setInterval(update, 1000);
+}
+
+// ── FORM ──
+function bindForm() {
+  const fileInput = document.getElementById('fFile');
+  if (fileInput) fileInput.addEventListener('change', handleFile);
+}
+
+async function handleFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const zone = document.getElementById('fileZone');
+  const txt = document.getElementById('fileZoneText');
+  const preview = document.getElementById('filePreview');
+  txt.textContent = '⏳ מעלה...';
+  zone.classList.remove('has-file');
+
+  const formData = new FormData();
+  formData.append('image', file);
+  try {
+    const res = await fetch('/api/shop/upload-image', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (data.ok && data.imageUrl) {
+      _receiptUrl = data.imageUrl;
+      zone.classList.add('has-file');
+      txt.textContent = '✅ הקבלה הועלתה';
+      preview.src = data.imageUrl;
+      preview.style.display = 'block';
+    } else {
+      txt.textContent = '❌ שגיאה בהעלאה, נסה שוב';
+    }
+  } catch(e) {
+    txt.textContent = '❌ שגיאת רשת';
+  }
+}
+
+async function submitForm() {
+  const name = document.getElementById('fName').value.trim();
+  const phone = document.getElementById('fPhone').value.trim();
+  const email = document.getElementById('fEmail').value.trim();
+  const errEl = document.getElementById('formError');
+  const btn = document.getElementById('submitBtn');
+
+  errEl.classList.remove('show');
+
+  if (!name) { errEl.textContent = '❌ נא להזין שם'; errEl.classList.add('show'); return; }
+  if (!phone && !email) { errEl.textContent = '❌ נא להזין טלפון או מייל'; errEl.classList.add('show'); return; }
+  if (!_receiptUrl) { errEl.textContent = '❌ נא להעלות תמונת קבלה'; errEl.classList.add('show'); return; }
+
+  btn.disabled = true;
+  btn.textContent = '⏳ נרשם...';
+
+  try {
+    const res = await fetch(API + '/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, phone, email, receiptImageUrl: _receiptUrl })
+    });
+    const d = await res.json();
+    if (d.error) {
+      if (d.ticketNumber) {
+        // Already registered
+        _myTicket = { ticketNumber: d.ticketNumber, registeredAt: new Date().toISOString() };
+        localStorage.setItem('myRaffleTicket', JSON.stringify(_myTicket));
+        render();
+        fireConfetti();
+        return;
+      }
+      errEl.textContent = '❌ ' + d.error;
+      errEl.classList.add('show');
+      btn.disabled = false;
+      btn.textContent = 'הירשם להגרלה →';
+      return;
+    }
+    _myTicket = { ticketNumber: d.ticketNumber, registeredAt: new Date().toISOString() };
+    localStorage.setItem('myRaffleTicket', JSON.stringify(_myTicket));
+    await loadStatus();
+    fireConfetti();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  } catch(e) {
+    errEl.textContent = '❌ שגיאת רשת, נסה שוב';
+    errEl.classList.add('show');
+    btn.disabled = false;
+    btn.textContent = 'הירשם להגרלה →';
+  }
+}
+
+// ── CONFETTI ──
+function fireConfetti() {
+  const colors = ['#15803d', '#f59e0b', '#16a34a', '#fbbf24', '#10b981', '#fcd34d'];
+  for (let i = 0; i < 80; i++) {
+    const el = document.createElement('div');
+    el.className = 'confetti';
+    el.style.left = Math.random() * 100 + 'vw';
+    el.style.background = colors[Math.floor(Math.random() * colors.length)];
+    el.style.animationDelay = (Math.random() * 1.5) + 's';
+    el.style.animationDuration = (2 + Math.random() * 2) + 's';
+    if (Math.random() > .5) el.style.borderRadius = '50%';
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 5000);
+  }
+}
+
+// ── INIT ──
+loadStatus();
+// Refresh status every 60s to update participant count
+setInterval(() => { if (!document.hidden) loadStatus(); }, 60000);
+</script>
+
+</body>
+</html>

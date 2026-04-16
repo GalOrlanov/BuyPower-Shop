@@ -303,6 +303,7 @@ input:checked + .slider::before { transform: translateX(20px); }
       <button class="tab-btn active" onclick="showTab('orders')">📦 הזמנות</button>
       <button class="tab-btn" id="pickupTrackingTabBtn" onclick="showTab('pickupTracking');loadPickupTracking()">📍 מעקב איסוף</button>
       <button class="tab-btn" id="staffTabBtn" onclick="showTab('staff');loadStaff()">👷 עובדים</button>
+      <button class="tab-btn" onclick="showTab('raffle');loadRaffleAdmin()">🎰 הגרלה</button>
       <button class="tab-btn" onclick="showTab('pickup');setPickupThisWeek();if(_orders&&_orders.length){renderPickup();}else{loadOrders();}">🚚 סיכום איסוף</button>
       <button class="tab-btn" onclick="showTab('summary');renderSummary&&renderSummary()">📊 סיכום</button>
       <button class="tab-btn" onclick="showTab('announcements')">📢 הודעות</button>
@@ -1049,6 +1050,63 @@ input:checked + .slider::before { transform: translateX(20px); }
         </div>
       </div>
       <div id="staffList"></div>
+    </div>
+
+    <!-- ========== RAFFLE TAB ========== -->
+    <div id="tab-raffle" class="tab-panel">
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-title">⚙️ הגדרות הגרלה</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px">
+          <div>
+            <label style="font-size:.82rem;font-weight:700;display:block;margin-bottom:4px">סכום מינימלי בקבלה (₪)</label>
+            <input type="number" id="raffleMinAmount" style="width:100%;padding:10px;border:2px solid #d1d5db;border-radius:10px" placeholder="200">
+          </div>
+          <div>
+            <label style="font-size:.82rem;font-weight:700;display:block;margin-bottom:4px">תיאור הפרס</label>
+            <input type="text" id="rafflePrize" style="width:100%;padding:10px;border:2px solid #d1d5db;border-radius:10px" placeholder="פרס השבוע 🎁">
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
+          <label style="display:flex;align-items:center;gap:8px;font-weight:700;cursor:pointer">
+            <input type="checkbox" id="raffleEnabled" style="width:18px;height:18px;accent-color:#15803d">
+            הגרלה פעילה
+          </label>
+          <button onclick="saveRaffleSettings()" style="padding:10px 18px;background:#15803d;color:white;border:none;border-radius:10px;font-weight:700;cursor:pointer">💾 שמור</button>
+          <button onclick="runManualRaffleDraw()" style="padding:10px 18px;background:#f59e0b;color:white;border:none;border-radius:10px;font-weight:700;cursor:pointer">🎲 הרצה ידנית</button>
+        </div>
+        <div style="margin-top:10px;padding:10px;background:#f0fdf4;border-radius:8px;font-size:.85rem;color:#14532d">
+          🔗 לינק הדף: <a href="/raffle.html" target="_blank" style="color:#15803d;font-weight:700">raffle.html</a>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-title">📊 השבוע הנוכחי</div>
+        <div id="raffleStats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;text-align:center">
+          <div style="background:#f0fdf4;padding:12px;border-radius:10px"><div style="font-size:1.6rem;font-weight:900;color:#15803d" id="rStatTotal">—</div><div style="font-size:.75rem;color:#6b7280">סה"כ</div></div>
+          <div style="background:#fef3c7;padding:12px;border-radius:10px"><div style="font-size:1.6rem;font-weight:900;color:#d97706" id="rStatPending">—</div><div style="font-size:.75rem;color:#6b7280">ממתינים</div></div>
+          <div style="background:#dcfce7;padding:12px;border-radius:10px"><div style="font-size:1.6rem;font-weight:900;color:#15803d" id="rStatApproved">—</div><div style="font-size:.75rem;color:#6b7280">מאושרים</div></div>
+          <div style="background:#fee2e2;padding:12px;border-radius:10px"><div style="font-size:1.6rem;font-weight:900;color:#dc2626" id="rStatRejected">—</div><div style="font-size:.75rem;color:#6b7280">נדחו</div></div>
+        </div>
+        <div id="raffleWeekInfo" style="margin-top:10px;font-size:.85rem;color:#6b7280;text-align:center"></div>
+      </div>
+
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-title">⏳ ממתינים לאישור</div>
+        <div id="rafflePendingList"><div style="text-align:center;color:#9ca3af;padding:20px">טוען...</div></div>
+      </div>
+
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-title">📜 היסטוריית זוכים</div>
+        <div id="raffleHistoryList"><div style="text-align:center;color:#9ca3af;padding:20px">טוען...</div></div>
+      </div>
+    </div>
+
+    <!-- Raffle receipt viewer modal -->
+    <div id="raffleReceiptModal" onclick="if(event.target===this)closeRaffleReceipt()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:9999;align-items:center;justify-content:center;padding:20px">
+      <div style="position:relative;max-width:90vw;max-height:90vh;background:white;border-radius:16px;padding:16px">
+        <button onclick="closeRaffleReceipt()" style="position:absolute;top:8px;left:8px;background:#dc2626;color:white;border:none;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:1.1rem">✕</button>
+        <img id="raffleReceiptImg" style="max-width:100%;max-height:80vh;border-radius:8px" alt="receipt">
+      </div>
     </div>
 
 <!-- Order Detail Modal -->
@@ -4317,6 +4375,162 @@ async function sendPickupSMS(orderId) {
 }
 
 // ===================== STAFF MANAGEMENT =====================
+// ═══════════════════════════════════════════════════════════
+// RAFFLE ADMIN
+// ═══════════════════════════════════════════════════════════
+let _raffleData = null;
+
+async function loadRaffleAdmin() {
+  await loadRaffleSettings();
+  await loadRaffleAll();
+  await loadRaffleHistory();
+}
+
+async function loadRaffleSettings() {
+  try {
+    const res = await fetch('/api/raffle/admin/settings', { headers: authHeaders() });
+    const s = await res.json();
+    if (s.error) return;
+    document.getElementById('raffleMinAmount').value = s.minReceiptAmount || 200;
+    document.getElementById('rafflePrize').value = s.prizeDescription || '';
+    document.getElementById('raffleEnabled').checked = s.enabled !== false;
+  } catch(e) { console.error('raffle settings:', e); }
+}
+
+async function saveRaffleSettings() {
+  try {
+    const body = {
+      minReceiptAmount: parseFloat(document.getElementById('raffleMinAmount').value) || 200,
+      prizeDescription: document.getElementById('rafflePrize').value.trim(),
+      enabled: document.getElementById('raffleEnabled').checked
+    };
+    const res = await fetch('/api/raffle/admin/settings', {
+      method: 'PUT', headers: authHeaders(), body: JSON.stringify(body)
+    });
+    const d = await res.json();
+    if (d.error) { alert('❌ ' + d.error); return; }
+    alert('✅ הגדרות נשמרו');
+  } catch(e) { alert('שגיאת רשת'); }
+}
+
+async function loadRaffleAll() {
+  try {
+    const res = await fetch('/api/raffle/admin/all', { headers: authHeaders() });
+    const data = await res.json();
+    if (data.error) return;
+    _raffleData = data;
+    // Stats
+    document.getElementById('rStatTotal').textContent = data.counts.total;
+    document.getElementById('rStatPending').textContent = data.counts.pending;
+    document.getElementById('rStatApproved').textContent = data.counts.approved;
+    document.getElementById('rStatRejected').textContent = data.counts.rejected;
+    // Week info
+    if (data.week) {
+      const drawAt = new Date(data.week.weekEndDate);
+      document.getElementById('raffleWeekInfo').textContent =
+        'הגרלה הבאה: ' + drawAt.toLocaleString('he-IL', {day:'numeric', month:'numeric', hour:'2-digit', minute:'2-digit'});
+    }
+    // Pending list
+    renderRafflePending(data.entries.filter(e => e.status === 'pending'));
+  } catch(e) { console.error('raffle all:', e); }
+}
+
+function renderRafflePending(entries) {
+  const el = document.getElementById('rafflePendingList');
+  if (!entries.length) {
+    el.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:20px">אין רישומים ממתינים לאישור 🎉</div>';
+    return;
+  }
+  el.innerHTML = entries.map(e => {
+    const date = new Date(e.createdAt).toLocaleString('he-IL', {day:'numeric', month:'numeric', hour:'2-digit', minute:'2-digit'});
+    const contact = e.phone ? '📱 ' + e.phone : (e.email ? '📧 ' + e.email : '—');
+    return '<div style="border:1.5px solid #e5e7eb;border-radius:12px;padding:12px;margin-bottom:10px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">' +
+      '<div style="background:#15803d;color:white;padding:6px 14px;border-radius:8px;font-family:monospace;font-weight:900;font-size:1.1rem;letter-spacing:2px">' + e.ticketNumber + '</div>' +
+      '<div style="flex:1;min-width:150px">' +
+        '<div style="font-weight:700">' + (e.name || '—') + '</div>' +
+        '<div style="font-size:.82rem;color:#6b7280">' + contact + '</div>' +
+        '<div style="font-size:.75rem;color:#9ca3af">' + date + '</div>' +
+      '</div>' +
+      '<button onclick="viewRaffleReceipt(\'' + e.receiptImageUrl + '\')" style="padding:8px 14px;background:#0369a1;color:white;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:.85rem">📷 צפה בקבלה</button>' +
+      '<button onclick="approveRaffleEntry(\'' + e._id + '\')" style="padding:8px 14px;background:#15803d;color:white;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:.85rem">✓ אשר</button>' +
+      '<button onclick="rejectRaffleEntry(\'' + e._id + '\')" style="padding:8px 14px;background:#dc2626;color:white;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:.85rem">✕ דחה</button>' +
+    '</div>';
+  }).join('');
+}
+
+function viewRaffleReceipt(url) {
+  document.getElementById('raffleReceiptImg').src = url;
+  document.getElementById('raffleReceiptModal').style.display = 'flex';
+}
+function closeRaffleReceipt() {
+  document.getElementById('raffleReceiptModal').style.display = 'none';
+}
+
+async function approveRaffleEntry(id) {
+  if (!confirm('לאשר את הרישום?')) return;
+  try {
+    const res = await fetch('/api/raffle/admin/' + id + '/approve', { method: 'POST', headers: authHeaders() });
+    const d = await res.json();
+    if (d.error) { alert('❌ ' + d.error); return; }
+    loadRaffleAll();
+  } catch(e) { alert('שגיאת רשת'); }
+}
+
+async function rejectRaffleEntry(id) {
+  const reason = prompt('סיבת דחייה (אופציונלי):', '');
+  if (reason === null) return;
+  try {
+    const res = await fetch('/api/raffle/admin/' + id + '/reject', {
+      method: 'POST', headers: authHeaders(), body: JSON.stringify({ rejectionReason: reason })
+    });
+    const d = await res.json();
+    if (d.error) { alert('❌ ' + d.error); return; }
+    loadRaffleAll();
+  } catch(e) { alert('שגיאת רשת'); }
+}
+
+async function runManualRaffleDraw() {
+  if (!confirm('להריץ הגרלה ידנית עכשיו? (בדרך כלל ההגרלה אוטומטית כל שישי 08:00)')) return;
+  try {
+    const res = await fetch('/api/raffle/admin/draw-manual', { method: 'POST', headers: authHeaders() });
+    const d = await res.json();
+    if (d.error) { alert('❌ ' + d.error); return; }
+    if (d.drawn) {
+      alert('🎉 הגרלה הוגרלה! מספר זוכה: ' + d.winnerTicket + ' (מתוך ' + d.totalEntries + ' משתתפים)');
+    } else {
+      alert('לא הוגרלה: ' + (d.reason || 'unknown'));
+    }
+    loadRaffleAll();
+    loadRaffleHistory();
+  } catch(e) { alert('שגיאת רשת'); }
+}
+
+async function loadRaffleHistory() {
+  try {
+    const res = await fetch('/api/raffle/admin/history', { headers: authHeaders() });
+    const list = await res.json();
+    const el = document.getElementById('raffleHistoryList');
+    if (!list.length || list.error) {
+      el.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:20px">עדיין אין הגרלות קודמות</div>';
+      return;
+    }
+    el.innerHTML = list.map(w => {
+      const d = new Date(w.drawnAt).toLocaleDateString('he-IL', {day:'numeric', month:'numeric', year:'numeric'});
+      const winner = w.winner;
+      return '<div style="border:1.5px solid #e5e7eb;border-radius:12px;padding:12px;margin-bottom:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">' +
+        '<div style="background:#f59e0b;color:white;padding:6px 14px;border-radius:8px;font-family:monospace;font-weight:900;font-size:1.1rem;letter-spacing:2px">' +
+          (w.winnerTicketNumber || '—') + '</div>' +
+        '<div style="flex:1;min-width:140px">' +
+          '<div style="font-size:.82rem;color:#6b7280">' + d + '</div>' +
+          '<div style="font-weight:700">' + (winner ? winner.name : 'לא נבחר זוכה') + '</div>' +
+          (winner ? '<div style="font-size:.8rem;color:#6b7280">' + (winner.phone || winner.email || '') + '</div>' : '') +
+        '</div>' +
+        '<div style="font-size:.75rem;color:#6b7280">👥 ' + (w.totalApprovedEntries || 0) + '</div>' +
+      '</div>';
+    }).join('');
+  } catch(e) { console.error('raffle history:', e); }
+}
+
 let _staffData = [];
 
 async function loadStaff() {

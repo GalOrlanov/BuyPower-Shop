@@ -7,6 +7,8 @@ import { swaggerSpec } from './api/swagger/swagger.config';
 import { apiLimiter } from './api/middleware/rateLimiter.middleware';
 import routes from './api/routes';
 import { closeExpiredPurchases } from './services/groupPurchase.service';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { checkAndDrawRaffle } = require('./jobs/raffle.job');
 
 const app = express();
 
@@ -38,6 +40,9 @@ const start = async (): Promise<void> => {
 
   // Run expired purchases check every 5 minutes
   setInterval(closeExpiredPurchases, 5 * 60 * 1000);
+
+  // Run weekly raffle draw check every 15 minutes (only draws on Friday 08:00+)
+  setInterval(checkAndDrawRaffle, 15 * 60 * 1000);
 };
 
 start().catch(console.error);

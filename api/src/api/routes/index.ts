@@ -19,6 +19,8 @@ const shopRoutes = require('./shop.routes');
 const shopGroupRoutes = require('./shop-group-purchases.routes');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const shopGroupCronRoutes = require('./shop-group-cron.routes');
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const raffleRoutes = require('./raffle.routes');
 import { seedDatabase } from '../../seeds/seed';
 
 const router = Router();
@@ -39,6 +41,7 @@ router.use('/orders', ordersRoutes);
 router.use('/shop', shopRoutes);
 router.use('/shop', shopGroupRoutes);
 router.use('/shop', shopGroupCronRoutes);
+router.use('/raffle', raffleRoutes);
 
 /** POST /api/seed - Seed database with demo data */
 router.post('/seed', async (_req: Request, res: Response): Promise<void> => {
