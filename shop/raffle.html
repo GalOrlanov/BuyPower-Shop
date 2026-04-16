@@ -38,6 +38,28 @@
     position: relative;
     overflow: hidden;
   }
+  .logo-corner {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    width: 300px;
+    height: 300px;
+    border-radius: 50%;
+    background: white;
+    box-shadow: 0 8px 28px rgba(0,0,0,.25);
+    padding: 6px;
+    z-index: 3;
+    object-fit: contain;
+  }
+  @media (max-width: 768px) {
+    .logo-corner {
+      width: 120px;
+      height: 120px;
+      top: 12px;
+      left: 12px;
+    }
+    .hero { padding-top: 60px; }
+  }
   .hero::before {
     content: '';
     position: absolute;
@@ -417,6 +439,7 @@
 
 <!-- HERO -->
 <div class="hero">
+  <img src="/logo.jpg?v=3" alt="נלחמים ביוקר המחיה" class="logo-corner">
   <div class="hero-emoji">🎰</div>
   <div class="hero-title">הגרלה שבועית</div>
   <div class="hero-sub">נלחמים ביוקר המחיה</div>
