@@ -407,28 +407,66 @@ async function uploadGalleryImage(input) {
   if (!file) return;
   const caption = document.getElementById('galleryCaption').value.trim();
   const status = document.getElementById('galleryUploadStatus');
-  status.textContent = '⏳ מעלה...';
+
+  // Size check (5MB limit)
+  if (file.size > 5 * 1024 * 1024) {
+    status.textContent = '❌ הקובץ גדול מדי (עד 5MB)';
+    input.value = '';
+    return;
+  }
+
+  status.textContent = '⏳ מעלה תמונה...';
+
   try {
+    // Step 1: Upload image file
     const formData = new FormData();
     formData.append('image', file);
-    const r = await fetch('/api/shop/upload-image', { method: 'POST', body: formData });
-    const data = await r.json();
-    if (!data.ok || !data.imageUrl) { status.textContent = '❌ שגיאה בהעלאה'; return; }
+    let uploadData;
+    try {
+      const r = await fetch('/api/shop/upload-image', { method: 'POST', body: formData });
+      if (!r.ok) {
+        status.textContent = '❌ שגיאה בהעלאה (' + r.status + ')';
+        return;
+      }
+      uploadData = await r.json();
+    } catch(err) {
+      status.textContent = '❌ שגיאה בהעלאת התמונה: ' + err.message;
+      return;
+    }
+    if (!uploadData.ok || !uploadData.imageUrl) {
+      status.textContent = '❌ ' + (uploadData.error || 'שגיאה בהעלאה');
+      return;
+    }
 
-    // Save to gallery
-    const saveRes = await fetch('/api/raffle/admin/gallery', {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({ imageUrl: data.imageUrl, caption })
-    });
-    const saveD = await saveRes.json();
-    if (saveD.error) { status.textContent = '❌ ' + saveD.error; return; }
+    status.textContent = '⏳ שומר בגלריה...';
+
+    // Step 2: Save to gallery
+    try {
+      const saveRes = await fetch('/api/raffle/admin/gallery', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + _token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl: uploadData.imageUrl, caption: caption })
+      });
+      if (!saveRes.ok) {
+        status.textContent = '❌ שגיאה בשמירה (' + saveRes.status + ')';
+        return;
+      }
+      const saveD = await saveRes.json();
+      if (saveD.error) { status.textContent = '❌ ' + saveD.error; return; }
+    } catch(err) {
+      status.textContent = '❌ שגיאה בשמירה: ' + err.message;
+      return;
+    }
+
     status.textContent = '✅ התמונה נוספה';
     document.getElementById('galleryCaption').value = '';
     input.value = '';
     loadGallery();
     setTimeout(() => { status.textContent = ''; }, 2500);
-  } catch(e) { status.textContent = '❌ שגיאת רשת'; }
+  } catch(e) {
+    status.textContent = '❌ שגיאה: ' + e.message;
+    console.error('upload error:', e);
+  }
 }
 
 async function loadGallery() {
