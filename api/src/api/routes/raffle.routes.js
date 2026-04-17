@@ -341,4 +341,56 @@ router.get('/admin/history', verifyAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ────────────────────────────────────────────────────────────
+// GALLERY ENDPOINTS
+// ────────────────────────────────────────────────────────────
+
+// GET /api/raffle/gallery — public list
+router.get('/gallery', async (req, res) => {
+  try {
+    const db = await getDb();
+    const items = await db.collection('shop_raffle_gallery')
+      .find({})
+      .sort({ sortOrder: 1, createdAt: -1 })
+      .toArray();
+    res.json(items.map(i => ({ _id: i._id, imageUrl: i.imageUrl, caption: i.caption || '' })));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/raffle/admin/gallery — add image
+router.post('/admin/gallery', verifyAdmin, async (req, res) => {
+  try {
+    const db = await getDb();
+    const imageUrl = (req.body.imageUrl || '').trim();
+    const caption = (req.body.caption || '').trim();
+    if (!imageUrl) return res.status(400).json({ error: 'imageUrl required' });
+    const doc = { imageUrl, caption, sortOrder: 0, createdAt: new Date() };
+    const r = await db.collection('shop_raffle_gallery').insertOne(doc);
+    res.json({ ok: true, _id: r.insertedId, ...doc });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /api/raffle/admin/gallery/:id
+router.delete('/admin/gallery/:id', verifyAdmin, async (req, res) => {
+  try {
+    const db = await getDb();
+    const r = await db.collection('shop_raffle_gallery').deleteOne({ _id: new ObjectId(req.params.id) });
+    if (!r.deletedCount) return res.status(404).json({ error: 'לא נמצא' });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /api/raffle/admin/gallery/:id — update caption/sortOrder
+router.put('/admin/gallery/:id', verifyAdmin, async (req, res) => {
+  try {
+    const db = await getDb();
+    const update = {};
+    if (typeof req.body.caption === 'string') update.caption = req.body.caption.trim();
+    if (req.body.sortOrder !== undefined) update.sortOrder = parseInt(req.body.sortOrder) || 0;
+    if (!Object.keys(update).length) return res.status(400).json({ error: 'nothing to update' });
+    await db.collection('shop_raffle_gallery').updateOne({ _id: new ObjectId(req.params.id) }, { $set: update });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;

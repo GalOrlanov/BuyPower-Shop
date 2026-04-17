@@ -397,6 +397,55 @@
     font-weight: 700;
   }
 
+  /* Gallery */
+  .gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .gallery-item {
+    position: relative;
+    aspect-ratio: 1;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #f3f4f6;
+    cursor: pointer;
+  }
+  .gallery-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform .3s;
+  }
+  .gallery-item:hover img { transform: scale(1.05); }
+  .gallery-caption {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    left: 0;
+    background: linear-gradient(to top, rgba(0,0,0,.75), transparent);
+    color: white;
+    padding: 6px 8px;
+    font-size: .72rem;
+    font-weight: 600;
+  }
+  .lightbox {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.92);
+    z-index: 9999;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    cursor: zoom-out;
+  }
+  .lightbox.show { display: flex; }
+  .lightbox img { max-width: 95vw; max-height: 90vh; border-radius: 10px; }
+  @media (max-width: 480px) {
+    .gallery-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+
   /* History */
   .history-title {
     font-size: 1.1rem;
@@ -519,6 +568,42 @@ async function loadHistory() {
   } catch(e) { return []; }
 }
 
+async function loadGalleryList() {
+  try {
+    const res = await fetch(API + '/gallery');
+    const list = await res.json();
+    const el = document.getElementById('galleryList');
+    if (!el) return;
+    if (!list.length) {
+      // Hide the whole card if empty
+      const card = document.getElementById('galleryCard');
+      if (card) card.style.display = 'none';
+      return;
+    }
+    el.className = 'gallery-grid';
+    el.innerHTML = list.map(g =>
+      '<div class="gallery-item" onclick="showLightbox(\'' + g.imageUrl + '\')">' +
+        '<img src="' + g.imageUrl + '" alt="' + (g.caption || '') + '" loading="lazy">' +
+        (g.caption ? '<div class="gallery-caption">' + g.caption + '</div>' : '') +
+      '</div>'
+    ).join('');
+  } catch(e) { console.error('gallery:', e); }
+}
+
+function showLightbox(url) {
+  let box = document.getElementById('lightbox');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'lightbox';
+    box.className = 'lightbox';
+    box.onclick = () => box.classList.remove('show');
+    box.innerHTML = '<img id="lightboxImg" alt="">';
+    document.body.appendChild(box);
+  }
+  document.getElementById('lightboxImg').src = url;
+  box.classList.add('show');
+}
+
 // ── RENDER ──
 async function render() {
   const wrap = document.getElementById('mainWrap');
@@ -544,6 +629,9 @@ async function render() {
     html += '<div class="card" style="text-align:center"><div style="font-size:2rem">⏸️</div><div style="font-weight:800;color:#6b7280;margin-top:8px">ההגרלה מושהית כרגע</div></div>';
   }
 
+  // Gallery
+  html += '<div class="card" id="galleryCard"><div class="history-title">🖼️ גלריה</div><div id="galleryList" class="loading">טוען...</div></div>';
+
   // History
   html += '<div class="card" id="historyCard"><div class="history-title">📜 זוכים קודמים</div><div id="historyList" class="loading">טוען...</div></div>';
 
@@ -551,6 +639,9 @@ async function render() {
 
   startCountdown();
   bindForm();
+
+  // Load gallery async
+  loadGalleryList();
 
   // Load history async
   const history = await loadHistory();

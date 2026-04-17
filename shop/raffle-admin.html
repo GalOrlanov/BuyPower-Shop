@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>🎰 ניהול הגרלה</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, 'Segoe UI', Arial, sans-serif;
+    background: #f8fafc;
+    direction: rtl;
+    color: #1a1a1a;
+    min-height: 100vh;
+  }
+
+  /* Login */
+  #loginScreen { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+  .login-card {
+    background: white;
+    border-radius: 20px;
+    padding: 40px 32px;
+    max-width: 400px;
+    width: 100%;
+    box-shadow: 0 10px 40px rgba(0,0,0,.1);
+    text-align: center;
+  }
+  .login-emoji { font-size: 3rem; margin-bottom: 10px; }
+  .login-title { font-size: 1.4rem; font-weight: 900; color: #14532d; margin-bottom: 6px; }
+  .login-sub { color: #6b7280; font-size: .9rem; margin-bottom: 24px; }
+  .login-card input {
+    width: 100%;
+    padding: 14px 16px;
+    border: 2px solid #e5e7eb;
+    border-radius: 12px;
+    font-size: 1rem;
+    font-family: inherit;
+    direction: rtl;
+    outline: none;
+    margin-bottom: 12px;
+  }
+  .login-card input:focus { border-color: #15803d; }
+  .login-card button {
+    width: 100%;
+    padding: 14px;
+    background: linear-gradient(135deg, #15803d, #16a34a);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-size: 1rem;
+    font-weight: 800;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .login-card button:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(21,128,61,.3); }
+  .login-error { color: #dc2626; font-size: .88rem; margin-top: 10px; min-height: 20px; }
+
+  /* App */
+  #appScreen { display: none; }
+  .topbar {
+    background: linear-gradient(135deg, #15803d, #16a34a);
+    color: white;
+    padding: 16px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    box-shadow: 0 2px 12px rgba(0,0,0,.1);
+  }
+  .topbar-title { font-size: 1.15rem; font-weight: 900; }
+  .topbar-sub { font-size: .8rem; opacity: .9; }
+  .logout-btn {
+    background: rgba(255,255,255,.2);
+    border: none;
+    color: white;
+    padding: 8px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: .85rem;
+    font-family: inherit;
+    font-weight: 600;
+  }
+
+  .main { padding: 20px; max-width: 900px; margin: 0 auto; }
+
+  .card {
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,.06);
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  .card-title {
+    font-size: 1rem;
+    font-weight: 900;
+    color: #14532d;
+    margin-bottom: 14px;
+  }
+
+  /* Settings grid */
+  .settings-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+  .settings-grid label {
+    font-size: .82rem;
+    font-weight: 700;
+    display: block;
+    margin-bottom: 4px;
+  }
+  .settings-grid input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 2px solid #d1d5db;
+    border-radius: 10px;
+    font-size: .95rem;
+    font-family: inherit;
+    outline: none;
+  }
+  .settings-grid input:focus { border-color: #15803d; }
+  .settings-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+  }
+  .chk-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    cursor: pointer;
+    flex: 1;
+    min-width: 140px;
+  }
+  .chk-label input { width: 18px; height: 18px; accent-color: #15803d; }
+
+  .btn {
+    padding: 10px 18px;
+    border: none;
+    border-radius: 10px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: .9rem;
+  }
+  .btn-green { background: #15803d; color: white; }
+  .btn-green:hover { background: #166534; }
+  .btn-gold { background: #f59e0b; color: white; }
+  .btn-gold:hover { background: #d97706; }
+  .btn-blue { background: #0369a1; color: white; }
+  .btn-red { background: #dc2626; color: white; }
+
+  /* Stats */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    text-align: center;
+  }
+  .stat-box { padding: 14px; border-radius: 12px; }
+  .stat-num { font-size: 1.8rem; font-weight: 900; line-height: 1; }
+  .stat-label { font-size: .75rem; color: #6b7280; margin-top: 4px; }
+  .stat-total { background: #f0fdf4; color: #15803d; }
+  .stat-pending { background: #fef3c7; color: #d97706; }
+  .stat-approved { background: #dcfce7; color: #15803d; }
+  .stat-rejected { background: #fee2e2; color: #dc2626; }
+
+  /* Entry cards */
+  .entry {
+    border: 1.5px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 10px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .ticket {
+    background: #15803d;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-family: 'SF Mono', Menlo, monospace;
+    font-weight: 900;
+    font-size: 1.2rem;
+    letter-spacing: 2px;
+  }
+  .entry-info { flex: 1; min-width: 180px; }
+  .entry-name { font-weight: 700; font-size: 1rem; }
+  .entry-contact { font-size: .85rem; color: #6b7280; margin-top: 2px; }
+  .entry-date { font-size: .75rem; color: #9ca3af; margin-top: 2px; }
+
+  .empty { text-align: center; color: #9ca3af; padding: 30px; font-size: .95rem; }
+  .loading { text-align: center; color: #6b7280; padding: 30px; }
+
+  /* Modal */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.85);
+    z-index: 9999;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal-box {
+    position: relative;
+    background: white;
+    border-radius: 16px;
+    padding: 16px;
+    max-width: 95vw;
+    max-height: 95vh;
+  }
+  .modal-close {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    background: #dc2626;
+    color: white;
+    border: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 1.2rem;
+    font-weight: 700;
+  }
+  .modal-box img { max-width: 85vw; max-height: 85vh; border-radius: 8px; display: block; }
+
+  .info-banner {
+    background: #f0fdf4;
+    border: 1.5px solid #86efac;
+    color: #14532d;
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: .85rem;
+    margin-top: 10px;
+  }
+  .info-banner a { color: #15803d; font-weight: 700; text-decoration: none; }
+
+  @media (max-width: 640px) {
+    .settings-grid { grid-template-columns: 1fr; }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .stat-num { font-size: 1.4rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="login-emoji">🎰</div>
+    <div class="login-title">ניהול הגרלה</div>
+    <div class="login-sub">הזן סיסמת ניהול כדי להמשיך</div>
+    <input type="password" id="pwInput" placeholder="סיסמה" onkeydown="if(event.key==='Enter')doLogin()" autofocus>
+    <button onclick="doLogin()">כניסה →</button>
+    <div class="login-error" id="loginError"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="appScreen">
+  <div class="topbar">
+    <div>
+      <div class="topbar-title">🎰 ניהול הגרלה שבועית</div>
+      <div class="topbar-sub">נלחמים ביוקר המחיה — ירושלים והסביבה</div>
+    </div>
+    <button class="logout-btn" onclick="doLogout()">יציאה</button>
+  </div>
+
+  <div class="main">
+    <!-- Settings -->
+    <div class="card">
+      <div class="card-title">⚙️ הגדרות הגרלה</div>
+      <div class="settings-grid">
+        <div>
+          <label>סכום מינימלי בקבלה (₪)</label>
+          <input type="number" id="minAmount" placeholder="200">
+        </div>
+        <div>
+          <label>תיאור הפרס</label>
+          <input type="text" id="prize" placeholder="פרס השבוע 🎁">
+        </div>
+      </div>
+      <div class="settings-actions">
+        <label class="chk-label">
+          <input type="checkbox" id="enabled">
+          הגרלה פעילה
+        </label>
+        <button class="btn btn-green" onclick="saveSettings()">💾 שמור</button>
+        <button class="btn btn-gold" onclick="runManualDraw()">🎲 הרצה ידנית</button>
+      </div>
+      <div class="info-banner">
+        🔗 דף ההגרלה הפומבי: <a href="/raffle.html" target="_blank">shop.buypower.co.il/raffle.html</a>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="card">
+      <div class="card-title">📊 השבוע הנוכחי</div>
+      <div class="stats-grid">
+        <div class="stat-box stat-total"><div class="stat-num" id="sTotal">—</div><div class="stat-label">סה"כ</div></div>
+        <div class="stat-box stat-pending"><div class="stat-num" id="sPending">—</div><div class="stat-label">ממתינים</div></div>
+        <div class="stat-box stat-approved"><div class="stat-num" id="sApproved">—</div><div class="stat-label">מאושרים</div></div>
+        <div class="stat-box stat-rejected"><div class="stat-num" id="sRejected">—</div><div class="stat-label">נדחו</div></div>
+      </div>
+      <div id="weekInfo" style="margin-top:12px;font-size:.88rem;color:#6b7280;text-align:center"></div>
+    </div>
+
+    <!-- Pending -->
+    <div class="card">
+      <div class="card-title">⏳ ממתינים לאישור</div>
+      <div id="pendingList" class="loading">⏳ טוען...</div>
+    </div>
+
+    <!-- Gallery -->
+    <div class="card">
+      <div class="card-title">🖼️ גלריית תמונות</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+        <input type="file" id="galleryFile" accept="image/*" style="display:none" onchange="uploadGalleryImage(this)">
+        <button class="btn btn-green" onclick="document.getElementById('galleryFile').click()">📷 הוסף תמונה</button>
+        <input type="text" id="galleryCaption" placeholder="כיתוב (אופציונלי)" style="flex:1;min-width:200px;padding:10px;border:2px solid #d1d5db;border-radius:10px;font-family:inherit">
+        <div id="galleryUploadStatus" style="font-size:.82rem;color:#6b7280"></div>
+      </div>
+      <div id="galleryGrid" class="loading">⏳ טוען...</div>
+    </div>
+
+    <!-- History -->
+    <div class="card">
+      <div class="card-title">📜 היסטוריית זוכים</div>
+      <div id="historyList" class="loading">⏳ טוען...</div>
+    </div>
+  </div>
+</div>
+
+<!-- Receipt modal -->
+<div class="modal-overlay" id="receiptModal" onclick="if(event.target===this)closeReceipt()">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeReceipt()">✕</button>
+    <img id="receiptImg" alt="receipt">
+  </div>
+</div>
+
+<script>
+const API = '/api';
+let _token = '';
+
+// ─── Auth ───
+async function doLogin() {
+  const pass = document.getElementById('pwInput').value;
+  const errEl = document.getElementById('loginError');
+  errEl.textContent = '';
+  if (!pass) { errEl.textContent = 'נא להזין סיסמה'; return; }
+  try {
+    const res = await fetch('/api/shop/admin/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pass })
+    });
+    const d = await res.json();
+    if (!d.token) { errEl.textContent = '❌ סיסמה שגויה'; return; }
+    _token = d.token;
+    sessionStorage.setItem('raffleAdminToken', _token);
+    showApp();
+  } catch(e) { errEl.textContent = '❌ שגיאת רשת'; }
+}
+
+function showApp() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appScreen').style.display = 'block';
+  loadAll();
+}
+
+function doLogout() {
+  sessionStorage.removeItem('raffleAdminToken');
+  _token = '';
+  document.getElementById('appScreen').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('pwInput').value = '';
+}
+
+function authHeaders() {
+  return { 'Authorization': 'Bearer ' + _token, 'Content-Type': 'application/json' };
+}
+
+// ─── Data ───
+async function loadAll() {
+  await Promise.all([loadSettings(), loadEntries(), loadHistory(), loadGallery()]);
+}
+
+// ─── Gallery ───
+let _pendingGalleryUrl = '';
+
+async function uploadGalleryImage(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const caption = document.getElementById('galleryCaption').value.trim();
+  const status = document.getElementById('galleryUploadStatus');
+  status.textContent = '⏳ מעלה...';
+  try {
+    const formData = new FormData();
+    formData.append('image', file);
+    const r = await fetch('/api/shop/upload-image', { method: 'POST', body: formData });
+    const data = await r.json();
+    if (!data.ok || !data.imageUrl) { status.textContent = '❌ שגיאה בהעלאה'; return; }
+
+    // Save to gallery
+    const saveRes = await fetch('/api/raffle/admin/gallery', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ imageUrl: data.imageUrl, caption })
+    });
+    const saveD = await saveRes.json();
+    if (saveD.error) { status.textContent = '❌ ' + saveD.error; return; }
+    status.textContent = '✅ התמונה נוספה';
+    document.getElementById('galleryCaption').value = '';
+    input.value = '';
+    loadGallery();
+    setTimeout(() => { status.textContent = ''; }, 2500);
+  } catch(e) { status.textContent = '❌ שגיאת רשת'; }
+}
+
+async function loadGallery() {
+  try {
+    const r = await fetch('/api/raffle/gallery');
+    const list = await r.json();
+    const el = document.getElementById('galleryGrid');
+    if (!list.length) { el.innerHTML = '<div class="empty">עדיין אין תמונות בגלריה</div>'; return; }
+    el.style.display = 'grid';
+    el.style.gridTemplateColumns = 'repeat(auto-fill, minmax(140px, 1fr))';
+    el.style.gap = '10px';
+    el.innerHTML = list.map(g => {
+      return '<div style="position:relative;border-radius:12px;overflow:hidden;aspect-ratio:1;background:#f3f4f6">' +
+        '<img src="' + g.imageUrl + '" onclick="viewReceipt(\'' + g.imageUrl + '\')" style="width:100%;height:100%;object-fit:cover;cursor:pointer">' +
+        (g.caption ? '<div style="position:absolute;bottom:0;right:0;left:0;background:linear-gradient(to top,rgba(0,0,0,.75),transparent);color:white;padding:8px;font-size:.75rem">' + g.caption + '</div>' : '') +
+        '<button onclick="deleteGalleryImage(\'' + g._id + '\')" style="position:absolute;top:4px;left:4px;background:#dc2626;color:white;border:none;width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:.8rem;font-weight:700">✕</button>' +
+      '</div>';
+    }).join('');
+  } catch(e) { console.error(e); }
+}
+
+async function deleteGalleryImage(id) {
+  if (!confirm('למחוק את התמונה?')) return;
+  try {
+    const r = await fetch('/api/raffle/admin/gallery/' + id, { method: 'DELETE', headers: authHeaders() });
+    const d = await r.json();
+    if (d.error) { alert('❌ ' + d.error); return; }
+    loadGallery();
+  } catch(e) { alert('שגיאת רשת'); }
+}
+
+async function loadSettings() {
+  try {
+    const r = await fetch('/api/raffle/admin/settings', { headers: authHeaders() });
+    const s = await r.json();
+    if (s.error) return;
+    document.getElementById('minAmount').value = s.minReceiptAmount || 200;
+    document.getElementById('prize').value = s.prizeDescription || '';
+    document.getElementById('enabled').checked = s.enabled !== false;
+  } catch(e) {}
+}
+
+async function saveSettings() {
+  try {
+    const body = {
+      minReceiptAmount: parseFloat(document.getElementById('minAmount').value) || 200,
+      prizeDescription: document.getElementById('prize').value.trim(),
+      enabled: document.getElementById('enabled').checked
+    };
+    const r = await fetch('/api/raffle/admin/settings', {
+      method: 'PUT', headers: authHeaders(), body: JSON.stringify(body)
+    });
+    const d = await r.json();
+    if (d.error) { alert('❌ ' + d.error); return; }
+    alert('✅ הגדרות נשמרו');
+  } catch(e) { alert('שגיאת רשת'); }
+}
+
+async function loadEntries() {
+  try {
+    const r = await fetch('/api/raffle/admin/all', { headers: authHeaders() });
+    const data = await r.json();
+    if (data.error) return;
+
+    document.getElementById('sTotal').textContent = data.counts.total;
+    document.getElementById('sPending').textContent = data.counts.pending;
+    document.getElementById('sApproved').textContent = data.counts.approved;
+    document.getElementById('sRejected').textContent = data.counts.rejected;
+
+    if (data.week) {
+      const d = new Date(data.week.weekEndDate);
+      document.getElementById('weekInfo').textContent =
+        '🗓️ הגרלה הבאה: ' + d.toLocaleString('he-IL', {day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'});
+    }
+
+    renderPending(data.entries.filter(e => e.status === 'pending'));
+  } catch(e) { console.error(e); }
+}
+
+function renderPending(entries) {
+  const el = document.getElementById('pendingList');
+  if (!entries.length) {
+    el.innerHTML = '<div class="empty">אין רישומים ממתינים לאישור 🎉</div>';
+    return;
+  }
+  el.innerHTML = entries.map(e => {
+    const d = new Date(e.createdAt).toLocaleString('he-IL', {day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'});
+    const contact = e.phone ? '📱 ' + e.phone : (e.email ? '📧 ' + e.email : '—');
+    return '<div class="entry">' +
+      '<div class="ticket">' + e.ticketNumber + '</div>' +
+      '<div class="entry-info">' +
+        '<div class="entry-name">' + (e.name || '—') + '</div>' +
+        '<div class="entry-contact">' + contact + '</div>' +
+        '<div class="entry-date">' + d + '</div>' +
+      '</div>' +
+      '<button class="btn btn-blue" onclick="viewReceipt(\'' + e.receiptImageUrl + '\')">📷 צפה בקבלה</button>' +
+      '<button class="btn btn-green" onclick="approveEntry(\'' + e._id + '\')">✓ אשר</button>' +
+      '<button class="btn btn-red" onclick="rejectEntry(\'' + e._id + '\')">✕ דחה</button>' +
+    '</div>';
+  }).join('');
+}
+
+function viewReceipt(url) {
+  document.getElementById('receiptImg').src = url;
+  document.getElementById('receiptModal').classList.add('show');
+}
+function closeReceipt() {
+  document.getElementById('receiptModal').classList.remove('show');
+}
+
+async function approveEntry(id) {
+  if (!confirm('לאשר את הרישום?')) return;
+  try {
+    const r = await fetch('/api/raffle/admin/' + id + '/approve', { method: 'POST', headers: authHeaders() });
+    const d = await r.json();
+    if (d.error) { alert('❌ ' + d.error); return; }
+    loadEntries();
+  } catch(e) { alert('שגיאת רשת'); }
+}
+
+async function rejectEntry(id) {
+  const reason = prompt('סיבת דחייה (אופציונלי):', '');
+  if (reason === null) return;
+  try {
+    const r = await fetch('/api/raffle/admin/' + id + '/reject', {
+      method: 'POST', headers: authHeaders(), body: JSON.stringify({ rejectionReason: reason })
+    });
+    const d = await r.json();
+    if (d.error) { alert('❌ ' + d.error); return; }
+    loadEntries();
+  } catch(e) { alert('שגיאת רשת'); }
+}
+
+async function runManualDraw() {
+  if (!confirm('להריץ הגרלה ידנית עכשיו? (בדרך כלל ההגרלה אוטומטית כל שישי 08:00)')) return;
+  try {
+    const r = await fetch('/api/raffle/admin/draw-manual', { method: 'POST', headers: authHeaders() });
+    const d = await r.json();
+    if (d.error) { alert('❌ ' + d.error); return; }
+    if (d.drawn) {
+      alert('🎉 הוגרל! מספר הזוכה: ' + d.winnerTicket + '\nמתוך ' + d.totalEntries + ' משתתפים');
+    } else {
+      alert('לא הוגרלה: ' + (d.reason || 'unknown'));
+    }
+    loadAll();
+  } catch(e) { alert('שגיאת רשת'); }
+}
+
+async function loadHistory() {
+  try {
+    const r = await fetch('/api/raffle/admin/history', { headers: authHeaders() });
+    const list = await r.json();
+    const el = document.getElementById('historyList');
+    if (!list.length || list.error) {
+      el.innerHTML = '<div class="empty">עדיין אין הגרלות קודמות</div>';
+      return;
+    }
+    el.innerHTML = list.map(w => {
+      const d = w.drawnAt ? new Date(w.drawnAt).toLocaleDateString('he-IL', {day:'numeric',month:'numeric',year:'numeric'}) : '—';
+      const winner = w.winner;
+      return '<div class="entry">' +
+        '<div class="ticket" style="background:#f59e0b">' + (w.winnerTicketNumber || '—') + '</div>' +
+        '<div class="entry-info">' +
+          '<div class="entry-date">' + d + '</div>' +
+          '<div class="entry-name">' + (winner ? winner.name : 'לא נבחר זוכה') + '</div>' +
+          (winner ? '<div class="entry-contact">' + (winner.phone || winner.email || '') + '</div>' : '') +
+        '</div>' +
+        '<div style="font-size:.82rem;color:#6b7280">👥 ' + (w.totalApprovedEntries || 0) + ' משתתפים</div>' +
+      '</div>';
+    }).join('');
+  } catch(e) { console.error(e); }
+}
+
+// ─── Auto-login if token saved ───
+(function autoLogin() {
+  const saved = sessionStorage.getItem('raffleAdminToken');
+  if (saved) {
+    _token = saved;
+    showApp();
+  }
+})();
+</script>
+
+</body>
+</html>
