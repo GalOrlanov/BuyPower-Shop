@@ -54,18 +54,23 @@
   }
   .hero { min-height: 340px; padding-top: 60px; }
   @media (max-width: 768px) {
+    /* On mobile: logo becomes centered, above title */
     .logo-corner {
+      position: static;
       width: 130px;
       height: 130px;
-      top: 12px;
-      left: 12px;
-      padding: 4px;
+      padding: 5px;
+      margin: 0 auto 16px;
     }
-    .hero { min-height: auto; padding-top: 30px; padding-right: 150px; }
+    .hero {
+      min-height: auto;
+      padding: 24px 20px 70px;
+      text-align: center;
+    }
   }
   @media (max-width: 480px) {
-    .logo-corner { width: 100px; height: 100px; }
-    .hero { padding-right: 120px; padding-left: 10px; }
+    .logo-corner { width: 110px; height: 110px; }
+    .hero { padding: 20px 16px 60px; }
   }
   .hero::before {
     content: '';
@@ -95,8 +100,14 @@
     text-shadow: 0 2px 8px rgba(0,0,0,.25);
   }
   @media (max-width: 640px) {
-    .hero-sub { font-size: 2rem; }
-    .hero-location { font-size: 1.05rem; }
+    .hero-emoji { font-size: 2.6rem; }
+    .hero-title { font-size: 1.5rem; margin-bottom: 10px; }
+    .hero-sub { font-size: 2rem; line-height: 1.15; }
+    .hero-location { font-size: 1rem; }
+  }
+  @media (max-width: 380px) {
+    .hero-sub { font-size: 1.7rem; }
+    .hero-title { font-size: 1.3rem; }
   }
 
   .wrap {
