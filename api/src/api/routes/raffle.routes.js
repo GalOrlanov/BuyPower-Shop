@@ -192,6 +192,7 @@ router.post('/register', async (req, res) => {
     }
 
     const ticketNumber = await generateTicketNumber(db, activeWeek._id);
+    const detectedAmount = parseFloat(req.body.detectedAmount) || null;
     const entry = {
       raffleWeekId: activeWeek._id,
       ticketNumber,
@@ -199,17 +200,22 @@ router.post('/register', async (req, res) => {
       phone: phone || '',
       email: email || '',
       receiptImageUrl,
-      status: 'pending',
+      detectedAmount,
+      status: 'approved', // Auto-approved on upload
+      approvedAt: new Date(),
+      approvedBy: 'auto',
       rejectionReason: '',
-      createdAt: new Date()
+      createdAt: new Date(),
+      // Get client IP for anti-fraud tracking
+      clientIp: (req.headers['x-forwarded-for'] || req.connection.remoteAddress || '').split(',')[0].trim()
     };
     await db.collection('shop_raffle_entries').insertOne(entry);
 
     res.json({
       ok: true,
       ticketNumber,
-      status: 'pending',
-      message: 'נרשמת בהצלחה! הרישום שלך ממתין לאישור לאחר בדיקת הקבלה'
+      status: 'approved',
+      message: 'הקבלה התקבלה בהצלחה! המספר שלך רשום להגרלה'
     });
   } catch (e) {
     console.error('raffle/register error:', e);
@@ -338,6 +344,110 @@ router.get('/admin/history', verifyAdmin, async (req, res) => {
     }));
 
     res.json(enriched);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ────────────────────────────────────────────────────────────
+// STATS & EXPORT
+// ────────────────────────────────────────────────────────────
+
+// GET /api/raffle/admin/stats — overall statistics
+router.get('/admin/stats', verifyAdmin, async (req, res) => {
+  try {
+    const db = await getDb();
+    const now = new Date();
+    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+
+    const activeWeek = await getOrCreateActiveWeek(db);
+
+    const [thisWeek, lastWeek, allTime, drawnWeeks, totalEntries] = await Promise.all([
+      db.collection('shop_raffle_entries').countDocuments({ raffleWeekId: activeWeek._id }),
+      db.collection('shop_raffle_entries').countDocuments({
+        createdAt: { $gte: twoWeeksAgo, $lt: weekAgo }
+      }),
+      db.collection('shop_raffle_entries').countDocuments({}),
+      db.collection('shop_raffle_weeks').countDocuments({ status: 'drawn' }),
+      db.collection('shop_raffle_entries').countDocuments({})
+    ]);
+
+    // Hourly distribution for this week
+    const thisWeekEntries = await db.collection('shop_raffle_entries')
+      .find({ raffleWeekId: activeWeek._id }).toArray();
+    const hourly = Array(24).fill(0);
+    thisWeekEntries.forEach(e => {
+      const h = new Date(e.createdAt).getHours();
+      hourly[h]++;
+    });
+    const peakHour = hourly.indexOf(Math.max(...hourly));
+
+    // Daily distribution (last 7 days)
+    const daily = {};
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+      const key = d.toISOString().slice(0, 10);
+      daily[key] = 0;
+    }
+    const last7dEntries = await db.collection('shop_raffle_entries')
+      .find({ createdAt: { $gte: new Date(now.getTime() - 7*24*60*60*1000) } }).toArray();
+    last7dEntries.forEach(e => {
+      const key = new Date(e.createdAt).toISOString().slice(0, 10);
+      if (daily[key] !== undefined) daily[key]++;
+    });
+
+    // Growth percentage
+    const growthPct = lastWeek > 0 ? Math.round(((thisWeek - lastWeek) / lastWeek) * 100) : (thisWeek > 0 ? 100 : 0);
+
+    res.json({
+      thisWeek,
+      lastWeek,
+      allTime,
+      drawnWeeks,
+      totalEntries,
+      growthPct,
+      peakHour,
+      hourly,
+      daily
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/raffle/admin/export — CSV export of current week entries
+router.get('/admin/export', verifyAdmin, async (req, res) => {
+  try {
+    const db = await getDb();
+    const all = req.query.all === '1';
+    let entries;
+    if (all) {
+      entries = await db.collection('shop_raffle_entries')
+        .find({}).sort({ createdAt: -1 }).toArray();
+    } else {
+      const activeWeek = await getOrCreateActiveWeek(db);
+      entries = await db.collection('shop_raffle_entries')
+        .find({ raffleWeekId: activeWeek._id }).sort({ createdAt: -1 }).toArray();
+    }
+
+    // Build CSV (with BOM for proper Hebrew UTF-8 in Excel)
+    let csv = '\uFEFF';
+    csv += 'מספר,שם,טלפון,מייל,סכום זוהה,סטטוס,תאריך,קישור לקבלה\n';
+    for (const e of entries) {
+      const row = [
+        e.ticketNumber || '',
+        e.name || '',
+        e.phone || '',
+        e.email || '',
+        e.detectedAmount ? '₪' + e.detectedAmount : '',
+        e.status || '',
+        new Date(e.createdAt).toLocaleString('he-IL'),
+        e.receiptImageUrl || ''
+      ].map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',');
+      csv += row + '\n';
+    }
+
+    const filename = all ? 'raffle-all-entries.csv' : 'raffle-this-week.csv';
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"');
+    res.send(csv);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

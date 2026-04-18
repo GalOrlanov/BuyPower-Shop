@@ -318,10 +318,22 @@
       <div id="weekInfo" style="margin-top:12px;font-size:.88rem;color:#6b7280;text-align:center"></div>
     </div>
 
-    <!-- Pending -->
+    <!-- Trend chart -->
     <div class="card">
-      <div class="card-title">⏳ ממתינים לאישור</div>
-      <div id="pendingList" class="loading">⏳ טוען...</div>
+      <div class="card-title">📈 סטטיסטיקה</div>
+      <div id="trendStats" class="loading">⏳ טוען...</div>
+    </div>
+
+    <!-- All entries this week -->
+    <div class="card">
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+        <span>📋 כל המשתתפים השבוע</span>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-blue" onclick="exportCSV(false)">📊 ייצא אקסל</button>
+          <button class="btn btn-gold" onclick="exportCSV(true)">📊 ייצא הכל</button>
+        </div>
+      </div>
+      <div id="entriesList" class="loading">⏳ טוען...</div>
     </div>
 
     <!-- Gallery -->
@@ -396,7 +408,71 @@ function authHeaders() {
 
 // ─── Data ───
 async function loadAll() {
-  await Promise.all([loadSettings(), loadEntries(), loadHistory(), loadGallery()]);
+  await Promise.all([loadSettings(), loadEntries(), loadHistory(), loadGallery(), loadStats()]);
+}
+
+// ─── Stats ───
+async function loadStats() {
+  try {
+    const r = await fetch('/api/raffle/admin/stats', { headers: authHeaders() });
+    const s = await r.json();
+    if (s.error) return;
+    const trendIcon = s.growthPct > 0 ? '📈' : s.growthPct < 0 ? '📉' : '➡️';
+    const trendColor = s.growthPct > 0 ? '#15803d' : s.growthPct < 0 ? '#dc2626' : '#6b7280';
+    const growthSign = s.growthPct > 0 ? '+' : '';
+
+    // Daily chart
+    const maxDaily = Math.max(...Object.values(s.daily), 1);
+    const daysHtml = Object.entries(s.daily).map(([date, count]) => {
+      const pct = (count / maxDaily) * 100;
+      const d = new Date(date);
+      const label = d.toLocaleDateString('he-IL', { weekday: 'short' });
+      return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">' +
+        '<div style="font-size:.75rem;color:#15803d;font-weight:800">' + count + '</div>' +
+        '<div style="width:100%;height:60px;background:#f3f4f6;border-radius:6px;display:flex;align-items:flex-end;overflow:hidden">' +
+          '<div style="width:100%;height:' + pct + '%;background:linear-gradient(180deg,#15803d,#16a34a);border-radius:6px 6px 0 0;min-height:2px"></div>' +
+        '</div>' +
+        '<div style="font-size:.7rem;color:#6b7280">' + label + '</div>' +
+      '</div>';
+    }).join('');
+
+    document.getElementById('trendStats').innerHTML =
+      '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">' +
+        '<div style="text-align:center;padding:10px;background:#f0fdf4;border-radius:10px">' +
+          '<div style="font-size:1.4rem;font-weight:900;color:#15803d">' + s.allTime + '</div>' +
+          '<div style="font-size:.72rem;color:#6b7280">סה"כ משתתפים (כל הזמנים)</div>' +
+        '</div>' +
+        '<div style="text-align:center;padding:10px;background:#fef3c7;border-radius:10px">' +
+          '<div style="font-size:1.4rem;font-weight:900;color:#d97706">' + s.drawnWeeks + '</div>' +
+          '<div style="font-size:.72rem;color:#6b7280">הגרלות שהתקיימו</div>' +
+        '</div>' +
+        '<div style="text-align:center;padding:10px;background:#e0f2fe;border-radius:10px">' +
+          '<div style="font-size:1.4rem;font-weight:900;color:' + trendColor + '">' + trendIcon + ' ' + growthSign + s.growthPct + '%</div>' +
+          '<div style="font-size:.72rem;color:#6b7280">לעומת שבוע שעבר</div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="font-size:.85rem;color:#374151;font-weight:700;margin-bottom:8px">רישומים ב-7 ימים אחרונים:</div>' +
+      '<div style="display:flex;gap:6px;align-items:flex-end;min-height:90px">' + daysHtml + '</div>' +
+      '<div style="margin-top:12px;font-size:.82rem;color:#6b7280;text-align:center">⏰ שעת שיא להרשמות: <strong>' + String(s.peakHour).padStart(2,'0') + ':00</strong></div>';
+  } catch(e) { console.error(e); }
+}
+
+// ─── CSV Export ───
+async function exportCSV(all) {
+  try {
+    const url = '/api/raffle/admin/export' + (all ? '?all=1' : '');
+    const r = await fetch(url, { headers: authHeaders() });
+    if (!r.ok) { alert('❌ שגיאה בייצוא'); return; }
+    const blob = await r.blob();
+    const dlUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = dlUrl;
+    a.download = all ? 'raffle-all-entries.csv' : 'raffle-this-week.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(dlUrl);
+  } catch(e) { alert('שגיאה: ' + e.message); }
 }
 
 // ─── Gallery ───
@@ -542,31 +618,46 @@ async function loadEntries() {
         '🗓️ הגרלה הבאה: ' + d.toLocaleString('he-IL', {day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'});
     }
 
-    renderPending(data.entries.filter(e => e.status === 'pending'));
+    renderEntries(data.entries);
   } catch(e) { console.error(e); }
 }
 
-function renderPending(entries) {
-  const el = document.getElementById('pendingList');
+function renderEntries(entries) {
+  const el = document.getElementById('entriesList');
   if (!entries.length) {
-    el.innerHTML = '<div class="empty">אין רישומים ממתינים לאישור 🎉</div>';
+    el.innerHTML = '<div class="empty">עדיין אין משתתפים השבוע</div>';
     return;
   }
   el.innerHTML = entries.map(e => {
     const d = new Date(e.createdAt).toLocaleString('he-IL', {day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'});
     const contact = e.phone ? '📱 ' + e.phone : (e.email ? '📧 ' + e.email : '—');
+    const amountBadge = e.detectedAmount
+      ? '<span style="background:#f0fdf4;color:#15803d;padding:2px 8px;border-radius:8px;font-size:.78rem;font-weight:700">₪' + e.detectedAmount + '</span>'
+      : '';
     return '<div class="entry">' +
       '<div class="ticket">' + e.ticketNumber + '</div>' +
       '<div class="entry-info">' +
-        '<div class="entry-name">' + (e.name || '—') + '</div>' +
+        '<div class="entry-name">' + (e.name || '—') + ' ' + amountBadge + '</div>' +
         '<div class="entry-contact">' + contact + '</div>' +
         '<div class="entry-date">' + d + '</div>' +
       '</div>' +
-      '<button class="btn btn-blue" onclick="viewReceipt(\'' + e.receiptImageUrl + '\')">📷 צפה בקבלה</button>' +
-      '<button class="btn btn-green" onclick="approveEntry(\'' + e._id + '\')">✓ אשר</button>' +
-      '<button class="btn btn-red" onclick="rejectEntry(\'' + e._id + '\')">✕ דחה</button>' +
+      (e.receiptImageUrl ? '<button class="btn btn-blue" onclick="viewReceipt(\'' + e.receiptImageUrl + '\')">📷 קבלה</button>' : '') +
+      '<button class="btn btn-red" onclick="deleteEntry(\'' + e._id + '\')" title="מחק">✕</button>' +
     '</div>';
   }).join('');
+}
+
+async function deleteEntry(id) {
+  if (!confirm('למחוק רישום? (פעולה זו לא ניתנת לביטול)')) return;
+  try {
+    const r = await fetch('/api/raffle/admin/' + id + '/reject', {
+      method: 'POST', headers: authHeaders(), body: JSON.stringify({ rejectionReason: 'מחוק על ידי מנהל' })
+    });
+    const d = await r.json();
+    if (d.error) { alert('❌ ' + d.error); return; }
+    loadEntries();
+    loadStats();
+  } catch(e) { alert('שגיאת רשת'); }
 }
 
 function viewReceipt(url) {
@@ -575,29 +666,6 @@ function viewReceipt(url) {
 }
 function closeReceipt() {
   document.getElementById('receiptModal').classList.remove('show');
-}
-
-async function approveEntry(id) {
-  if (!confirm('לאשר את הרישום?')) return;
-  try {
-    const r = await fetch('/api/raffle/admin/' + id + '/approve', { method: 'POST', headers: authHeaders() });
-    const d = await r.json();
-    if (d.error) { alert('❌ ' + d.error); return; }
-    loadEntries();
-  } catch(e) { alert('שגיאת רשת'); }
-}
-
-async function rejectEntry(id) {
-  const reason = prompt('סיבת דחייה (אופציונלי):', '');
-  if (reason === null) return;
-  try {
-    const r = await fetch('/api/raffle/admin/' + id + '/reject', {
-      method: 'POST', headers: authHeaders(), body: JSON.stringify({ rejectionReason: reason })
-    });
-    const d = await r.json();
-    if (d.error) { alert('❌ ' + d.error); return; }
-    loadEntries();
-  } catch(e) { alert('שגיאת רשת'); }
 }
 
 async function runManualDraw() {
