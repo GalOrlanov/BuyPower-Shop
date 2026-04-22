@@ -720,7 +720,7 @@ router.get('/orders', async (req, res) => {
 
     const dateField = req.query.dateField === 'paidAt' ? 'paidAt' : 'createdAt';
     const since = req.query.since ? new Date(req.query.since) : defaultMonday;
-    const filter = { [dateField]: { $gte: since }, status: { $nin: ['pending_payment', 'cancelled_duplicate'] } };
+    const filter = { [dateField]: { $gte: since }, status: { $nin: ['pending_payment', 'cancelled_duplicate', 'merged_into_paid'] } };
     if (req.query.until) filter[dateField].$lte = new Date(req.query.until);
     const orders = await db.collection('shop_orders')
       .find(filter)
@@ -739,7 +739,7 @@ router.get('/orders/summary', async (req, res) => {
       ? new Date(req.query.since)
       : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const orders = await db.collection('shop_orders')
-      .find({ createdAt: { $gte: since }, status: { $nin: ['pending_payment', 'cancelled_duplicate'] } })
+      .find({ createdAt: { $gte: since }, status: { $nin: ['pending_payment', 'cancelled_duplicate', 'merged_into_paid'] } })
       .toArray();
     // Build summary per product
     const summary = {};
