@@ -449,91 +449,16 @@ router.get('/settings', async (req, res) => {
 router.put('/settings', async (req, res) => {
   try {
     const db = await getDb();
+    // FIX: Use the same filter as GET /settings ({ key: { $exists: false } })
+    // so PUT and GET target the same document. Previously used `{}` which
+    // matched any document non-deterministically and caused saves to land in
+    // the wrong doc — making it look like nothing was saved.
     await db.collection('shop_settings').updateOne(
-      {},
-      { $set: (function(b){ delete b._id; return b; })(Object.assign({}, req.body)) },
+      { key: { $exists: false } },
+      { $set: (function(b){ delete b._id; delete b.key; return b; })(Object.assign({}, req.body)) },
       { upsert: true }
     );
     res.json({ ok: true });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// ─── PICKUP DATES ONLY (isolated endpoint) ─────────────────────────────────
-// Updates ONLY collectionDate / collectionTimeFrom / collectionTimeTo on pickup
-// locations. Does not touch any other settings field. Syncs across all 3 docs
-// where pickup data lives so GET endpoints stay consistent.
-router.put('/settings/pickup-dates', async (req, res) => {
-  try {
-    const db = await getDb();
-    const incoming = Array.isArray(req.body && req.body.pickupLocations)
-      ? req.body.pickupLocations : null;
-    if (!incoming) return res.status(400).json({ error: 'pickupLocations array required' });
-
-    // Build a lookup by name → date fields only (defensive — strip everything else)
-    const dateMap = {};
-    incoming.forEach(p => {
-      if (!p || !p.name) return;
-      dateMap[p.name.trim()] = {
-        collectionDate: p.collectionDate || null,
-        collectionTimeFrom: p.collectionTimeFrom || '',
-        collectionTimeTo: p.collectionTimeTo || ''
-      };
-    });
-
-    // Helper to merge dates into an existing array, matching by name only
-    function mergeDates(existing, getName, setFields) {
-      return (existing || []).map(item => {
-        const dates = dateMap[(getName(item) || '').trim()];
-        if (!dates) return item;
-        return setFields(item, dates);
-      });
-    }
-
-    // 1) Update the document GET /settings reads from (no key)
-    const noKeyDoc = await db.collection('shop_settings').findOne({ key: { $exists: false } });
-    if (noKeyDoc) {
-      const merged = mergeDates(noKeyDoc.pickupLocations, p => p.name, (p, d) => ({ ...p, ...d }));
-      await db.collection('shop_settings').updateOne(
-        { _id: noKeyDoc._id },
-        { $set: { pickupLocations: merged } }
-      );
-    } else {
-      // Create one if missing — only with pickupLocations
-      const seedLocs = incoming.map(p => ({
-        name: p.name || '',
-        address: p.address || '',
-        hours: p.hours || '',
-        days: p.days || '',
-        collectionDate: p.collectionDate || null,
-        collectionTimeFrom: p.collectionTimeFrom || '',
-        collectionTimeTo: p.collectionTimeTo || ''
-      }));
-      await db.collection('shop_settings').insertOne({ pickupLocations: seedLocs });
-    }
-
-    // 2) Update the inventoryCategories doc if it has pickupLocations
-    const invDoc = await db.collection('shop_settings').findOne({ key: 'inventoryCategories' });
-    if (invDoc && Array.isArray(invDoc.pickupLocations)) {
-      const merged = mergeDates(invDoc.pickupLocations, p => p.name, (p, d) => ({ ...p, ...d }));
-      await db.collection('shop_settings').updateOne(
-        { _id: invDoc._id },
-        { $set: { pickupLocations: merged } }
-      );
-    }
-
-    // 3) Update the pickupPoints doc points array
-    const ppDoc = await db.collection('shop_settings').findOne({ key: 'pickupPoints' });
-    if (ppDoc && Array.isArray(ppDoc.points)) {
-      const merged = mergeDates(ppDoc.points, p => p.name, (p, d) => ({ ...p, ...d }));
-      await db.collection('shop_settings').updateOne(
-        { _id: ppDoc._id },
-        { $set: { points: merged } }
-      );
-    }
-
-    res.json({ ok: true, updatedCount: Object.keys(dateMap).length });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
