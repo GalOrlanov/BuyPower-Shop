@@ -518,6 +518,12 @@ router.post('/orders', async (req, res) => {
     const db = await getDb();
     const { customerName, phone, items, pickupLocation, pickupDate } = req.body;
 
+    // Reject empty carts — prevents phantom orders from being created when
+    // the cart was already cleared (back-button / retry after redirect to Grow).
+    if (!Array.isArray(items) || !items.length || !items.some(i => (Number(i.qty) || 0) > 0 && Number(i.price) > 0)) {
+      return res.status(400).json({ error: 'סל הקניות ריק' });
+    }
+
     // Validate pickup location exists and is a valid pickup point
     if (!pickupLocation || !pickupLocation.trim()) {
       return res.status(400).json({ error: 'נא לבחור נקודת איסוף' });
@@ -532,6 +538,9 @@ router.post('/orders', async (req, res) => {
     let totalAmount = 0;
     for (const item of items) {
       totalAmount += item.price * item.qty;
+    }
+    if (!(totalAmount > 0)) {
+      return res.status(400).json({ error: 'סכום הזמנה לא תקין' });
     }
 
     const doc = {
@@ -2527,7 +2536,21 @@ router.post('/payment/webhook', async (req, res) => {
       }
     }
 
-    // Try by phone if no order found by ID
+    // Try by paymentLinkProcessId — deterministic 1:1 mapping set when the Grow link was created.
+    // Prevents mis-matches when a phantom pending_payment order exists for the same phone.
+    if (!order && paymentLinkProcessId) {
+      order = await db.collection('shop_orders').findOne({
+        paymentLinkProcessId: Number(paymentLinkProcessId),
+        status: { $ne: 'paid' }
+      });
+      if (order) {
+        await db.collection('shop_orders').updateOne({ _id: order._id }, { $set: updateData });
+        console.log('[GROW WEBHOOK] updated by paymentLinkProcessId:', paymentLinkProcessId);
+      }
+    }
+
+    // Try by phone if still no match. Prefer an order whose total matches the paid amount
+    // and has real items — fall back to newest only if nothing better matches.
     if (!order && customerPhone) {
       const cleanPhone = customerPhone.replace(/\D/g, '').replace(/^972/, '0');
       // Skip if another order with same asmachta already marked paid (prevent double-submit duplicates)
@@ -2538,13 +2561,19 @@ router.post('/payment/webhook', async (req, res) => {
           return res.json({ ok: true, duplicate: true });
         }
       }
-      order = await db.collection('shop_orders').findOne(
-        { phone: cleanPhone, status: 'pending_payment' },
-        { sort: { createdAt: -1 } }
-      );
-      if (order) {
+      const candidates = await db.collection('shop_orders').find(
+        { phone: cleanPhone, status: 'pending_payment' }
+      ).sort({ createdAt: -1 }).toArray();
+      if (candidates.length) {
+        const paidNum = paidAmount ? Number(paidAmount) : null;
+        const amountMatch = paidNum
+          ? candidates.find(c => (c.items || []).length > 0 && Math.abs((c.totalAmount || 0) - paidNum) < 0.5)
+          : null;
+        const itemsMatch = candidates.find(c => (c.items || []).length > 0 && (c.totalAmount || 0) > 0);
+        order = amountMatch || itemsMatch || candidates[0];
         await db.collection('shop_orders').updateOne({ _id: order._id }, { $set: updateData });
-        console.log('[GROW WEBHOOK] updated by phone:', cleanPhone);
+        console.log('[GROW WEBHOOK] updated by phone:', cleanPhone, '→', order._id.toString(),
+          amountMatch ? '(amount-match)' : itemsMatch ? '(items-match)' : '(newest)');
       }
     }
 
