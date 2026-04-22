@@ -3473,10 +3473,11 @@ async function savePickupLocationDate(i, btn) {
   loc.collectionTimeFrom = fromVal;
   loc.collectionTimeTo = toVal;
   try {
-    var res = await fetch(API + '/settings', {
+    // Use isolated endpoint that ONLY updates pickup dates (won't touch other settings)
+    var res = await fetch(API + '/settings/pickup-dates', {
       method: 'PUT',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(currentSettings)
+      body: JSON.stringify({ pickupLocations: currentSettings.pickupLocations })
     });
     var body = await res.text();
     if (!res.ok) {
