@@ -68,7 +68,26 @@ async function getDb() {
     cachedClient = new MongoClient(MONGODB_URI);
     await cachedClient.connect();
   }
-  return cachedClient.db('shop_prod');
+  return cachedClient.db(process.env.SHOP_DB_NAME || 'shop_prod');
+}
+
+// ─── Pickup-point validation helpers ─────────────────────────────────────────
+// Single source of truth for "is this pickup-point name allowed?".
+// Throws an object {code, msg} consumed by the route handlers below.
+async function assertValidPickupPoint(db, name) {
+  const trimmed = (name || '').trim();
+  if (!trimmed) throw { code: 400, msg: 'נקודת איסוף חסרה' };
+  const doc = await db.collection('shop_settings').findOne({ key: 'pickupPoints' });
+  const valid = (doc && Array.isArray(doc.points)) ? doc.points.map(p => p.name) : [];
+  if (valid.length && !valid.includes(trimmed)) {
+    throw { code: 400, msg: 'נקודת איסוף לא קיימת' };
+  }
+  return trimmed;
+}
+
+// Always write both fields together so they can never drift apart.
+function userPickupUpdate(name) {
+  return { pickupPoint: name, pickupLocation: name };
 }
 
 const INFORU_API_TOKEN = process.env.INFORU_API_TOKEN || 'Ym95cG93ZXI6ZjA2MDYwNTMtZjY2OS00NGQzLTkzNjAtMDYzNmNiNDE2NzVh';
@@ -518,20 +537,34 @@ router.post('/orders', async (req, res) => {
     const db = await getDb();
     const { customerName, phone, items, pickupLocation, pickupDate } = req.body;
 
-    // Reject empty carts — prevents phantom orders from being created when
+    // 0. Reject empty carts — prevents phantom orders from being created when
     // the cart was already cleared (back-button / retry after redirect to Grow).
     if (!Array.isArray(items) || !items.length || !items.some(i => (Number(i.qty) || 0) > 0 && Number(i.price) > 0)) {
       return res.status(400).json({ error: 'סל הקניות ריק' });
     }
 
-    // Validate pickup location exists and is a valid pickup point
-    if (!pickupLocation || !pickupLocation.trim()) {
-      return res.status(400).json({ error: 'נא לבחור נקודת איסוף' });
+    // 1. Pickup must be present + exist in master list
+    let cleanPickup;
+    try { cleanPickup = await assertValidPickupPoint(db, pickupLocation); }
+    catch (e) { return res.status(e.code || 400).json({ error: e.msg }); }
+
+    // 2. Customer must be a registered shop_user (no anonymous / guest orders)
+    const cleanPhone = (phone || '').replace(/\D/g, '');
+    if (cleanPhone.length < 9) {
+      return res.status(400).json({ error: 'מספר טלפון לא תקין' });
     }
-    const ppDoc = await db.collection('shop_settings').findOne({ key: 'pickupPoints' });
-    const validPoints = ppDoc && Array.isArray(ppDoc.points) ? ppDoc.points.map(p => p.name) : [];
-    if (validPoints.length && !validPoints.includes(pickupLocation.trim())) {
-      return res.status(400).json({ error: 'נקודת האיסוף שנבחרה אינה קיימת. נא לבחור נקודה מהרשימה.' });
+    const user = await db.collection('shop_users').findOne({ phone: cleanPhone });
+    if (!user) {
+      return res.status(401).json({ error: 'יש להירשם לפני ביצוע הזמנה' });
+    }
+
+    // 3. Order's pickup must match the user's profile pickup (no cross-point mixing)
+    const userPickup = (user.pickupPoint || user.pickupLocation || '').trim();
+    if (!userPickup) {
+      return res.status(400).json({ error: 'חסרה נקודת איסוף בפרופיל. יש להשלים הרשמה.' });
+    }
+    if (userPickup !== cleanPickup) {
+      return res.status(400).json({ error: 'נקודת האיסוף בהזמנה לא תואמת לפרופיל שלך' });
     }
 
     // Calculate total
@@ -1044,13 +1077,20 @@ router.put('/users/:id', async (req, res) => {
     if (email !== undefined) update.email = email;
     if (phone !== undefined) update.phone = phone;
     if (isBlocked !== undefined) update.isBlocked = isBlocked;
-    if (pickupPoint !== undefined) update.pickupPoint = pickupPoint;
-    if (pickupLocation !== undefined) update.pickupLocation = pickupLocation;
+    // Pickup fields are write-locked through the validator + always synced as a pair.
+    const incomingPickup = pickupPoint !== undefined ? pickupPoint
+                          : pickupLocation !== undefined ? pickupLocation
+                          : undefined;
+    if (incomingPickup !== undefined) {
+      try {
+        const cleanPickup = await assertValidPickupPoint(db, incomingPickup);
+        Object.assign(update, userPickupUpdate(cleanPickup));
+      } catch (e) { return res.status(e.code || 400).json({ error: e.msg }); }
+    }
     if (req.body.internalNotes !== undefined) update.internalNotes = req.body.internalNotes;
     await db.collection('shop_users').updateOne({ _id: new ObjectId(req.params.id) }, { $set: update });
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
-  finally { await client.close(); }
 });
 
 // DELETE /api/shop/users/:id - delete user
@@ -2325,6 +2365,10 @@ router.post('/admin/staff', verifyShopToken, async (req, res) => {
     const bcrypt = require('bcryptjs');
     const { name, phone, email, notes, pickupPoint } = req.body;
     if (!name || !phone) return res.status(400).json({ error: 'שם וטלפון הם שדות חובה' });
+    // Pickup point is mandatory for staff (defines which point's data they manage)
+    let cleanPickup;
+    try { cleanPickup = await assertValidPickupPoint(db, pickupPoint); }
+    catch (e) { return res.status(e.code || 400).json({ error: 'חובה לבחור נקודת איסוף לעובד מתוך הרשימה' }); }
     const cleanPhone = phone.replace(/[^0-9]/g, '');
     // Generate 4-digit temp password
     const tempPassword = Math.floor(1000 + Math.random() * 9000).toString();
@@ -2335,7 +2379,7 @@ router.post('/admin/staff', verifyShopToken, async (req, res) => {
       phone: cleanPhone,
       email: email || '',
       notes: notes || '',
-      pickupPoint: pickupPoint || '',
+      pickupPoint: cleanPickup,
       passwordHash,
       role: 'employee',
       isActive: true,
@@ -2357,13 +2401,13 @@ router.post('/admin/staff', verifyShopToken, async (req, res) => {
         isEmployee: true,
         isAdmin: false,
         isActive: true,
-        pickupPoint: pickupPoint || '',
+        ...userPickupUpdate(cleanPickup),
         createdAt: new Date(),
       });
     } else {
       await db.collection('shop_users').updateOne(
         { phone: cleanPhone },
-        { $set: { role: 'employee', isEmployee: true, passwordHash, pickupPoint: pickupPoint || '' } }
+        { $set: { role: 'employee', isEmployee: true, passwordHash, ...userPickupUpdate(cleanPickup) } }
       );
     }
 

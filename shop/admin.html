@@ -291,6 +291,7 @@ input:checked + .slider::before { transform: translateX(20px); }
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:8px">
+        <button onclick="openOpenWeekModal()" style="background:#15803d;color:white;border:none;font-size:.82rem;font-weight:700;padding:7px 16px;border-radius:20px;cursor:pointer">🔓 פתיחת שבוע</button>
         <button onclick="openCloseWeekModal()" style="background:#dc2626;color:white;border:none;font-size:.82rem;font-weight:700;padding:7px 16px;border-radius:20px;cursor:pointer">🔒 סגירת שבוע</button>
         <a href="admin-inventory.html" style="background:rgba(255,255,255,0.2);color:white;text-decoration:none;font-size:.82rem;font-weight:700;padding:7px 14px;border-radius:20px">📦 מלאי</a>
         <a href="index.html" style="color:rgba(255,255,255,0.7);text-decoration:none;font-size:.85rem">← לחנות</a>
@@ -5041,6 +5042,49 @@ function initFinanceTab() {
 </script>
 
 <!-- ===== CLOSE WEEK MODAL ===== -->
+<!-- ===== OPEN WEEK MODAL ===== -->
+<div id="openWeekModal" onclick="if(event.target===this)closeOpenWeekModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center;font-family:inherit">
+  <div style="background:white;border-radius:18px;padding:0;width:min(480px,96vw);max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <div style="background:#15803d;color:white;padding:18px 22px;border-radius:18px 18px 0 0;display:flex;align-items:center;justify-content:space-between">
+      <span style="font-size:1.15rem;font-weight:700">🔓 פתיחת שבוע</span>
+      <button onclick="closeOpenWeekModal()" style="background:none;border:none;color:white;font-size:1.4rem;cursor:pointer;line-height:1">✕</button>
+    </div>
+    <div style="padding:22px;display:flex;flex-direction:column;gap:18px">
+      <div id="owStatusBox" style="border:2px solid #d1fae5;border-radius:12px;padding:14px;background:#f0fdf4;font-size:.9rem;color:#14532d">
+        <div style="font-weight:700;margin-bottom:4px">סטטוס נוכחי:</div>
+        <div id="owCurrentStatus">⏳ בודק...</div>
+      </div>
+
+      <div style="border:2px solid #bbf7d0;border-radius:12px;padding:16px;background:white">
+        <div style="font-weight:700;font-size:1rem;color:#15803d;margin-bottom:10px">📢 הודעת פתיחה ללקוחות</div>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.88rem;font-weight:600;color:#374151;margin-bottom:8px">
+          <input type="checkbox" id="owSendBanner" checked style="width:16px;height:16px;cursor:pointer">
+          הצג באנר עליון בעמוד הבית
+        </label>
+        <textarea id="owBannerMsg" rows="2" placeholder="🌿 פתחנו! האתר חזר לפעילות. אפשר להזמין שוב 🛒" style="width:100%;padding:10px;border:1.5px solid #bbf7d0;border-radius:8px;font-size:.9rem;font-family:inherit;direction:rtl;resize:vertical;box-sizing:border-box">🌿 פתחנו! האתר חזר לפעילות — אפשר להזמין שוב 🛒</textarea>
+      </div>
+
+      <div style="border:2px solid #e5e7eb;border-radius:12px;padding:14px;background:#f9fafb">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.88rem;font-weight:600;color:#374151">
+          <input type="checkbox" id="owSendWa" style="width:16px;height:16px;cursor:pointer">
+          📱 שלח וואטסאפ ללקוחות פעילים
+        </label>
+        <textarea id="owWaMsg" rows="2" style="display:none;width:100%;padding:10px;margin-top:8px;border:1.5px solid #d1d5db;border-radius:8px;font-size:.9rem;font-family:inherit;direction:rtl;resize:vertical;box-sizing:border-box">שלום 😊
+פתחנו את האתר להזמנות חדשות! 🌿
+היכנסו: https://shop.buypower.co.il
+— ידידיה</textarea>
+      </div>
+
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button onclick="closeOpenWeekModal()" style="padding:11px 22px;background:#f3f4f6;border:none;border-radius:10px;font-size:.95rem;cursor:pointer;font-family:inherit">ביטול</button>
+        <button onclick="executeOpenWeek(this)" style="padding:11px 28px;background:#15803d;color:white;border:none;border-radius:10px;font-size:.95rem;font-weight:700;cursor:pointer;font-family:inherit">🔓 פתח את האתר</button>
+      </div>
+
+      <div id="owResult" style="display:none"></div>
+    </div>
+  </div>
+</div>
+
 <div id="closeWeekModal" onclick="if(event.target===this)closeCloseWeekModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center;font-family:inherit">
   <div style="background:white;border-radius:18px;padding:0;width:min(540px,96vw);max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)">
     <!-- Header -->
@@ -5284,6 +5328,97 @@ async function executeCloseWeek(btn) {
     resultEl.style.display = 'block';
     btn.disabled = false;
     btn.textContent = '🔒 בצע סגירת שבוע';
+  }
+}
+
+// ===== OPEN WEEK =====
+async function openOpenWeekModal() {
+  document.getElementById('openWeekModal').style.display = 'flex';
+  document.getElementById('owResult').style.display = 'none';
+  // Show current state
+  try {
+    var s = await fetch(API + '/settings').then(function(r){ return r.json(); });
+    var statusEl = document.getElementById('owCurrentStatus');
+    if (s.isClosed) {
+      statusEl.innerHTML = '🔒 <strong>האתר סגור</strong>' + (s.closedMessage ? '<div style="color:#6b7280;margin-top:4px;font-size:.82rem">' + s.closedMessage + '</div>' : '');
+      document.getElementById('owStatusBox').style.background = '#fef2f2';
+      document.getElementById('owStatusBox').style.borderColor = '#fca5a5';
+    } else {
+      statusEl.innerHTML = '✅ <strong>האתר פתוח</strong> — לחיצה תרענן את הסטטוס + תוסיף באנר/וואטסאפ אם תרצה';
+      document.getElementById('owStatusBox').style.background = '#f0fdf4';
+      document.getElementById('owStatusBox').style.borderColor = '#86efac';
+    }
+  } catch(e) {
+    document.getElementById('owCurrentStatus').textContent = 'שגיאה בטעינת סטטוס: ' + e.message;
+  }
+  // Toggle WhatsApp textarea visibility
+  var waCb = document.getElementById('owSendWa');
+  var waMsg = document.getElementById('owWaMsg');
+  waCb.onchange = function(){ waMsg.style.display = waCb.checked ? 'block' : 'none'; };
+}
+function closeOpenWeekModal() {
+  document.getElementById('openWeekModal').style.display = 'none';
+}
+async function executeOpenWeek(btn) {
+  btn.disabled = true;
+  btn.textContent = '⏳ פותח...';
+  var resultEl = document.getElementById('owResult');
+  resultEl.style.display = 'none';
+  var sendBanner = document.getElementById('owSendBanner').checked;
+  var bannerMsg = document.getElementById('owBannerMsg').value.trim();
+  var sendWa = document.getElementById('owSendWa').checked;
+  var waMsg = document.getElementById('owWaMsg').value.trim();
+  var results = [];
+  try {
+    // 1. Read current settings, flip flags
+    var settings = await fetch(API + '/settings').then(function(r){ return r.json(); });
+    settings.isClosed = false;
+    settings.closedMessage = '';
+    settings.reopenAt = '';
+    if (sendBanner && bannerMsg) {
+      settings.openBanner = bannerMsg;
+      settings.openBannerUntil = new Date(Date.now() + 3*24*60*60*1000).toISOString(); // 3 days
+    } else {
+      settings.openBanner = '';
+      settings.openBannerUntil = '';
+    }
+    var r = await fetch(API + '/settings', {
+      method: 'PUT', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(settings)
+    });
+    if (r.ok) results.push('✅ האתר נפתח להזמנות');
+    else results.push('❌ שגיאה בעדכון הגדרות');
+
+    // 2. Optional: WhatsApp broadcast
+    if (sendWa && waMsg) {
+      try {
+        var waRes = await fetch(API + '/broadcast-whatsapp', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ message: waMsg, weekOnly: false })
+        });
+        if (waRes.ok) {
+          var waData = await waRes.json();
+          results.push('✅ וואטספ נשלח ל-' + (waData.sent || '?') + ' לקוחות');
+        } else {
+          results.push('⚠️ שגיאה בשליחת וואטספ');
+        }
+      } catch(e) {
+        results.push('⚠️ וואטספ לא נשלח — (' + e.message + ')');
+      }
+    }
+
+    resultEl.innerHTML = '<div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:14px;font-size:.9rem;direction:rtl">' +
+      '<div style="font-weight:700;color:#15803d;margin-bottom:8px">📋 תוצאות:</div>' +
+      results.map(function(r){ return '<div style="margin-bottom:4px">' + r + '</div>'; }).join('') +
+      '</div>';
+    resultEl.style.display = 'block';
+    btn.textContent = '✅ בוצע';
+    setTimeout(function(){ btn.disabled = false; btn.textContent = '🔓 פתח את האתר'; closeOpenWeekModal(); }, 2500);
+  } catch(e) {
+    resultEl.innerHTML = '<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;padding:14px;color:#dc2626">❌ שגיאה: ' + e.message + '</div>';
+    resultEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = '🔓 פתח את האתר';
   }
 }
 </script>

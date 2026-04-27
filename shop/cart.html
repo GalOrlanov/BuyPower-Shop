@@ -581,8 +581,10 @@ async function loadPickupInfo() {
       if (el) el.innerHTML = '<div style="color:#9ca3af;font-size:.9rem">אין נקודות איסוף מוגדרות</div>';
       return;
     }
-    // Pre-select user's saved pickup point but show all options
-    const userPickup = (JSON.parse(localStorage.getItem('shopUser') || '{}').pickupPoint || '').trim();
+    // Pre-select user's saved pickup point. For logged-in users we LOCK it (read-only).
+    var _userObj = JSON.parse(localStorage.getItem('shopUser') || '{}');
+    var _isLoggedIn = _userObj && !_userObj.isGuest && (_userObj.pickupPoint || _userObj.pickupLocation);
+    const userPickup = ((_userObj.pickupPoint || _userObj.pickupLocation) || '').trim();
     {
       selectedPickup = userPickup || '';
       var dayNames = ['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'];
@@ -593,15 +595,29 @@ async function loadPickupInfo() {
         return '<span style="display:block;font-size:.78rem;color:#15803d;font-weight:700;margin-top:2px">📅 יום ' + dayNames[d.getDay()] + ' ' + d.getDate() + '/' + (d.getMonth()+1) + ts + '</span>';
       }
       if (el) {
-        var radioHtml = (!selectedPickup ? '<div style="background:#fef3c7;border:1.5px solid #f59e0b;border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:.88rem;font-weight:700;color:#92400e">⚠️ נא לבחור נקודת איסוף</div>' : '');
-        radioHtml += pickupLocations.map((loc, i) => {
-          var isSelected = loc.name === selectedPickup;
-          return '<label class="pickup-option' + (isSelected ? ' selected' : '') + '" id="pickup_' + i + '" onclick="selectPickup(' + i + ')">' +
-            '<input type="radio" name="pickup" value="' + loc.name + '"' + (isSelected ? ' checked' : '') + '>' +
-            '<span>' + loc.name + (isSelected ? ' ✓' : '') + fmtLocDate(loc) + '</span>' +
-            '</label>';
-        }).join('');
-        el.innerHTML = radioHtml;
+        if (_isLoggedIn) {
+          // LOCKED view — registered user can only pick up at their profile location.
+          var myLoc = pickupLocations.find(function(l){ return l.name === userPickup; }) || { name: userPickup };
+          el.innerHTML =
+            '<div style="background:#f0fdf4;border:2px solid #16a34a;border-radius:12px;padding:14px 16px">' +
+              '<div style="font-weight:800;color:#15803d;font-size:.95rem">📍 ' + myLoc.name + ' &nbsp;🔒</div>' +
+              (myLoc.address && myLoc.address !== myLoc.name ? '<div style="font-size:.82rem;color:#6b7280;margin-top:3px">' + myLoc.address + '</div>' : '') +
+              ((myLoc.days || myLoc.hours) ? '<div style="font-size:.82rem;color:#374151;margin-top:4px">🗓️ ' + (myLoc.days || '') + (myLoc.hours ? ' ⏰ ' + myLoc.hours : '') + '</div>' : '') +
+              fmtLocDate(myLoc) +
+              '<div style="font-size:.78rem;color:#9ca3af;margin-top:10px">נקודת האיסוף שלך נקבעה בהרשמה.</div>' +
+            '</div>';
+        } else {
+          // Guest / unregistered — keep choosable radio.
+          var radioHtml = (!selectedPickup ? '<div style="background:#fef3c7;border:1.5px solid #f59e0b;border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:.88rem;font-weight:700;color:#92400e">⚠️ נא לבחור נקודת איסוף</div>' : '');
+          radioHtml += pickupLocations.map((loc, i) => {
+            var isSelected = loc.name === selectedPickup;
+            return '<label class="pickup-option' + (isSelected ? ' selected' : '') + '" id="pickup_' + i + '" onclick="selectPickup(' + i + ')">' +
+              '<input type="radio" name="pickup" value="' + loc.name + '"' + (isSelected ? ' checked' : '') + '>' +
+              '<span>' + loc.name + (isSelected ? ' ✓' : '') + fmtLocDate(loc) + '</span>' +
+              '</label>';
+          }).join('');
+          el.innerHTML = radioHtml;
+        }
       }
     }
   } catch(e) {}
@@ -634,8 +650,11 @@ async function sendOrder() {
   btn.disabled = true;
   btn.textContent = 'שולח...';
   
-  // Validate pickup location before submitting
-  const _pickupVal = selectedPickup || document.querySelector('input[name="pickup"]:checked')?.value || _loggedUser?.pickupPoint || _loggedUser?.pickupLocation || '';
+  // Validate pickup location before submitting.
+  // For registered users the profile pickup ALWAYS wins, ignoring any UI override.
+  const _pickupVal = (_loggedUser && !_loggedUser.isGuest && (_loggedUser.pickupPoint || _loggedUser.pickupLocation))
+    ? (_loggedUser.pickupPoint || _loggedUser.pickupLocation)
+    : (selectedPickup || document.querySelector('input[name="pickup"]:checked')?.value || '');
   if (!_pickupVal) {
     btn.disabled = false;
     btn.textContent = 'שלח הזמנה ✓';
@@ -747,7 +766,10 @@ async function submitGrowForm() {
 
   const cart = JSON.parse(localStorage.getItem('yedidya_cart') || '[]');
   const _su2 = JSON.parse(localStorage.getItem('shopUser') || '{}');
-  const _pLoc = selectedPickup || (document.querySelector('input[name="pickup"]:checked') && document.querySelector('input[name="pickup"]:checked').value) || _su2.pickupPoint || _su2.pickupLocation || '';
+  // Registered user: profile pickup wins. Guest: fall back to UI selection.
+  const _pLoc = (_su2 && !_su2.isGuest && (_su2.pickupPoint || _su2.pickupLocation))
+    ? (_su2.pickupPoint || _su2.pickupLocation)
+    : (selectedPickup || (document.querySelector('input[name="pickup"]:checked') && document.querySelector('input[name="pickup"]:checked').value) || '');
   if (!_pLoc) {
     btn.disabled = false;
     btn.textContent = '💳 לתשלום';

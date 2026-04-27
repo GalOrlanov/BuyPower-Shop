@@ -1310,7 +1310,7 @@ async function loadFeatured() {
   try {
     const res = await fetch('/api/shop/products');
     const products = await res.json();
-    const featuredList = products.filter(p => p.isFeatured && p.isActive).slice(0, 4);
+    const featuredList = products.filter(p => p.isFeatured && p.isActive).slice(0, 6);
     window._featuredProduct = featuredList[0] || null;
     if (!featuredList.length) return;
     const section = document.getElementById('featuredSection');
