@@ -290,7 +290,11 @@ input:checked + .slider::before { transform: translateX(20px); }
           <div id="adminSubtitle" style="font-size:0.8rem;color:rgba(255,255,255,0.75);display:none"></div>
         </div>
       </div>
-      <div style="display:flex;align-items:center;gap:8px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <select id="globalPickupFilter" onchange="onGlobalPickupChanged()" title="כל הטאבים מסוננים לפי הנקודה הזו"
+          style="background:rgba(255,255,255,0.95);color:#14532d;border:none;font-size:.82rem;font-weight:700;padding:7px 14px;border-radius:20px;cursor:pointer;font-family:inherit">
+          <option value="">🌐 כל הנקודות</option>
+        </select>
         <button onclick="openOpenWeekModal()" style="background:#15803d;color:white;border:none;font-size:.82rem;font-weight:700;padding:7px 16px;border-radius:20px;cursor:pointer">🔓 פתיחת שבוע</button>
         <button onclick="openCloseWeekModal()" style="background:#dc2626;color:white;border:none;font-size:.82rem;font-weight:700;padding:7px 16px;border-radius:20px;cursor:pointer">🔒 סגירת שבוע</button>
         <a href="admin-inventory.html" style="background:rgba(255,255,255,0.2);color:white;text-decoration:none;font-size:.82rem;font-weight:700;padding:7px 14px;border-radius:20px">📦 מלאי</a>
@@ -1126,6 +1130,41 @@ const API = '/api/shop';
 const ADMIN_PASS = 'yedidya123';
 let currentSettings = null;
 
+// ===== GLOBAL PICKUP-POINT FILTER =====
+// Single source of truth for which point's data is currently shown across ALL tabs.
+// '' means "show everything across all points" (default).
+function getActivePickup() {
+  return localStorage.getItem('activePickupPoint') || '';
+}
+async function loadGlobalPickupFilter() {
+  var sel = document.getElementById('globalPickupFilter');
+  if (!sel) return;
+  try {
+    var pts = await fetch(API + '/pickup-points').then(function(r){ return r.json(); });
+    var current = getActivePickup();
+    var html = '<option value="">🌐 כל הנקודות</option>';
+    (pts || []).forEach(function(p) {
+      var name = (p.name || '').replace(/"/g,'&quot;');
+      html += '<option value="' + name + '"' + (name === current ? ' selected' : '') + '>📍 ' + p.name + '</option>';
+    });
+    sel.innerHTML = html;
+  } catch(e) { console.warn('loadGlobalPickupFilter', e); }
+}
+function onGlobalPickupChanged() {
+  var v = document.getElementById('globalPickupFilter').value || '';
+  if (v) localStorage.setItem('activePickupPoint', v);
+  else localStorage.removeItem('activePickupPoint');
+  // Refresh whichever tabs are loaded — best-effort, handlers no-op if data isn't ready.
+  try { if (typeof loadOrders === 'function') loadOrders(); } catch(e) {}
+  try { if (typeof loadPickupTracking === 'function' && document.getElementById('tab-pickupTracking')?.classList.contains('active')) loadPickupTracking(); } catch(e) {}
+  try { if (typeof renderPickup === 'function' && window._orders) renderPickup(); } catch(e) {}
+  try { if (typeof renderSummary === 'function') renderSummary(); } catch(e) {}
+  try { if (typeof loadCrm === 'function' && document.getElementById('tab-crm')?.classList.contains('active')) loadCrm(); } catch(e) {}
+  try { if (typeof loadPricing === 'function' && document.getElementById('tab-pricing')?.classList.contains('active')) loadPricing(); } catch(e) {}
+}
+// Load filter on page boot.
+document.addEventListener('DOMContentLoaded', loadGlobalPickupFilter);
+
 function login() {
   const pass = document.getElementById('passInput').value;
   if (pass === ADMIN_PASS) {
@@ -1500,8 +1539,11 @@ function renderSummary() {
   const tbody = document.getElementById('summaryTbody');
   if (!tbody) return;
   if (!_orders || !_orders.length) { tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#9ca3af;padding:24px">אין הזמנות</td></tr>'; return; }
+  // Apply global pickup filter
+  const _gp = getActivePickup();
+  const _scopedOrders = _gp ? _orders.filter(function(o){ return (o.pickupLocation || '') === _gp; }) : _orders;
   const summary = {};
-  _orders.forEach(function(order) {
+  _scopedOrders.forEach(function(order) {
     (order.items || []).forEach(function(item) {
       const key = item.variant ? item.name + '|' + item.variant : item.name;
       if (!summary[key]) summary[key] = { name: item.name, variant: item.variant || null, qty: 0, unit: item.unit || '', total: 0 };
@@ -1905,7 +1947,8 @@ async function renderPickup() {
   const toVal = document.getElementById('pickupTo').value;
   const from = fromVal ? new Date(fromVal) : null;
   const to = toVal ? new Date(toVal + 'T23:59:59') : null;
-  const locFilter = (document.getElementById('pickupLocationFilter')||{}).value || '';
+  // Global pickup filter overrides the local dropdown.
+  const locFilter = getActivePickup() || ((document.getElementById('pickupLocationFilter')||{}).value || '');
 
   const filtered = _orders.filter(o => {
     const d = new Date(o.createdAt);
@@ -2249,10 +2292,12 @@ async function loadPricing() {
       fetch(API+'/inventory').then(r=>r.json()).catch(()=>[])
     ]);
 
+    const _gp = getActivePickup();
     const filtered = orders.filter(o => {
       const d = new Date(o.createdAt);
       if (from && d < from) return false;
       if (to && d > to) return false;
+      if (_gp && (o.pickupLocation || '') !== _gp) return false;
       return true;
     });
 
@@ -2541,7 +2586,10 @@ let _crmData = [];
 
 async function loadCrm() {
   try {
-    const orders = await fetch(API+'/orders').then(r=>r.json());
+    const allOrders = await fetch(API+'/orders').then(r=>r.json());
+    // Apply global pickup filter — CRM should reflect customers of the selected point only.
+    const _gp = getActivePickup();
+    const orders = _gp ? allOrders.filter(o => (o.pickupLocation || '') === _gp) : allOrders;
     const customers = {};
     orders.forEach(o => {
       const phone = o.phone || o.customerPhone || '—';
@@ -2842,7 +2890,9 @@ async function loadOrders() {
     const dateType = document.getElementById('orderDateType')?.value || 'createdAt';
     const fromDate = document.getElementById('orderFromDate')?.value;
     const toDate = document.getElementById('orderToDate')?.value;
-    const pickupFilter = document.getElementById('orderPickupFilter')?.value || '';
+    // Global pickup filter overrides any local pickup filter dropdown.
+    const globalPickup = getActivePickup();
+    const pickupFilter = globalPickup || (document.getElementById('orderPickupFilter')?.value || '');
     const statusFilter = document.getElementById('orderStatusFilter')?.value || '';
     let url = API + '/orders';
     const params = [];
@@ -3500,6 +3550,10 @@ async function addPickupLocation() {
   const address = document.getElementById('newPickupAddress').value.trim();
   if (!name) { alert('נא להזין שם נקודה'); return; }
   if (!currentSettings) currentSettings = { pickupLocations: [] };
+  // Reject duplicates — same name → same point. Otherwise we'd silently create
+  // unreachable pickup-point variations.
+  const dup = (currentSettings.pickupLocations || []).find(l => (l.name || '').trim() === name);
+  if (dup) { alert('נקודה בשם זה כבר קיימת'); return; }
   currentSettings.pickupLocations.push({ name, address });
   await fetch(API + '/settings', {
     method: 'PUT',
@@ -3509,10 +3563,15 @@ async function addPickupLocation() {
   document.getElementById('newPickupName').value = '';
   document.getElementById('newPickupAddress').value = '';
   renderPickupLocations();
+  // Refresh the global pickup filter so the new point is selectable immediately.
+  if (typeof loadGlobalPickupFilter === 'function') loadGlobalPickupFilter();
+  alert('✅ נקודה נוספה. היא תופיע מיד בהרשמה, בעגלה, באדמין ובמלאי.');
 }
 
 async function removePickup(idx) {
   if (!currentSettings) return;
+  const removed = (currentSettings.pickupLocations || [])[idx];
+  if (!confirm('למחוק את הנקודה "' + (removed?.name || '?') + '"? משתמשים ששייכו אותה לעצמם לא יוכלו להזמין עד שיחליפו לאחרת.')) return;
   currentSettings.pickupLocations.splice(idx, 1);
   await fetch(API + '/settings', {
     method: 'PUT',
@@ -3520,6 +3579,7 @@ async function removePickup(idx) {
     body: JSON.stringify(currentSettings)
   });
   renderPickupLocations();
+  if (typeof loadGlobalPickupFilter === 'function') loadGlobalPickupFilter();
 }
 </script>
 
@@ -4086,7 +4146,8 @@ async function loadPickupTracking() {
   initPickupTracking();
   const weekStart = document.getElementById('pickupWeekStart').value || getThisMonday();
   const weekEnd = document.getElementById('pickupWeekEnd').value || '';
-  const pickupPoint = document.getElementById('pickupPointFilter').value || '';
+  // Global filter overrides local dropdown.
+  const pickupPoint = getActivePickup() || (document.getElementById('pickupPointFilter').value || '');
   const listEl = document.getElementById('pickupOrdersList');
   const statsEl = document.getElementById('pickupStats');
   if (listEl) listEl.innerHTML = '<div style="text-align:center;padding:20px;color:#6b7280">⏳ טוען...</div>';
@@ -5430,6 +5491,13 @@ async function executeOpenWeek(btn) {
       <div style="font-size:1.1rem;font-weight:800;color:#14532d">📋 הזמנה לספק</div>
       <button onclick="document.getElementById('supplierOrderModal').style.display='none'" style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:#6b7280">✕</button>
     </div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:.83rem;font-weight:700;color:#dc2626;display:block;margin-bottom:4px">📍 נקודת איסוף (חובה)</label>
+      <select id="soPickupPoint" onchange="rebuildSoEntriesFromPickup()" style="width:100%;padding:10px 12px;border:2px solid #fca5a5;border-radius:10px;font-family:inherit;font-size:.9rem">
+        <option value="">— בחר נקודה —</option>
+      </select>
+      <div style="font-size:.74rem;color:#6b7280;margin-top:4px">סכומי המוצרים יחושבו רק מהזמנות בנקודה הזו, וההזמנה תישמר תחת השם שלה.</div>
+    </div>
     <div style="margin-bottom:14px">
       <label style="font-size:.83rem;font-weight:700;color:#374151;display:block;margin-bottom:4px">בחר ספק (אופציונלי — לסינון מוצרים ושמירה)</label>
       <select id="soSupplier" style="width:100%;padding:10px 12px;border:2px solid #d1fae5;border-radius:10px;font-family:inherit;font-size:.9rem" onchange="filterSupplierProducts()">
@@ -5451,37 +5519,59 @@ var _soEntries = [];
 var _soFilteredEntries = [];
 
 async function openSupplierOrderModal() {
-  // Always load fresh orders to build _pickupByProduct
+  // Always load fresh orders so we can aggregate by point.
   if (typeof loadOrders === 'function') {
     await loadOrders();
   }
-  // Build product summary from _orders directly if _pickupByProduct still empty
-  if (!window._pickupByProduct || !Object.keys(window._pickupByProduct).length) {
-    var byProd = {};
-    (_orders || []).forEach(function(o) {
+  // Populate pickup-point selector — pre-select the global filter if one is active.
+  try {
+    var pts = await fetch('/api/shop/pickup-points').then(function(r){ return r.json(); });
+    var preSel = (typeof getActivePickup === 'function') ? getActivePickup() : '';
+    var ppSel = document.getElementById('soPickupPoint');
+    ppSel.innerHTML = '<option value="">— בחר נקודה —</option>' +
+      (pts || []).map(function(p) {
+        var name = (p.name||'').replace(/"/g,'&quot;');
+        return '<option value="' + name + '"' + (name === preSel ? ' selected' : '') + '>📍 ' + p.name + '</option>';
+      }).join('');
+  } catch(e) { console.warn('pickup-points load fail', e); }
+
+  // Suppliers list
+  var res = await fetch('/api/shop/suppliers', { headers: { 'Content-Type': 'application/json', 'x-admin-password': 'yedidya2024' } });
+  _allSuppliers = await res.json();
+  var sel = document.getElementById('soSupplier');
+  sel.innerHTML = '<option value="">📦 כל המוצרים</option>' +
+    _allSuppliers.map(function(s) { return '<option value="' + s._id + '" data-name="' + s.name + '">' + s.name + '</option>'; }).join('');
+
+  _soEntries = [];
+  _soFilteredEntries = [];
+  rebuildSoEntriesFromPickup(); // builds entries scoped to selected pickup
+  document.getElementById('soErr').style.display = 'none';
+  document.getElementById('supplierOrderModal').style.display = 'flex';
+}
+
+// Rebuild aggregated product list using ONLY orders for the selected pickup point.
+// This is the fix for the cross-point mixing bug — pickup is the primary filter, not an afterthought.
+function rebuildSoEntriesFromPickup() {
+  var pp = document.getElementById('soPickupPoint').value;
+  if (!pp) {
+    _soEntries = [];
+    _soFilteredEntries = [];
+    renderSoProducts([]);
+    return;
+  }
+  var byProd = {};
+  (_orders || [])
+    .filter(function(o){ return (o.pickupLocation || '') === pp; })
+    .forEach(function(o) {
       (o.items || []).forEach(function(item) {
         var key = item.name + (item.variant ? '__' + item.variant : '');
         if (!byProd[key]) byProd[key] = { name: item.name, variant: item.variant || '', total: 0 };
         byProd[key].total += (item.qty || item.quantity || 1);
       });
     });
-    window._pickupByProduct = byProd;
-  }
-  var byProduct = window._pickupByProduct || {};
-  var selected = getSelectedKeys ? getSelectedKeys() : new Set();
-  var entries = Object.entries(byProduct).filter(function(e) { return selected.size===0 || selected.has(encodeURIComponent(e[0])); });
-  if (!entries.length) { alert('אין מוצרים. ודא שיש הזמנות בטווח התאריכים הנבחר.'); return; }
-  var res = await fetch('/api/shop/suppliers', { headers: { 'Content-Type': 'application/json', 'x-admin-password': 'yedidya2024' } });
-  _allSuppliers = await res.json();
-  var sel = document.getElementById('soSupplier');
-  sel.innerHTML = '<option value="">📦 כל המוצרים</option>' +
-    _allSuppliers.map(function(s) { return '<option value="' + s._id + '" data-name="' + s.name + '">' + s.name + '</option>'; }).join('');
-  _soEntries = entries;
-  _soFilteredEntries = entries;
-  renderSoProducts(entries);
-  document.getElementById('soErr').style.display = 'none';
-  var modal = document.getElementById('supplierOrderModal');
-  modal.style.display = 'flex';
+  _soEntries = Object.entries(byProd);
+  _soFilteredEntries = _soEntries;
+  renderSoProducts(_soEntries);
 }
 
 async function filterSupplierProducts() {
@@ -5510,8 +5600,10 @@ function renderSoProducts(entries) {
 }
 
 async function doExportSupplierPDF(saveToSupplier) {
+  var pickupPoint = document.getElementById('soPickupPoint').value;
+  if (!pickupPoint) { document.getElementById('soErr').textContent = 'יש לבחור נקודת איסוף'; document.getElementById('soErr').style.display='block'; return; }
   var entries = _soFilteredEntries.length ? _soFilteredEntries : _soEntries;
-  if (!entries.length) { document.getElementById('soErr').textContent = 'אין מוצרים'; document.getElementById('soErr').style.display='block'; return; }
+  if (!entries.length) { document.getElementById('soErr').textContent = 'אין מוצרים בנקודה זו בטווח התאריכים'; document.getElementById('soErr').style.display='block'; return; }
   var supplierId = document.getElementById('soSupplier').value;
   var supplierName = supplierId ? document.getElementById('soSupplier').selectedOptions[0].dataset.name : 'כללי';
   if (saveToSupplier && !supplierId) { document.getElementById('soErr').textContent = 'יש לבחור ספק כדי לשמור'; document.getElementById('soErr').style.display='block'; return; }
@@ -5540,8 +5632,17 @@ async function doExportSupplierPDF(saveToSupplier) {
   var totalCost = items.reduce(function(s,i){ return s+i.lineTotal; }, 0);
 
   if (saveToSupplier) {
-    var r = await fetch('/api/shop/suppliers/' + supplierId + '/orders', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-password': 'yedidya2024' }, body: JSON.stringify({ items: items, dateRange: dateRange, totalCost: totalCost, notes: '' }) });
-    if (!r.ok) { document.getElementById('soErr').textContent = 'שגיאה בשמירה'; document.getElementById('soErr').style.display='block'; return; }
+    var r = await fetch('/api/shop/suppliers/' + supplierId + '/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-password': 'yedidya2024' },
+      body: JSON.stringify({ items: items, dateRange: dateRange, totalCost: totalCost, notes: '', pickupPoint: pickupPoint })
+    });
+    if (!r.ok) {
+      var errBody; try { errBody = await r.json(); } catch(e) { errBody = {}; }
+      document.getElementById('soErr').textContent = errBody.error || 'שגיאה בשמירה';
+      document.getElementById('soErr').style.display='block';
+      return;
+    }
   }
 
   var showPrices = false;
@@ -5560,7 +5661,7 @@ async function doExportSupplierPDF(saveToSupplier) {
   w.document.write('<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>הזמנה לספק</title><style>@page{size:A4;margin:20mm}body{font-family:Arial,sans-serif;direction:rtl;color:#111;font-size:12pt}h1{font-size:17pt;color:#14532d;margin-bottom:4px}.meta{color:#555;font-size:10pt;margin-bottom:20px}table{width:100%;border-collapse:collapse;margin-top:8px}th{background:#14532d;color:white;padding:10px 14px;text-align:right;font-size:11pt}td{border-bottom:1px solid #e5e7eb}tr:nth-child(even) td{background:#f9fafb}.total-row td{background:#f0fdf4;font-weight:900;border-top:3px solid #14532d;font-size:1.1rem}.btn{position:fixed;top:16px;left:16px;background:#14532d;color:white;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;font-weight:700;font-size:12pt}@media print{.btn{display:none}}</style></head><body>' +
     '<button class="btn" onclick="window.print()">🖨️ שמור / הדפס</button>' +
     '<h1>📋 הזמנה לספק — '+supplierName+'</h1>' +
-    '<div class="meta">תאריכים: '+dateRange+' &nbsp;·&nbsp; הופק: '+new Date().toLocaleString("he-IL")+'</div>' +
+    '<div class="meta">📍 נקודת איסוף: <strong>'+pickupPoint+'</strong> &nbsp;·&nbsp; תאריכים: '+dateRange+' &nbsp;·&nbsp; הופק: '+new Date().toLocaleString("he-IL")+'</div>' +
     '<table><thead><tr>' +
     '<th style="width:40px;text-align:center">#</th>' +
     '<th>מוצר</th>' +

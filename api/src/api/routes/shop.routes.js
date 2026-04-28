@@ -520,10 +520,9 @@ router.get('/pickup-points', async (req, res) => {
   try {
     const db = await getDb();
     const doc = await db.collection('shop_settings').findOne({ key: 'pickupPoints' });
-    const points = doc ? doc.points : [
-      { name: 'פרדס חנה–כרכור', address: 'פרדס חנה–כרכור', days: 'חמישי', hours: '16:00–20:00' },
-      { name: 'רמת אייל – הדולב 4ב׳', address: 'הדולב 4ב׳, רמת אייל', days: 'חמישי', hours: '16:00–20:00' }
-    ];
+    // No hardcoded fallback — fresh installs return [] and the admin adds points
+    // through the settings UI. This keeps the master list under the admin's control.
+    const points = (doc && Array.isArray(doc.points)) ? doc.points : [];
     // Manager auth endpoint
     if (req.query.managerLogin) {
       const { pointName, password } = req.query;
@@ -2918,7 +2917,10 @@ router.delete('/suppliers/:id', async (req, res) => {
 router.get('/suppliers/:id/orders', async (req, res) => {
   try {
     const db = await getDb();
-    const orders = await db.collection('shop_purchase_orders').find({ supplierId: req.params.id }).sort({ createdAt: -1 }).toArray();
+    // Optional ?pickupPoint=X — return only purchase orders generated for that point.
+    const filter = { supplierId: req.params.id };
+    if (req.query.pickupPoint) filter.pickupPoint = req.query.pickupPoint;
+    const orders = await db.collection('shop_purchase_orders').find(filter).sort({ createdAt: -1 }).toArray();
     res.json(orders);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -2927,11 +2929,26 @@ router.post('/suppliers/:id/orders', async (req, res) => {
   try {
     const db = await getDb();
     const { ObjectId } = require('mongodb');
-    const { items, dateRange, notes } = req.body;
+    const { items, dateRange, notes, pickupPoint, totalCost } = req.body;
     if (!items || !items.length) return res.status(400).json({ error: 'אין פריטים' });
+    // Pickup point is required so each purchase-order row is owned by one point.
+    // Otherwise orders from different points get aggregated into the same supplier sheet.
+    if (!pickupPoint) return res.status(400).json({ error: 'חובה לבחור נקודת איסוף להפקת דף לספק' });
+    try { await assertValidPickupPoint(db, pickupPoint); }
+    catch (e) { return res.status(e.code || 400).json({ error: e.msg }); }
     const supplier = await db.collection('shop_suppliers').findOne({ _id: new ObjectId(req.params.id) });
     if (!supplier) return res.status(404).json({ error: 'ספק לא נמצא' });
-    const doc = { supplierId: req.params.id, supplierName: supplier.name, items, dateRange: dateRange||'', notes: notes||'', totalItems: items.reduce((s,i)=>s+(i.qty||0),0), createdAt: new Date() };
+    const doc = {
+      supplierId: req.params.id,
+      supplierName: supplier.name,
+      pickupPoint,
+      items,
+      dateRange: dateRange || '',
+      notes: notes || '',
+      totalCost: typeof totalCost === 'number' ? totalCost : null,
+      totalItems: items.reduce((s,i)=>s+(i.qty||0),0),
+      createdAt: new Date(),
+    };
     const result = await db.collection('shop_purchase_orders').insertOne(doc);
     res.json({ ...doc, _id: result.insertedId });
   } catch (e) { res.status(500).json({ error: e.message }); }

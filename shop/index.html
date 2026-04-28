@@ -984,17 +984,14 @@ function closeAnnPopup() {
   if (window._annKey) localStorage.setItem(window._annKey, '1');
 }
 
-function normalizePickup(pt) {
-  if (!pt) return '';
-  if (pt.includes('רמת') || pt.includes('אפרים') || pt.includes('הדולב')) return 'רמת אייל - הדולב 4ב׳ (עץ אפרים)';
-  if (pt.includes('פרדס') || pt.includes('למרחב') || pt.includes('העגלה')) return 'פרדס חנה דרך למרחב 36 - "העגלה החברתית"';
-  return pt;
-}
+// Pickup names come from /api/shop/pickup-points (the single source of truth).
+// No more hardcoded mapping — any new point added in admin works without code changes.
+function normalizePickup(pt) { return pt || ''; }
 function shortPickupName(pt) {
   if (!pt) return '';
-  if (pt.includes('פרדס') || pt.includes('למרחב') || pt.includes('העגלה')) return 'פרדס חנה–כרכור';
-  if (pt.includes('רמת') || pt.includes('אפרים') || pt.includes('הדולב')) return 'רמת אייל (עץ אפרים)';
-  return pt.split(' ').slice(0,2).join(' ');
+  // Take the first segment before " - " or " — " (or fall back to first 2 words).
+  var firstSeg = pt.split(/\s[\-—]\s/)[0];
+  return firstSeg.length <= 24 ? firstSeg : firstSeg.split(' ').slice(0,3).join(' ');
 }
 
 function selectPickupFromModal(pickupName) {
