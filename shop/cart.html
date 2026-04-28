@@ -554,22 +554,24 @@ function renderTotal() {
 
 async function loadPickupInfo() {
   try {
-    const res = await fetch(API + '/settings');
-    const settings = await res.json();
-    pickupLocations = settings.pickupLocations || [];
-    pickupInfoText = settings.pickupInfo || '';
-    minOrderAmount = parseFloat(settings.minOrderAmount) || 0;
-
-    // Fallback: if no pickupLocations in settings, load from /pickup-points
-    if (!pickupLocations.length) {
-      try {
-        const ptsRes = await fetch(API + '/pickup-points');
-        const pts = await ptsRes.json();
-        if (Array.isArray(pts) && pts.length) {
-          pickupLocations = pts.map(p => ({ name: p.name, address: p.address, days: p.days, hours: p.hours, collectionDate: p.collectionDate, collectionTimeFrom: p.collectionTimeFrom, collectionTimeTo: p.collectionTimeTo }));
-        }
-      } catch(e2) { console.warn('Failed to load pickup-points fallback', e2); }
-    }
+    // Canonical source: /pickup-points. Settings is read only for non-pickup config.
+    try {
+      const ptsRes = await fetch(API + '/pickup-points');
+      const pts = await ptsRes.json();
+      if (Array.isArray(pts) && pts.length) {
+        pickupLocations = pts.map(p => ({ name: p.name, address: p.address, days: p.days, hours: p.hours, collectionDate: p.collectionDate, collectionTimeFrom: p.collectionTimeFrom, collectionTimeTo: p.collectionTimeTo }));
+      }
+    } catch(e1) { console.warn('Failed to load pickup-points', e1); }
+    try {
+      const res = await fetch(API + '/settings');
+      const settings = await res.json();
+      pickupInfoText = settings.pickupInfo || '';
+      minOrderAmount = parseFloat(settings.minOrderAmount) || 0;
+      // Settings is the legacy fallback only — never overwrites canonical data.
+      if (!pickupLocations.length && Array.isArray(settings.pickupLocations)) {
+        pickupLocations = settings.pickupLocations;
+      }
+    } catch(e2) { console.warn('Failed to load settings', e2); }
 
     // Pickup info is now per-location (shown inline in each radio option)
     const textEl = document.getElementById('pickupInfoText');

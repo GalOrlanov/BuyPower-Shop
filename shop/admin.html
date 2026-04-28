@@ -608,17 +608,53 @@ input:checked + .slider::before { transform: translateX(20px); }
       <div class="card">
         <div class="card-title">📍 נקודות איסוף</div>
         <div id="pickupLocationsList"></div>
-        <div class="form-row" style="margin-top:12px">
-          <div class="form-group">
-            <label>שם נקודה</label>
-            <input type="text" id="newPickupName" placeholder="פרדס חנה — רחוב הדקל 5">
+        <div style="margin-top:14px;padding:14px;border:2px solid #d1fae5;border-radius:12px;background:#f0fdf4">
+          <div style="font-weight:700;color:#15803d;margin-bottom:10px">➕ הוספת נקודה חדשה</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>שם נקודה <span style="color:#dc2626">*</span></label>
+              <input type="text" id="newPickupName" placeholder="כפר סבא — ויצמן 12">
+            </div>
+            <div class="form-group">
+              <label>כתובת</label>
+              <input type="text" id="newPickupAddress" placeholder="ויצמן 12, כפר סבא">
+            </div>
           </div>
-          <div class="form-group">
-            <label>כתובת</label>
-            <input type="text" id="newPickupAddress" placeholder="רחוב הדקל 5, פרדס חנה">
+          <div class="form-row">
+            <div class="form-group">
+              <label>🗓️ יום קבוע</label>
+              <select id="newPickupDays">
+                <option value="">— בחר —</option>
+                <option>ראשון</option>
+                <option>שני</option>
+                <option>שלישי</option>
+                <option>רביעי</option>
+                <option selected>חמישי</option>
+                <option>שישי</option>
+                <option>שבת</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>⏰ שעות (טקסט חופשי)</label>
+              <input type="text" id="newPickupHours" placeholder="16:00–20:00" value="16:00–20:00">
+            </div>
           </div>
+          <div class="form-row" style="margin-bottom:6px">
+            <div class="form-group">
+              <label>📅 תאריך איסוף ספציפי <span style="color:#9ca3af;font-weight:400">(אופציונלי)</span></label>
+              <input type="date" id="newPickupCollectionDate">
+            </div>
+            <div class="form-group">
+              <label>שעת התחלה</label>
+              <input type="time" id="newPickupTimeFrom">
+            </div>
+            <div class="form-group">
+              <label>שעת סיום</label>
+              <input type="time" id="newPickupTimeTo">
+            </div>
+          </div>
+          <button class="btn btn-green" onclick="addPickupLocation()" style="margin-top:6px">➕ הוסף נקודה</button>
         </div>
-        <button class="btn btn-green" onclick="addPickupLocation()">➕ הוסף נקודה</button>
       </div>
     </div>
 
@@ -1251,23 +1287,27 @@ function renderUsersTable() {
     if (o.phone && o.pickupLocation) phoneToLoc[o.phone] = o.pickupLocation;
   });
 
-  // Populate location dropdown from users + orders + settings
+  // Populate location dropdown — canonical source is /api/shop/pickup-points.
+  // Legacy values from users/orders are added too so old data with stale strings
+  // is still selectable for cleanup.
   if (locFilterEl && locFilterEl.options.length <= 1) {
     const allLocs = new Set(Object.values(phoneToLoc));
-    // Also collect from user pickupPoint/pickupLocation fields
     (_allUsers||[]).forEach(function(u) {
       if (u.pickupPoint) allLocs.add(u.pickupPoint);
       if (u.pickupLocation) allLocs.add(u.pickupLocation);
     });
-    // Also add from settings
-    if (typeof currentSettings !== 'undefined' && currentSettings && currentSettings.pickupLocations) {
-      currentSettings.pickupLocations.forEach(function(loc) { if (loc.name) allLocs.add(loc.name); });
-    }
-    [...allLocs].sort().forEach(function(loc) {
-      const opt = document.createElement('option');
-      opt.value = loc; opt.textContent = '📍 ' + loc;
-      locFilterEl.appendChild(opt);
-    });
+    fetch(API + '/pickup-points').then(function(r){ return r.json(); }).then(function(pts) {
+      (pts || []).forEach(function(p) { if (p.name) allLocs.add(p.name); });
+      // Re-render options from the merged set
+      const cur = locFilterEl.value;
+      while (locFilterEl.options.length > 1) locFilterEl.remove(1);
+      [...allLocs].sort().forEach(function(loc) {
+        const opt = document.createElement('option');
+        opt.value = loc; opt.textContent = '📍 ' + loc;
+        locFilterEl.appendChild(opt);
+      });
+      locFilterEl.value = cur;
+    }).catch(function(){});
   }
 
   let users = _allUsers.filter(function(u) {
@@ -1362,16 +1402,12 @@ async function openEditUser(id) {
   var locSel = document.getElementById('editUserPickupLocation');
   if (locSel) {
     while (locSel.options.length > 1) locSel.remove(1);
-    // Try settings first, fallback to pickup-points API
-    var locations = (typeof currentSettings !== 'undefined' && currentSettings && currentSettings.pickupLocations && currentSettings.pickupLocations.length)
-      ? currentSettings.pickupLocations
-      : [];
-    if (!locations.length) {
-      try {
-        var pts = await fetch(API + '/pickup-points').then(function(r){ return r.json(); });
-        if (Array.isArray(pts)) locations = pts;
-      } catch(e) {}
-    }
+    // Always read from canonical pickup-points API
+    var locations = [];
+    try {
+      var pts = await fetch(API + '/pickup-points').then(function(r){ return r.json(); });
+      if (Array.isArray(pts)) locations = pts;
+    } catch(e) {}
     locations.forEach(function(loc) {
       var opt = document.createElement('option');
       opt.value = loc.name; opt.textContent = '📍 ' + loc.name;
@@ -1512,15 +1548,21 @@ async function loadAll() {
   try { loadSummary(); } catch(e) { console.error('loadSummary:', e); }
   try { loadProducts(); } catch(e) { console.error('loadProducts:', e); }
   try { loadInventoryDropdown(); } catch(e) { console.error('loadInventoryDropdown:', e); }
-  // Populate pickup location filters (pickup tab + orders tab)
+  // Populate pickup-location filter dropdowns from the canonical /pickup-points list
   try {
-    fetch('/api/shop/settings').then(r=>r.json()).then(s => {
-      const locations = s.pickupLocations || [];
-      const selPickup = document.getElementById('pickupLocationFilter');
-      const selOrders = document.getElementById('orderPickupFilter');
-      locations.forEach(loc => {
-        if (selPickup) { const o = document.createElement('option'); o.value = loc.name; o.textContent = loc.name; selPickup.appendChild(o); }
-        if (selOrders) { const o = document.createElement('option'); o.value = loc.name; o.textContent = loc.name; selOrders.appendChild(o); }
+    fetch('/api/shop/pickup-points').then(r=>r.json()).then(pts => {
+      const points = pts || [];
+      const targets = ['pickupLocationFilter', 'orderPickupFilter', 'pickupPointFilter'];
+      targets.forEach(id => {
+        const sel = document.getElementById(id);
+        if (!sel) return;
+        // Clear non-default options to avoid duplicates on re-runs
+        while (sel.options.length > 1) sel.remove(1);
+        points.forEach(p => {
+          const o = document.createElement('option');
+          o.value = p.name; o.textContent = '📍 ' + p.name;
+          sel.appendChild(o);
+        });
       });
     }).catch(()=>{});
   } catch(e) {}
@@ -3548,20 +3590,32 @@ async function savePickupLocationDate(i, btn) {
 async function addPickupLocation() {
   const name = document.getElementById('newPickupName').value.trim();
   const address = document.getElementById('newPickupAddress').value.trim();
+  const days = (document.getElementById('newPickupDays')?.value || '').trim();
+  const hours = (document.getElementById('newPickupHours')?.value || '').trim();
+  const collectionDate = document.getElementById('newPickupCollectionDate')?.value || '';
+  const collectionTimeFrom = document.getElementById('newPickupTimeFrom')?.value || '';
+  const collectionTimeTo = document.getElementById('newPickupTimeTo')?.value || '';
   if (!name) { alert('נא להזין שם נקודה'); return; }
   if (!currentSettings) currentSettings = { pickupLocations: [] };
   // Reject duplicates — same name → same point. Otherwise we'd silently create
   // unreachable pickup-point variations.
   const dup = (currentSettings.pickupLocations || []).find(l => (l.name || '').trim() === name);
   if (dup) { alert('נקודה בשם זה כבר קיימת'); return; }
-  currentSettings.pickupLocations.push({ name, address });
+  currentSettings.pickupLocations.push({
+    name, address, days, hours,
+    collectionDate: collectionDate || null,
+    collectionTimeFrom, collectionTimeTo,
+  });
   await fetch(API + '/settings', {
     method: 'PUT',
     headers: {'Content-Type':'application/json'},
     body: JSON.stringify(currentSettings)
   });
-  document.getElementById('newPickupName').value = '';
-  document.getElementById('newPickupAddress').value = '';
+  // Reset form
+  ['newPickupName','newPickupAddress','newPickupHours','newPickupCollectionDate','newPickupTimeFrom','newPickupTimeTo'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = id === 'newPickupHours' ? '16:00–20:00' : '';
+  });
+  const daysEl = document.getElementById('newPickupDays'); if (daysEl) daysEl.value = 'חמישי';
   renderPickupLocations();
   // Refresh the global pickup filter so the new point is selectable immediately.
   if (typeof loadGlobalPickupFilter === 'function') loadGlobalPickupFilter();
