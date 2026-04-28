@@ -1502,19 +1502,29 @@ router.post('/payment/create', async (req, res) => {
     // Save payment link to existing pending order (don't create a duplicate!)
     const db = await getDb();
     const cleanPhone = phone.replace(/\D/g, '');
+    // Resolve pickup: explicit body param wins, else lookup from user profile.
+    // This guarantees orders created via the Grow flow always carry a pickup so
+    // they show up correctly in the Orders/Summary tabs.
+    let resolvedPickup = (req.body.pickupLocation || req.body.pickupPoint || '').trim();
+    if (!resolvedPickup) {
+      const user = await db.collection('shop_users').findOne({ phone: cleanPhone });
+      resolvedPickup = (user?.pickupPoint || user?.pickupLocation || '').trim();
+    }
     const existingOrder = await db.collection('shop_orders').findOne(
       { phone: cleanPhone, status: 'pending_payment' },
       { sort: { createdAt: -1 } }
     );
     let orderId;
     if (existingOrder) {
-      // Update existing order with payment link info
+      // Update existing order with payment link info; backfill pickup if it was missing.
+      const setFields = { paymentUrl, paymentLinkProcessId, source: 'grow_link', chargeType: chargeTypeLabel };
+      if (resolvedPickup && !existingOrder.pickupLocation) setFields.pickupLocation = resolvedPickup;
       await db.collection('shop_orders').updateOne(
         { _id: existingOrder._id },
-        { $set: { paymentUrl, paymentLinkProcessId, source: 'grow_link', chargeType: chargeTypeLabel } }
+        { $set: setFields }
       );
       orderId = existingOrder._id;
-      console.log('[PAYMENT CREATE] Updated existing order:', orderId);
+      console.log('[PAYMENT CREATE] Updated existing order:', orderId, 'pickup:', existingOrder.pickupLocation || resolvedPickup || '(none)');
     } else {
       // No existing order — create one (e.g. admin-created payment links)
       const orderDoc = {
@@ -1524,6 +1534,7 @@ router.post('/payment/create', async (req, res) => {
         invoiceName: invoice_name || '',
         items: products.map(p => ({ name: p.name, price: Number(p.price), qty: Number(p.quantity) || 1 })),
         totalAmount: products.reduce((s, p) => s + Number(p.price) * (Number(p.quantity) || 1), 0),
+        pickupLocation: resolvedPickup || '',
         status: 'pending_payment',
         source: 'grow_link',
         paymentUrl,
@@ -1533,7 +1544,7 @@ router.post('/payment/create', async (req, res) => {
       };
       const inserted = await db.collection('shop_orders').insertOne(orderDoc);
       orderId = inserted.insertedId;
-      console.log('[PAYMENT CREATE] New order saved:', orderId);
+      console.log('[PAYMENT CREATE] New order saved:', orderId, 'pickup:', resolvedPickup || '(none)');
     }
 
     res.json({
@@ -2690,6 +2701,25 @@ router.post('/payment/webhook', async (req, res) => {
       );
       if (cancelled.modifiedCount > 0) {
         console.log('[GROW WEBHOOK] cancelled', cancelled.modifiedCount, 'duplicate pending orders for', order.phone);
+      }
+
+      // SAFETY NET: ensure the paid order has a pickupLocation. If somehow missing,
+      // backfill from the user's profile (or any prior order). This guarantees no
+      // paid order ever lives without a pickup tag — they'll always show up in the
+      // Orders/Summary tabs filtered by point.
+      if (!order.pickupLocation) {
+        const ph = (order.phone || '').replace(/\D/g, '');
+        let pickup = '';
+        const user = await db.collection('shop_users').findOne({ phone: ph });
+        pickup = user?.pickupPoint || user?.pickupLocation || '';
+        if (!pickup) {
+          const prior = await db.collection('shop_orders').findOne({ phone: ph, pickupLocation: { $exists: true, $ne: '' } });
+          pickup = prior?.pickupLocation || '';
+        }
+        if (pickup) {
+          await db.collection('shop_orders').updateOne({ _id: order._id }, { $set: { pickupLocation: pickup } });
+          console.log('[GROW WEBHOOK] backfilled pickup for', order._id.toString(), '→', pickup);
+        }
       }
     }
 
