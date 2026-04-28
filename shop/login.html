@@ -200,6 +200,9 @@ async function doLogin() {
     });
     var d = await res.json();
     if (!d.user) return showError(d.error || 'טלפון או סיסמה שגויים');
+    // Clear stale tokens so prior session can't override this login
+    localStorage.removeItem('shopToken');
+    localStorage.removeItem('shopAdminToken');
     localStorage.setItem('shopUser', JSON.stringify(d.user));
     if (d.token) localStorage.setItem('shopToken', d.token);
     var next = new URLSearchParams(location.search).get('next') || localStorage.getItem('afterLoginRedirect') || '/';
@@ -283,13 +286,18 @@ async function doRegister() {
     var res = await fetch('/api/shop/users/register', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ name: name, phone: phone, email: email, createdAt: new Date().toISOString(), pickupPoint: regPP })
+      body: JSON.stringify({ name: name, phone: phone, email: email, password: password, createdAt: new Date().toISOString(), pickupPoint: regPP })
     });
     var d = await res.json();
     if (d.error) return showError(d.error);
     var user = d.user || { name: name, phone: phone, email: email };
     if (regPP && !user.pickupPoint) user.pickupPoint = regPP;
+    // CRITICAL: clear ANY stale auth/session data first so a previous user's token
+    // doesn't override this brand-new account on the next page load.
+    localStorage.removeItem('shopToken');
+    localStorage.removeItem('shopAdminToken');
     localStorage.setItem('shopUser', JSON.stringify(user));
+    if (d.token) localStorage.setItem('shopToken', d.token);
     var next = new URLSearchParams(location.search).get('next') || localStorage.getItem('afterLoginRedirect') || '/';
     localStorage.removeItem('afterLoginRedirect');
     window.location.href = next;
@@ -368,6 +376,9 @@ async function doVerifyOtp() {
     var d = await res.json();
     if (d.error) return showError(d.error);
     if (_otpTimer) clearInterval(_otpTimer);
+    // Clear stale tokens before saving the new session
+    localStorage.removeItem('shopToken');
+    localStorage.removeItem('shopAdminToken');
     localStorage.setItem('shopUser', JSON.stringify(d.user));
     if (d.token) localStorage.setItem('shopToken', d.token);
     var next = new URLSearchParams(location.search).get('next') || '/';

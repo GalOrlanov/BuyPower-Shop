@@ -1200,20 +1200,18 @@ router.post('/users/register', async (req, res) => {
     if (existingUser) return res.status(409).json({ error: 'מספר הטלפון כבר רשום במערכת' });
     let passwordHash = '';
     if (password && bcrypt) passwordHash = await bcrypt.hash(password, 10);
-    const existing = await db.collection('shop_users').findOne({ phone: cleanPhone });
-    if (existing) {
-      // Update password and pickup point if provided
-      const updateFields = { passwordHash: passwordHash || existing.passwordHash, email: email||existing.email||'' };
-      if (pickupPoint) { updateFields.pickupPoint = pickupPoint; updateFields.pickupLocation = pickupPoint; }
-      await db.collection('shop_users').updateOne({ _id: existing._id }, { $set: updateFields });
-      const { passwordHash: ph, ...safeExisting } = { ...existing, ...updateFields };
-      return res.json({ user: safeExisting });
-    }
     const user = { name, phone: cleanPhone, email: email||'', city: city||'', idNumber: idNumber||'', pickupPoint, pickupLocation: pickupPoint, passwordHash, createdAt: new Date() };
     const result = await db.collection('shop_users').insertOne(user);
     user._id = result.insertedId;
     const { passwordHash: _ph, ...safeUser } = user;
-    res.json({ user: safeUser });
+    // Issue a fresh JWT so the client can call /users/me etc. without dragging
+    // a stale token from a previous session (which would resolve to the wrong user on refresh).
+    const token = jwt.sign(
+      { userId: user._id.toString(), phone: cleanPhone, name, isAdmin: false, isEmployee: false, pickupPoint },
+      JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+    res.json({ user: safeUser, token });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 

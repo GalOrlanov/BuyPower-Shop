@@ -1208,27 +1208,35 @@ window._syncUserPromise = (async function syncUser() {
   try {
     var token = localStorage.getItem('shopToken');
     if (!token) return;
+    var existing = JSON.parse(localStorage.getItem('shopUser') || '{}');
     var r = await fetch('/api/shop/users/me', { headers: { 'Authorization': 'Bearer ' + token } });
-    if (!r.ok) return;
-    var resp = await r.json();
-    var fresh = resp.user || resp; // handle both {user:{...}} and flat response
-    if (fresh && !fresh.error) {
-      var existing = JSON.parse(localStorage.getItem('shopUser') || '{}');
-      Object.assign(existing, fresh);
-      delete existing.passwordHash;
-      // Map server pickupLocation → frontend pickupPoint (always override)
-      if (fresh.pickupLocation) {
-        existing.pickupPoint = normalizePickup(fresh.pickupLocation);
-      }
-      localStorage.setItem('shopUser', JSON.stringify(existing));
-      shopUser = existing;
-      // Update vision location after sync
-      var vl = document.getElementById('visionLocation');
-      if (vl && existing.pickupPoint) vl.textContent = shortPickupName(existing.pickupPoint);
-      // Update pickup point bar
-      var lbl2 = document.getElementById('pickupPointLabel');
-      if (lbl2 && existing.pickupPoint) lbl2.textContent = shortPickupName(existing.pickupPoint);
+    if (!r.ok) {
+      // Token invalid or for a different user — clear it so we don't keep dragging stale state.
+      if (r.status === 401) localStorage.removeItem('shopToken');
+      return;
     }
+    var resp = await r.json();
+    var fresh = resp.user || resp;
+    if (!fresh || fresh.error) return;
+    // CRITICAL: if the token resolves to a DIFFERENT user than the one in shopUser,
+    // we have a stale-token bug. Don't overwrite shopUser — clear the bad token instead.
+    if (existing && existing.phone && fresh.phone &&
+        String(existing.phone).replace(/\D/g,'') !== String(fresh.phone).replace(/\D/g,'')) {
+      console.warn('[syncUser] token belongs to a different user — clearing token');
+      localStorage.removeItem('shopToken');
+      return;
+    }
+    Object.assign(existing, fresh);
+    delete existing.passwordHash;
+    // Server is the source of truth for pickup. Use pickupPoint or pickupLocation from DB.
+    var serverPickup = fresh.pickupPoint || fresh.pickupLocation;
+    if (serverPickup) existing.pickupPoint = normalizePickup(serverPickup);
+    localStorage.setItem('shopUser', JSON.stringify(existing));
+    shopUser = existing;
+    var vl = document.getElementById('visionLocation');
+    if (vl && existing.pickupPoint) vl.textContent = shortPickupName(existing.pickupPoint);
+    var lbl2 = document.getElementById('pickupPointLabel');
+    if (lbl2 && existing.pickupPoint) lbl2.textContent = shortPickupName(existing.pickupPoint);
   } catch(e) {}
 })();
 
