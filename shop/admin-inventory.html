@@ -476,10 +476,16 @@ function calcPriceWidget() {
   var base = buy * (1 + pct / 100);
   if (vat === 'included' || vat === 'excluded') base = base * 1.18;
   var rounded = Math.ceil(base * 2) / 2;
-  // Always update sell price when buy price or profit % changes
-  // But NOT when we're editing an existing item (editingId is set) and user hasn't touched buy price
-  document.getElementById('fSellPrice').value = base.toFixed(2);
-  if (preview) preview.textContent = '→ ₪' + base.toFixed(2) + ' (עגול: ₪' + rounded.toFixed(1) + ')';
+  // For NEW items: auto-fill sell price.
+  // For EDITED items: never overwrite the saved price — only show preview.
+  // Admin can click "⬆ חשב + עגל" to recalculate intentionally.
+  if (!editingId) {
+    document.getElementById('fSellPrice').value = base.toFixed(2);
+  }
+  if (preview) {
+    var hint = editingId ? ' &nbsp; <span style="color:#9ca3af">(לחץ ״חשב + עגל״ לעדכון)</span>' : '';
+    preview.innerHTML = '→ ₪' + base.toFixed(2) + ' (עגול: ₪' + rounded.toFixed(1) + ')' + hint;
+  }
 }
 
 function roundSellPrice() {

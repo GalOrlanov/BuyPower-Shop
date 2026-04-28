@@ -472,11 +472,42 @@ router.put('/settings', async (req, res) => {
     // so PUT and GET target the same document. Previously used `{}` which
     // matched any document non-deterministically and caused saves to land in
     // the wrong doc — making it look like nothing was saved.
+    const body = (function(b){ delete b._id; delete b.key; return b; })(Object.assign({}, req.body));
     await db.collection('shop_settings').updateOne(
       { key: { $exists: false } },
-      { $set: (function(b){ delete b._id; delete b.key; return b; })(Object.assign({}, req.body)) },
+      { $set: body },
       { upsert: true }
     );
+
+    // Mirror pickupLocations → the canonical {key:'pickupPoints'} doc that the
+    // /pickup-points API and product picker UIs read from. Otherwise admins
+    // who add a point in settings find it missing in the product modal.
+    if (Array.isArray(body.pickupLocations)) {
+      const existing = await db.collection('shop_settings').findOne({ key: 'pickupPoints' });
+      const existingByName = {};
+      (existing?.points || []).forEach(p => { existingByName[p.name] = p; });
+      const merged = body.pickupLocations.map(loc => {
+        const old = existingByName[loc.name] || {};
+        // Preserve manager credentials if the settings tab didn't carry them.
+        return {
+          name: loc.name,
+          address: loc.address || old.address || '',
+          days: loc.days || old.days || '',
+          hours: loc.hours || old.hours || '',
+          collectionDate: loc.collectionDate || old.collectionDate || null,
+          collectionTimeFrom: loc.collectionTimeFrom || old.collectionTimeFrom || '',
+          collectionTimeTo: loc.collectionTimeTo || old.collectionTimeTo || '',
+          managerName: old.managerName || '',
+          managerPassword: old.managerPassword || '',
+        };
+      });
+      await db.collection('shop_settings').updateOne(
+        { key: 'pickupPoints' },
+        { $set: { key: 'pickupPoints', points: merged } },
+        { upsert: true }
+      );
+    }
+
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
