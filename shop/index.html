@@ -1305,7 +1305,10 @@ loadPickupLocations();
 
 async function loadFeatured() {
   try {
-    const res = await fetch('/api/shop/products');
+    // Pass user's pickup so featured respects per-point assignment.
+    var rawPickup = shopUser && !shopUser.isGuest ? shopUser.pickupPoint : '';
+    var userPickup = normalizePickup(rawPickup);
+    const res = await fetch('/api/shop/products' + (userPickup ? '?pickupPoint=' + encodeURIComponent(userPickup) : ''));
     const products = await res.json();
     const featuredList = products.filter(p => p.isFeatured && p.isActive).slice(0, 6);
     window._featuredProduct = featuredList[0] || null;

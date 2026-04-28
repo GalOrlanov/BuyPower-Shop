@@ -3596,43 +3596,31 @@ async function addPickupLocation() {
   const collectionTimeFrom = document.getElementById('newPickupTimeFrom')?.value || '';
   const collectionTimeTo = document.getElementById('newPickupTimeTo')?.value || '';
   if (!name) { alert('נא להזין שם נקודה'); return; }
-  if (!currentSettings) currentSettings = { pickupLocations: [] };
-  // Reject duplicates — same name → same point. Otherwise we'd silently create
-  // unreachable pickup-point variations.
-  const dup = (currentSettings.pickupLocations || []).find(l => (l.name || '').trim() === name);
-  if (dup) { alert('נקודה בשם זה כבר קיימת'); return; }
-  currentSettings.pickupLocations.push({
-    name, address, days, hours,
-    collectionDate: collectionDate || null,
-    collectionTimeFrom, collectionTimeTo,
-  });
-  await fetch(API + '/settings', {
-    method: 'PUT',
+  // Direct call to dedicated CRUD endpoint — does NOT touch settings.
+  const r = await fetch(API + '/pickup-points', {
+    method: 'POST',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify(currentSettings)
+    body: JSON.stringify({ name, address, days, hours, collectionDate: collectionDate || null, collectionTimeFrom, collectionTimeTo })
   });
+  if (!r.ok) { const j = await r.json().catch(()=>({})); alert(j.error || 'שגיאה בהוספה'); return; }
   // Reset form
   ['newPickupName','newPickupAddress','newPickupHours','newPickupCollectionDate','newPickupTimeFrom','newPickupTimeTo'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = id === 'newPickupHours' ? '16:00–20:00' : '';
   });
   const daysEl = document.getElementById('newPickupDays'); if (daysEl) daysEl.value = 'חמישי';
-  renderPickupLocations();
-  // Refresh the global pickup filter so the new point is selectable immediately.
+  // Reload settings so renderPickupLocations sees the new point
+  await loadSettings();
   if (typeof loadGlobalPickupFilter === 'function') loadGlobalPickupFilter();
   alert('✅ נקודה נוספה. היא תופיע מיד בהרשמה, בעגלה, באדמין ובמלאי.');
 }
 
 async function removePickup(idx) {
-  if (!currentSettings) return;
-  const removed = (currentSettings.pickupLocations || [])[idx];
-  if (!confirm('למחוק את הנקודה "' + (removed?.name || '?') + '"? משתמשים ששייכו אותה לעצמם לא יוכלו להזמין עד שיחליפו לאחרת.')) return;
-  currentSettings.pickupLocations.splice(idx, 1);
-  await fetch(API + '/settings', {
-    method: 'PUT',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify(currentSettings)
-  });
-  renderPickupLocations();
+  if (!currentSettings || !currentSettings.pickupLocations) return;
+  const removed = currentSettings.pickupLocations[idx];
+  if (!removed) return;
+  if (!confirm('למחוק את הנקודה "' + removed.name + '"? משתמשים ששייכו אותה לעצמם לא יוכלו להזמין עד שיחליפו לאחרת.')) return;
+  await fetch(API + '/pickup-points/' + encodeURIComponent(removed.name), { method: 'DELETE' });
+  await loadSettings();
   if (typeof loadGlobalPickupFilter === 'function') loadGlobalPickupFilter();
 }
 </script>

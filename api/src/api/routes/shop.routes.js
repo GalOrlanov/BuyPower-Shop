@@ -442,23 +442,18 @@ router.get('/settings', async (req, res) => {
   try {
     const db = await getDb();
     let settings = await db.collection('shop_settings').findOne({ key: { $exists: false } }) || {};
-    if (!settings.pickupLocations) settings.pickupLocations = [];
-
-    // Sync: if pickupLocations is empty, merge from the pickupPoints document (source of truth)
-    if (!settings.pickupLocations.length) {
-      const ppDoc = await db.collection('shop_settings').findOne({ key: 'pickupPoints' });
-      if (ppDoc && Array.isArray(ppDoc.points) && ppDoc.points.length) {
-        settings.pickupLocations = ppDoc.points.map(p => ({
-          name: p.name || '',
-          address: p.address || '',
-          days: p.days || '',
-          hours: p.hours || '',
-          collectionDate: p.collectionDate || null,
-          collectionTimeFrom: p.collectionTimeFrom || '',
-          collectionTimeTo: p.collectionTimeTo || '',
-        }));
-      }
-    }
+    // pickupLocations is ALWAYS derived from the canonical pickupPoints doc.
+    // Never read from the legacy field on the settings doc — it could be stale.
+    const ppDoc = await db.collection('shop_settings').findOne({ key: 'pickupPoints' });
+    settings.pickupLocations = (ppDoc?.points || []).map(p => ({
+      name: p.name || '',
+      address: p.address || '',
+      days: p.days || '',
+      hours: p.hours || '',
+      collectionDate: p.collectionDate || null,
+      collectionTimeFrom: p.collectionTimeFrom || '',
+      collectionTimeTo: p.collectionTimeTo || '',
+    }));
     res.json(settings);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -468,50 +463,88 @@ router.get('/settings', async (req, res) => {
 router.put('/settings', async (req, res) => {
   try {
     const db = await getDb();
-    // FIX: Use the same filter as GET /settings ({ key: { $exists: false } })
-    // so PUT and GET target the same document. Previously used `{}` which
-    // matched any document non-deterministically and caused saves to land in
-    // the wrong doc — making it look like nothing was saved.
-    const body = (function(b){ delete b._id; delete b.key; return b; })(Object.assign({}, req.body));
+    // CRITICAL: pickup points are NOT settings — they have dedicated CRUD endpoints
+    // (POST/PUT/DELETE /pickup-points). We strip pickupLocations from the body so
+    // that an unrelated settings save (minOrderAmount, isClosed, etc.) cannot
+    // overwrite the master pickup-points list with stale client-side state.
+    const body = (function(b){ delete b._id; delete b.key; delete b.pickupLocations; return b; })(Object.assign({}, req.body));
     await db.collection('shop_settings').updateOne(
       { key: { $exists: false } },
       { $set: body },
       { upsert: true }
     );
-
-    // Mirror pickupLocations → the canonical {key:'pickupPoints'} doc that the
-    // /pickup-points API and product picker UIs read from. Otherwise admins
-    // who add a point in settings find it missing in the product modal.
-    if (Array.isArray(body.pickupLocations)) {
-      const existing = await db.collection('shop_settings').findOne({ key: 'pickupPoints' });
-      const existingByName = {};
-      (existing?.points || []).forEach(p => { existingByName[p.name] = p; });
-      const merged = body.pickupLocations.map(loc => {
-        const old = existingByName[loc.name] || {};
-        // Preserve manager credentials if the settings tab didn't carry them.
-        return {
-          name: loc.name,
-          address: loc.address || old.address || '',
-          days: loc.days || old.days || '',
-          hours: loc.hours || old.hours || '',
-          collectionDate: loc.collectionDate || old.collectionDate || null,
-          collectionTimeFrom: loc.collectionTimeFrom || old.collectionTimeFrom || '',
-          collectionTimeTo: loc.collectionTimeTo || old.collectionTimeTo || '',
-          managerName: old.managerName || '',
-          managerPassword: old.managerPassword || '',
-        };
-      });
-      await db.collection('shop_settings').updateOne(
-        { key: 'pickupPoints' },
-        { $set: { key: 'pickupPoints', points: merged } },
-        { upsert: true }
-      );
-    }
-
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// ===== PICKUP POINTS CRUD =====
+// Single source of truth. Settings does NOT touch this collection.
+
+// POST /pickup-points — add ONE point (idempotent on name)
+router.post('/pickup-points', async (req, res) => {
+  try {
+    const db = await getDb();
+    const { name, address, days, hours, collectionDate, collectionTimeFrom, collectionTimeTo, managerName, managerPassword } = req.body;
+    const trimmed = (name || '').trim();
+    if (!trimmed) return res.status(400).json({ error: 'שם נקודה חסר' });
+    const doc = await db.collection('shop_settings').findOne({ key: 'pickupPoints' });
+    const existing = (doc?.points || []);
+    if (existing.find(p => p.name === trimmed)) {
+      return res.status(409).json({ error: 'נקודה בשם זה כבר קיימת' });
+    }
+    const newPoint = {
+      name: trimmed,
+      address: address || '',
+      days: days || '',
+      hours: hours || '',
+      collectionDate: collectionDate || null,
+      collectionTimeFrom: collectionTimeFrom || '',
+      collectionTimeTo: collectionTimeTo || '',
+      managerName: managerName || '',
+      managerPassword: managerPassword || '',
+    };
+    await db.collection('shop_settings').updateOne(
+      { key: 'pickupPoints' },
+      { $push: { points: newPoint }, $setOnInsert: { key: 'pickupPoints' } },
+      { upsert: true }
+    );
+    res.json({ ok: true, point: newPoint });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PATCH /pickup-points/:name — partial update of one point's fields
+router.patch('/pickup-points/:name', async (req, res) => {
+  try {
+    const db = await getDb();
+    const target = decodeURIComponent(req.params.name);
+    const update = {};
+    ['address','days','hours','collectionDate','collectionTimeFrom','collectionTimeTo','managerName','managerPassword'].forEach(f => {
+      if (req.body[f] !== undefined) update['points.$.' + f] = req.body[f];
+    });
+    if (!Object.keys(update).length) return res.status(400).json({ error: 'אין שדות לעדכן' });
+    const r = await db.collection('shop_settings').updateOne(
+      { key: 'pickupPoints', 'points.name': target },
+      { $set: update }
+    );
+    if (!r.matchedCount) return res.status(404).json({ error: 'נקודה לא נמצאה' });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /pickup-points/:name
+router.delete('/pickup-points/:name', async (req, res) => {
+  try {
+    const db = await getDb();
+    const target = decodeURIComponent(req.params.name);
+    const r = await db.collection('shop_settings').updateOne(
+      { key: 'pickupPoints' },
+      { $pull: { points: { name: target } } }
+    );
+    if (!r.matchedCount) return res.status(404).json({ error: 'מסמך לא קיים' });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ─── PICKUP POINTS ───────────────────────────────────────────────────────────
@@ -1057,7 +1090,7 @@ router.get('/users/activity', async (req, res) => {
     const { MongoClient } = require('mongodb');
     const client2 = new MongoClient(MONGODB_URI);
     await client2.connect();
-    const db2 = client2.db('groupPurchase');
+    const db2 = client2.db(process.env.SHOP_DB_NAME || 'shop_prod');
     const users = await db2.collection('shop_users').find({}).toArray();
     await client2.close();
 
@@ -1090,7 +1123,7 @@ router.get('/users', async (req, res) => {
     const { MongoClient } = require('mongodb');
     const client2 = new MongoClient(MONGODB_URI);
     await client2.connect();
-    const db2 = client2.db('groupPurchase');
+    const db2 = client2.db(process.env.SHOP_DB_NAME || 'shop_prod');
     const users = await db2.collection('shop_users').find({}).sort({ createdAt: -1 }).toArray();
     await client2.close();
     res.json(users);
@@ -1522,7 +1555,7 @@ router.get('/legal-comments', async (req, res) => {
   const client = new MongoClient(process.env.MONGODB_URI || 'mongodb+srv://gal:12321@cluster0-7hpz1.gcp.mongodb.net/groupPurchase');
   try {
     await client.connect();
-    const db = client.db('groupPurchase');
+    const db = client.db(process.env.SHOP_DB_NAME || 'shop_prod');
     const comments = await db.collection('legal_comments').find({}).sort({ createdAt: 1 }).toArray();
     res.json(comments);
   } catch(e) {
@@ -1538,7 +1571,7 @@ router.post('/legal-comments', async (req, res) => {
   const client = new MongoClient(process.env.MONGODB_URI || 'mongodb+srv://gal:12321@cluster0-7hpz1.gcp.mongodb.net/groupPurchase');
   try {
     await client.connect();
-    const db = client.db('groupPurchase');
+    const db = client.db(process.env.SHOP_DB_NAME || 'shop_prod');
     const doc = { sectionId: sectionId || 'general', sectionTitle: sectionTitle || '', name, text, createdAt: new Date(), resolved: false };
     if (parentId) doc.parentId = parentId;
     const result = await db.collection('legal_comments').insertOne(doc);
@@ -1554,7 +1587,7 @@ router.delete('/legal-comments/:id', async (req, res) => {
   const client = new MongoClient(process.env.MONGODB_URI || 'mongodb+srv://gal:12321@cluster0-7hpz1.gcp.mongodb.net/groupPurchase');
   try {
     await client.connect();
-    const db = client.db('groupPurchase');
+    const db = client.db(process.env.SHOP_DB_NAME || 'shop_prod');
     // Delete comment and all its replies
     await db.collection('legal_comments').deleteMany({
       $or: [{ _id: new ObjectId(req.params.id) }, { parentId: req.params.id }]
@@ -1571,7 +1604,7 @@ router.patch('/legal-comments/:id/resolve', async (req, res) => {
   const client = new MongoClient(process.env.MONGODB_URI || 'mongodb+srv://gal:12321@cluster0-7hpz1.gcp.mongodb.net/groupPurchase');
   try {
     await client.connect();
-    const db = client.db('groupPurchase');
+    const db = client.db(process.env.SHOP_DB_NAME || 'shop_prod');
     await db.collection('legal_comments').updateOne({ _id: new ObjectId(req.params.id) }, { $set: { resolved: !req.body.resolved, resolvedAt: new Date() } });
     res.json({ ok: true });
   } catch(e) {
