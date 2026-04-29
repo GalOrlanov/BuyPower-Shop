@@ -306,13 +306,12 @@ input:checked + .slider::before { transform: translateX(20px); }
   <div class="tabs">
     <div class="tabs-inner">
       <button class="tab-btn active" onclick="showTab('orders')">📦 הזמנות</button>
+      <button class="tab-btn" onclick="showTab('pickup');setPickupThisWeek();if(_orders&&_orders.length){renderPickup();}else{loadOrders();}">🚚 סיכום הזמנות</button>
       <button class="tab-btn" id="pickupTrackingTabBtn" onclick="showTab('pickupTracking');loadPickupTracking()">📍 מעקב איסוף</button>
-      <button class="tab-btn" onclick="showTab('pickup');setPickupThisWeek();if(_orders&&_orders.length){renderPickup();}else{loadOrders();}">🚚 סיכום איסוף</button>
       <button class="tab-btn" onclick="showTab('summary');renderSummary&&renderSummary()">📊 סיכום</button>
       <button class="tab-btn" onclick="showTab('settings')">⚙️ הגדרות</button>
       <button class="tab-btn" onclick="showTab('users'); loadUsers(); try{loadCrm()}catch(e){}">👥 משתמשים</button>
       <button class="tab-btn" onclick="showTab('payment');setPayDateRange('month')">💳 תשלום Grow</button>
-      <button class="tab-btn" onclick="showTab('pricing');loadPricing()">📊 מחירון שבועי</button>
       <button class="tab-btn" onclick="showTab('finance');initFinanceTab()">💰 פיננסים</button>
       <button class="tab-btn" onclick="window.location.href='supplier.html'">🏭 ספקים</button>
     </div>
@@ -454,6 +453,7 @@ input:checked + .slider::before { transform: translateX(20px); }
               style="width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.9rem">
           </div>
           <button onclick="document.getElementById('summaryCategoryFilter').value='';document.getElementById('summaryProductFilter').value='';renderSummary()" style="padding:8px 16px;background:#f3f4f6;color:#374151;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.85rem;cursor:pointer">נקה</button>
+          <button onclick="exportSummaryPDF()" style="padding:8px 16px;background:#dc2626;color:white;border:none;border-radius:8px;font-family:inherit;font-size:.85rem;font-weight:700;cursor:pointer">📄 הורד PDF</button>
         </div>
         <div id="summaryStats" style="margin-top:10px;font-size:.85rem;color:#6b7280"></div>
       </div>
@@ -590,24 +590,8 @@ input:checked + .slider::before { transform: translateX(20px); }
     </div>
 
     <!-- ANNOUNCEMENTS TAB -->
-    <div id="tab-announcements" class="tab-panel">
-      <div class="card">
-        <div class="card-title">➕ הוסף הודעה</div>
-        <input type="hidden" id="editAnnId">
-        <div class="form-group">
-          <label>טקסט ההודעה</label>
-          <textarea id="annText" rows="2" placeholder="ברוכים הבאים..."></textarea>
-        </div>
-        <div style="display:flex;gap:10px">
-          <button class="btn btn-green" onclick="saveAnnouncement()">💾 שמור</button>
-          <button class="btn btn-gray" onclick="clearAnnForm()">✕</button>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-title">📢 הודעות קיימות</div>
-        <div id="announcementsList"><div style="color:#9ca3af;font-size:.9rem">טוען...</div></div>
-      </div>
-    </div>
+    <!-- Empty placeholder — announcements moved into the settings tab below -->
+    <div id="tab-announcements" class="tab-panel"></div>
 
     <!-- SETTINGS TAB -->
     <div id="tab-settings" class="tab-panel">
@@ -669,6 +653,24 @@ input:checked + .slider::before { transform: translateX(20px); }
             </div>
           </div>
           <button class="btn btn-green" onclick="addPickupLocation()" style="margin-top:6px">➕ הוסף נקודה</button>
+        </div>
+      </div>
+
+      <!-- ANNOUNCEMENTS — moved here from its own tab -->
+      <div class="card" style="margin-top:14px">
+        <div class="card-title">📢 הודעות לדף הבית</div>
+        <input type="hidden" id="editAnnId">
+        <div class="form-group">
+          <label>טקסט ההודעה</label>
+          <textarea id="annText" rows="2" placeholder="ברוכים הבאים..."></textarea>
+        </div>
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-green" onclick="saveAnnouncement()">💾 שמור</button>
+          <button class="btn btn-gray" onclick="clearAnnForm()">✕</button>
+        </div>
+        <div style="margin-top:14px;border-top:1px solid #f3f4f6;padding-top:12px">
+          <div style="font-weight:700;font-size:.92rem;color:#374151;margin-bottom:8px">הודעות קיימות:</div>
+          <div id="announcementsList"><div style="color:#9ca3af;font-size:.9rem">טוען...</div></div>
         </div>
       </div>
     </div>
@@ -1656,6 +1658,10 @@ function renderSummary() {
   const statsEl = document.getElementById('summaryStats');
   if (statsEl) statsEl.textContent = '✦ ' + rows.length + ' מוצרים · ' + totalUnits + ' יחידות · ₪' + totalRevenue.toFixed(2).replace(/\.00$/,'');
 
+  // Stash for the PDF export button
+  window._summaryFilteredRows = rows;
+  window._summaryFilteredStats = { count: rows.length, units: totalUnits, revenue: totalRevenue, category: catFilter, search: nameQuery, pickupPoint: _gp };
+
   if (!rows.length) {
     tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#9ca3af;padding:24px">אין תוצאות לפילטרים שנבחרו</td></tr>';
     return;
@@ -1679,6 +1685,68 @@ function renderSummary() {
     if (r.ok) window._allProductsForSummary = await r.json();
   } catch(e) {}
 })();
+
+// Open a printable HTML page with the currently-filtered summary rows.
+function exportSummaryPDF() {
+  const rows = window._summaryFilteredRows || [];
+  const stats = window._summaryFilteredStats || {};
+  if (!rows.length) { alert('אין נתונים להפקה — נקה פילטרים או טען הזמנות'); return; }
+  function escHtml(s) { return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  const filterTags = [];
+  if (stats.pickupPoint) filterTags.push('📍 ' + escHtml(stats.pickupPoint));
+  if (stats.category) filterTags.push('🏷️ ' + escHtml(stats.category));
+  if (stats.search) filterTags.push('🔍 ' + escHtml(stats.search));
+  const trs = rows.map((r, i) =>
+    '<tr>' +
+      '<td class="num">' + (i+1) + '</td>' +
+      '<td class="name">' + escHtml(r.name) + (r.variant ? ' <span style="color:#6b7280">(' + escHtml(r.variant) + ')</span>' : '') + '</td>' +
+      '<td class="cat">' + escHtml(r.category || '') + '</td>' +
+      '<td class="qty">' + r.qty + '</td>' +
+      '<td class="rev">₪' + (r.total || 0).toFixed(2).replace(/\.00$/,'') + '</td>' +
+    '</tr>'
+  ).join('');
+  const html = '<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="UTF-8">' +
+    '<title>סיכום הזמנות לפי מוצר</title>' +
+    '<style>' +
+      '@page{size:A4;margin:14mm}' +
+      'body{font-family:-apple-system,"Segoe UI",Arial,sans-serif;direction:rtl;color:#111;margin:0}' +
+      '.toolbar{position:sticky;top:0;background:#14532d;color:white;padding:12px 18px;display:flex;justify-content:space-between;align-items:center;z-index:5}' +
+      '.toolbar h1{margin:0;font-size:1rem}' +
+      '.toolbar button{background:white;color:#14532d;border:none;padding:8px 18px;font-weight:800;border-radius:8px;cursor:pointer;font-family:inherit}' +
+      '.body{padding:14mm}' +
+      'h1.title{font-size:18pt;color:#14532d;margin:0 0 6px}' +
+      '.meta{color:#555;font-size:10pt;margin-top:4px}' +
+      '.tags{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap}' +
+      '.tag{background:#f0fdf4;border:1.5px solid #86efac;color:#14532d;padding:4px 10px;border-radius:14px;font-size:9.5pt;font-weight:700}' +
+      '.grand{margin:14px 0;padding:12px 16px;background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:2px solid #15803d;border-radius:10px;font-weight:800;font-size:1rem;color:#14532d;display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap}' +
+      'table{width:100%;border-collapse:collapse;font-size:11pt;margin-top:6px}' +
+      'th{background:#14532d;color:white;padding:7px 10px;text-align:right;font-size:10.5pt}' +
+      'th.num,th.qty,th.rev,th.cat{text-align:center}' +
+      'td{padding:5px 10px;border-bottom:1px solid #e5e7eb}' +
+      'td.num,td.qty,td.rev,td.cat{text-align:center}' +
+      'td.name{font-weight:600}' +
+      'td.qty{font-weight:800;color:#14532d}' +
+      'td.rev{font-weight:700;color:#14532d}' +
+      'tr:nth-child(even) td{background:#f9fafb}' +
+      '@media print{.toolbar{display:none}.body{padding:0}}' +
+    '</style></head><body>' +
+    '<div class="toolbar"><h1>📊 סיכום הזמנות לפי מוצר</h1><button onclick="window.print()">🖨️ שמור / הדפס</button></div>' +
+    '<div class="body">' +
+      '<h1 class="title">📊 סיכום הזמנות לפי מוצר</h1>' +
+      '<div class="meta">הופק: ' + new Date().toLocaleString('he-IL') + '</div>' +
+      (filterTags.length ? '<div class="tags">' + filterTags.map(t => '<span class="tag">' + t + '</span>').join('') + '</div>' : '') +
+      '<div class="grand"><span>📦 ' + (stats.count||0) + ' מוצרים שונים</span><span>' + (stats.units||0) + ' יחידות</span><span>💰 ₪' + (stats.revenue||0).toFixed(2).replace(/\.00$/,'') + '</span></div>' +
+      '<table>' +
+        '<thead><tr><th class="num">#</th><th class="name">מוצר</th><th class="cat">קטגוריה</th><th class="qty">כמות</th><th class="rev">הכנסות</th></tr></thead>' +
+        '<tbody>' + trs + '</tbody>' +
+      '</table>' +
+    '</div>' +
+    '<script>window.addEventListener("load",function(){setTimeout(function(){window.print();},500)});</' + 'script>' +
+    '</body></html>';
+  const w = window.open('', '_blank');
+  w.document.write(html);
+  w.document.close();
+}
 async function loadSummary() {
   try {
     const res = await fetch(API + '/orders/summary/products');
@@ -3029,15 +3097,20 @@ async function loadOrders() {
     // Client-side filters
     if (pickupFilter) orders = orders.filter(o => (o.pickupLocation||'').includes(pickupFilter));
     if (statusFilter) orders = orders.filter(o => o.status === statusFilter);
-    // Summary
-    const total = orders.length;
-    const revenue = orders.filter(o => o.status === 'paid' || o.status === 'handled' || o.status === 'confirmed').reduce((s,o) => s + (o.totalAmount||0), 0);
+    // Summary — exclude cancelled/duplicate so the count matches the live data
+    const SKIP_CARD_STATUSES = ['cancelled', 'cancelled_duplicate', 'merged_into_paid'];
+    const validOrders = orders.filter(o => !SKIP_CARD_STATUSES.includes(o.status));
+    const total = validOrders.length;
+    const paidOrders = validOrders.filter(o => o.status === 'paid' || o.status === 'handled' || o.status === 'confirmed' || o.status === 'collected');
+    const revenue = paidOrders.reduce((s,o) => s + (o.totalAmount||0), 0);
+    const avgPerOrder = paidOrders.length ? (revenue / paidOrders.length) : 0;
     const productCounts = {};
-    orders.forEach(o => (o.items||[]).forEach(i => { productCounts[i.name] = (productCounts[i.name]||0) + i.qty; }));
+    validOrders.forEach(o => (o.items||[]).forEach(i => { productCounts[i.name] = (productCounts[i.name]||0) + i.qty; }));
     const topProduct = Object.entries(productCounts).sort((a,b) => b[1]-a[1])[0];
     document.getElementById('summaryGrid').innerHTML =
       '<div class="summary-card"><div class="summary-num">' + total + '</div><div class="summary-label">הזמנות השבוע</div></div>' +
       '<div class="summary-card"><div class="summary-num">₪' + revenue.toFixed(0) + '</div><div class="summary-label">הכנסות</div></div>' +
+      '<div class="summary-card"><div class="summary-num">₪' + avgPerOrder.toFixed(1) + '</div><div class="summary-label">ממוצע להזמנה</div></div>' +
       (topProduct ? '<div class="summary-card"><div class="summary-num" style="font-size:1rem">' + topProduct[0] + '</div><div class="summary-label">המוצר הנפוץ (' + topProduct[1] + ')</div></div>' : '');
 
     _orders = orders;
