@@ -286,41 +286,54 @@ async function loadPickupPoints() {
 // On page load — if URL has ?token=<jwt>, bypass login entirely.
 // The token is signed by /admin/pickup-share-token and hard-scopes the
 // session to one pickup. Used by the "Share link" button in admin.
-(function applyShareTokenLogin() {
+function _decodeJwtPayload(t) {
   try {
-    var t = new URLSearchParams(window.location.search).get('token');
-    if (!t) return;
-    // Decode the JWT payload (no verification on client — server verifies on every API call)
-    var payload = JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
-    if (payload.kind !== 'pickup_share') return;
-    sessionStorage.setItem('empToken', t);
-    window._token = t;
-    window._empPickupPoint = payload.pickupPoint || '';
-    // Hide login, show app
-    var login = document.getElementById('loginScreen');
-    var app = document.getElementById('appScreen');
-    if (login) login.style.display = 'none';
-    if (app) app.style.display = 'block';
-    // Set defaults so the existing init flow continues correctly
-    var topbarUser = document.getElementById('topbarUser');
-    if (topbarUser) topbarUser.textContent = '🔗 גישה לפי קישור';
-    var topbarPoint = document.getElementById('topbarPoint');
-    if (topbarPoint) topbarPoint.textContent = '📌 ' + (payload.pickupPoint || '');
-    // Trigger the same data flow as a normal login
-    document.addEventListener('DOMContentLoaded', function() {
+    var b64 = t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    // pad to a multiple of 4
+    while (b64.length % 4) b64 += '=';
+    var bin = atob(b64);
+    // atob produces a binary (latin-1) string; the JWT body is UTF-8 — convert.
+    var bytes = Uint8Array.from(bin, function(c){ return c.charCodeAt(0); });
+    var json = new TextDecoder('utf-8').decode(bytes);
+    return JSON.parse(json);
+  } catch(e) { console.warn('jwt decode failed', e); return null; }
+}
+
+(function applyShareTokenLogin() {
+  var t = new URLSearchParams(window.location.search).get('token');
+  if (!t) return;
+  var payload = _decodeJwtPayload(t);
+  if (!payload || payload.kind !== 'pickup_share') return;
+  // Stash for the bootstrap below — _token must be set BEFORE showApp/loadData
+  // because both the auto-refresh interval and Authorization header depend on it.
+  window._token = t;
+  window._sharePayload = payload;
+  sessionStorage.setItem('empToken', t);
+
+  function bootstrap() {
+    // Use the existing login flow's showApp() so the share-link path goes
+    // through the same init (date defaults, locked dropdown, auto-refresh,
+    // topbar labels). Hebrew names render correctly because showApp reads
+    // payload.pickupPoint, which we decoded as proper UTF-8.
+    if (typeof _token !== 'undefined') { try { _token = window._token; } catch(e){} }
+    if (typeof showApp === 'function') {
+      showApp({ name: '🔗 גישה לפי קישור', pickupPoint: payload.pickupPoint, isEmployee: true, isAdmin: false });
+    } else {
+      // Defensive fallback
+      var login = document.getElementById('loginScreen');
+      var app = document.getElementById('appScreen');
+      if (login) login.style.display = 'none';
+      if (app) app.style.display = 'block';
+      window._empPickupPoint = payload.pickupPoint || '';
       if (typeof loadPickupPoints === 'function') loadPickupPoints();
       if (typeof loadData === 'function') loadData();
-    });
-    // Also fire immediately in case DOMContentLoaded already fired
-    if (document.readyState !== 'loading') {
-      if (typeof loadPickupPoints === 'function') loadPickupPoints();
-      if (typeof loadData === 'function') loadData();
-      // Auto-refresh
-      if (!window._shareRefreshInterval) {
-        window._shareRefreshInterval = setInterval(function(){ if (!document.hidden && window._token) loadData(); }, 15000);
-      }
     }
-  } catch(e) { console.warn('share-token init failed', e); }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bootstrap);
+  } else {
+    bootstrap();
+  }
 })();
 
 async function loadData() {
