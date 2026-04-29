@@ -1583,9 +1583,11 @@ function renderSummary() {
   const tbody = document.getElementById('summaryTbody');
   if (!tbody) return;
   if (!_orders || !_orders.length) { tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#9ca3af;padding:24px">אין הזמנות</td></tr>'; return; }
-  // Apply global pickup filter
+  // Apply global pickup filter + skip cancelled/duplicate orders so they don't inflate totals
+  const SKIP_STATUSES_S = ['cancelled', 'cancelled_duplicate', 'merged_into_paid'];
   const _gp = getActivePickup();
-  const _scopedOrders = _gp ? _orders.filter(function(o){ return (o.pickupLocation || '') === _gp; }) : _orders;
+  const _scopedOrders = (_gp ? _orders.filter(function(o){ return (o.pickupLocation || '') === _gp; }) : _orders)
+                         .filter(function(o){ return !SKIP_STATUSES_S.includes(o.status); });
   const summary = {};
   _scopedOrders.forEach(function(order) {
     (order.items || []).forEach(function(item) {
@@ -1994,7 +1996,11 @@ async function renderPickup() {
   // Global pickup filter overrides the local dropdown.
   const locFilter = getActivePickup() || ((document.getElementById('pickupLocationFilter')||{}).value || '');
 
+  // Hide non-pickup-bound statuses from the pickup summary so a cancelled or
+  // duplicate order doesn't inflate the totals (and doesn't show as a row).
+  const SKIP_STATUSES = ['cancelled', 'cancelled_duplicate', 'merged_into_paid'];
   const filtered = _orders.filter(o => {
+    if (SKIP_STATUSES.includes(o.status)) return false;
     const d = new Date(o.createdAt);
     if (from && d < from) return false;
     if (to && d > to) return false;
@@ -2230,7 +2236,9 @@ function exportPDF() {
   const byProduct = {};
   const fromD = fromVal ? new Date(fromVal) : null;
   const toD = toVal ? new Date(toVal + 'T23:59:59') : null;
+  const SKIP = ['cancelled','cancelled_duplicate','merged_into_paid'];
   const filtered = (_orders||[]).filter(o => {
+    if (SKIP.includes(o.status)) return false;
     const d = new Date(o.createdAt);
     if (fromD && d < fromD) return false;
     if (toD && d > toD) return false;
