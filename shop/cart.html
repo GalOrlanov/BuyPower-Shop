@@ -831,6 +831,8 @@ async function submitGrowForm() {
             description: item.variant || ''
           };
         }),
+        cartItems: cart,
+        totalAmount: _gfTotal,
         success_url: _successUrl,
         fail_url: 'https://shop.buypower.co.il/cart.html?error=1' + (_orderId ? '&orderId=' + _orderId : '')
       })

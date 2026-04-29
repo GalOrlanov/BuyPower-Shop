@@ -1413,6 +1413,8 @@ router.post('/payment/create', async (req, res) => {
       max_or_custom = 'Max Payments',
       message_text = '',
       products = [],
+      cartItems,
+      totalAmount: passedTotalAmount,
       success_url: custom_success_url,
       fail_url: custom_fail_url,
       notify_url: custom_notify_url,
@@ -1526,14 +1528,41 @@ router.post('/payment/create', async (req, res) => {
       orderId = existingOrder._id;
       console.log('[PAYMENT CREATE] Updated existing order:', orderId, 'pickup:', existingOrder.pickupLocation || resolvedPickup || '(none)');
     } else {
-      // No existing order — create one (e.g. admin-created payment links)
+      // No existing order — create one (e.g. admin-created payment links, or cart flow
+      // where the prior /api/shop/orders POST failed silently).
+      // PREFER cartItems (real cart structure) over `products` — `products` is the Grow
+      // payload where names get suffixed with " xN" and quantity is forced to 1.
+      let orderItems;
+      let orderTotal;
+      if (Array.isArray(cartItems) && cartItems.length) {
+        orderItems = cartItems.map(i => {
+          const pid = i._id || i.id || i.productId || null;
+          const item = {
+            name: i.name,
+            price: Number(i.price) || 0,
+            qty: Number(i.qty) || 1,
+          };
+          if (pid) { item.id = pid; item.productId = pid; }
+          if (i.variant) item.variant = i.variant;
+          if (i.imageUrl) item.imageUrl = i.imageUrl;
+          if (i.unit) item.unit = i.unit;
+          return item;
+        });
+        orderTotal = Number(passedTotalAmount) > 0
+          ? Number(passedTotalAmount)
+          : orderItems.reduce((s, i) => s + i.price * i.qty, 0);
+      } else {
+        // Last-resort fallback (legacy admin payment-link flow): use products as-is.
+        orderItems = products.map(p => ({ name: p.name, price: Number(p.price), qty: Number(p.quantity) || 1 }));
+        orderTotal = products.reduce((s, p) => s + Number(p.price) * (Number(p.quantity) || 1), 0);
+      }
       const orderDoc = {
         customerName: full_name,
         phone: cleanPhone,
         email: email || '',
         invoiceName: invoice_name || '',
-        items: products.map(p => ({ name: p.name, price: Number(p.price), qty: Number(p.quantity) || 1 })),
-        totalAmount: products.reduce((s, p) => s + Number(p.price) * (Number(p.quantity) || 1), 0),
+        items: orderItems,
+        totalAmount: orderTotal,
         pickupLocation: resolvedPickup || '',
         status: 'pending_payment',
         source: 'grow_link',
@@ -1544,7 +1573,9 @@ router.post('/payment/create', async (req, res) => {
       };
       const inserted = await db.collection('shop_orders').insertOne(orderDoc);
       orderId = inserted.insertedId;
-      console.log('[PAYMENT CREATE] New order saved:', orderId, 'pickup:', resolvedPickup || '(none)');
+      console.log('[PAYMENT CREATE] New order saved:', orderId,
+        'pickup:', resolvedPickup || '(none)',
+        '| items source:', Array.isArray(cartItems) && cartItems.length ? 'cartItems' : 'products');
     }
 
     res.json({
