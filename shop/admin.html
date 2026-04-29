@@ -1067,6 +1067,7 @@ input:checked + .slider::before { transform: translateX(20px); }
             </select>
           </div>
           <button onclick="loadPickupTracking()" style="margin-top:16px;padding:9px 18px;background:#15803d;color:white;border:none;border-radius:8px;font-family:inherit;font-size:0.9rem;cursor:pointer">🔄 רענן</button>
+          <button onclick="openPickupShareModal()" style="margin-top:16px;padding:9px 18px;background:#f97316;color:white;border:none;border-radius:8px;font-family:inherit;font-size:0.9rem;cursor:pointer;font-weight:700">🔗 הנפק קישור</button>
           <button onclick="showPickupSummaryModal()" style="margin-top:16px;padding:9px 18px;background:#0369a1;color:white;border:none;border-radius:8px;font-family:inherit;font-size:0.9rem;cursor:pointer">📊 סיכום כללי</button>
           <button onclick="sendPickupSMSToAll()" style="margin-top:16px;padding:9px 18px;background:#7c3aed;color:white;border:none;border-radius:8px;font-family:inherit;font-size:0.9rem;cursor:pointer">📱 שלח SMS לכולם</button>
           <button onclick="printPickupPDF()" style="background:#6366f1;color:white;border:none;padding:8px 16px;border-radius:8px;font-size:14px;cursor:pointer;margin:4px;margin-top:16px">🖨️ PDF</button>
@@ -4826,6 +4827,110 @@ function renderPickupTracking(data) {
   } else {
     summaryEl.innerHTML = '';
   }
+}
+
+// Share-link modal: pick a pickup point → backend issues a 30-day signed token
+// → shareable URL the admin can WhatsApp to a worker. The worker opens it and
+// sees only that point's pickup tracking without entering a password.
+async function openPickupShareModal() {
+  let modal = document.getElementById('pickupShareModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'pickupShareModal';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center;font-family:inherit';
+    modal.innerHTML = `
+      <div style="background:white;border-radius:18px;width:min(520px,96vw);box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden">
+        <div style="background:#f97316;color:white;padding:14px 20px;display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:1.05rem;font-weight:800">🔗 הנפק קישור לעובד</span>
+          <button onclick="document.getElementById('pickupShareModal').style.display='none'" style="background:none;border:none;color:white;font-size:1.4rem;cursor:pointer">✕</button>
+        </div>
+        <div style="padding:20px;display:flex;flex-direction:column;gap:14px">
+          <div style="background:#fef3c7;border:1.5px solid #fcd34d;border-radius:10px;padding:10px 14px;font-size:.85rem;color:#92400e;line-height:1.5">
+            הקישור מאפשר לעובד לסמן הזמנות שנאספו בנקודה ספציפית בלי כניסה. תוקף 30 יום. אל תשתפו מעבר לעובד הרלוונטי.
+          </div>
+
+          <div>
+            <label style="font-size:.88rem;font-weight:700;color:#374151;display:block;margin-bottom:5px">📍 בחר נקודת איסוף</label>
+            <select id="psPickup" style="width:100%;padding:10px 12px;border:1.5px solid #d1d5db;border-radius:8px;font-size:.92rem;font-family:inherit">
+              <option value="">— בחר —</option>
+            </select>
+          </div>
+
+          <button id="psGenerate" onclick="generatePickupShareLink()" style="background:#f97316;color:white;border:none;padding:11px;border-radius:8px;font-weight:800;cursor:pointer;font-family:inherit;font-size:.95rem">⚡ הנפק קישור</button>
+
+          <div id="psResult" style="display:none">
+            <label style="font-size:.85rem;font-weight:700;color:#374151;display:block;margin-bottom:5px">הקישור:</label>
+            <input id="psUrl" readonly style="width:100%;padding:9px 11px;border:2px solid #15803d;border-radius:8px;font-size:.85rem;background:#f0fdf4;direction:ltr;text-align:left;font-family:monospace;box-sizing:border-box" onclick="this.select()">
+            <div style="display:flex;gap:8px;margin-top:10px">
+              <button onclick="psCopyLink()" style="flex:1;padding:10px;background:#15803d;color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit">📋 העתק קישור</button>
+              <button onclick="psWhatsAppLink()" style="flex:1;padding:10px;background:#25D366;color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit">💬 WhatsApp</button>
+            </div>
+            <div id="psCopiedHint" style="text-align:center;font-size:.82rem;color:#15803d;margin-top:6px;display:none">✓ הקישור הועתק</div>
+          </div>
+
+          <div id="psErr" style="color:#dc2626;font-size:.85rem;display:none"></div>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+  // Reset
+  document.getElementById('psResult').style.display = 'none';
+  document.getElementById('psErr').style.display = 'none';
+  document.getElementById('psCopiedHint').style.display = 'none';
+  // Populate pickup points (canonical)
+  try {
+    const pts = await fetch(API + '/pickup-points').then(r => r.json());
+    const sel = document.getElementById('psPickup');
+    sel.innerHTML = '<option value="">— בחר —</option>' +
+      (pts || []).map(p => '<option value="' + (p.name||'').replace(/"/g,'&quot;') + '">📍 ' + p.name + '</option>').join('');
+    // Pre-select global filter if active
+    const active = (typeof getActivePickup === 'function') ? getActivePickup() : '';
+    if (active) sel.value = active;
+  } catch(e) {}
+  modal.style.display = 'flex';
+}
+
+async function generatePickupShareLink() {
+  const sel = document.getElementById('psPickup');
+  const errEl = document.getElementById('psErr');
+  errEl.style.display = 'none';
+  const point = sel.value;
+  if (!point) { errEl.textContent = 'נא לבחור נקודה'; errEl.style.display = 'block'; return; }
+  const btn = document.getElementById('psGenerate');
+  btn.disabled = true; btn.textContent = '⏳ מנפיק...';
+  try {
+    const token = localStorage.getItem('shopAdminToken') || localStorage.getItem('shopToken') || '';
+    const r = await fetch(API + '/admin/pickup-share-token', {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ pickupPoint: point })
+    });
+    const j = await r.json();
+    if (!r.ok) { errEl.textContent = j.error || 'שגיאה'; errEl.style.display = 'block'; return; }
+    document.getElementById('psUrl').value = j.url;
+    document.getElementById('psResult').style.display = 'block';
+  } catch(e) {
+    errEl.textContent = e.message; errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = '⚡ הנפק קישור';
+  }
+}
+
+function psCopyLink() {
+  const inp = document.getElementById('psUrl');
+  inp.select(); inp.setSelectionRange(0, 99999);
+  try { document.execCommand('copy'); } catch(e) {}
+  if (navigator.clipboard) { navigator.clipboard.writeText(inp.value).catch(()=>{}); }
+  const hint = document.getElementById('psCopiedHint');
+  hint.style.display = 'block';
+  setTimeout(()=>{ hint.style.display = 'none'; }, 2200);
+}
+
+function psWhatsAppLink() {
+  const url = document.getElementById('psUrl').value;
+  const point = document.getElementById('psPickup').value;
+  const msg = '📍 קישור למעקב איסוף — ' + point + '\n\n' + url + '\n\n(תוקף 30 יום)';
+  window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
 }
 
 function showPickupSummaryModal() {

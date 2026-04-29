@@ -263,12 +263,65 @@ async function loadPickupPoints() {
       opt.value = name; opt.textContent = name;
       sel.appendChild(opt);
     });
-    // Auto-select employee's assigned point and lock
+    // Auto-select + LOCK if point came from employee's profile or from ?point= URL
     if (window._empPickupPoint) {
       sel.value = window._empPickupPoint;
+      sel.disabled = true;
+      sel.style.background = '#f3f4f6';
+      sel.style.cursor = 'not-allowed';
     }
   } catch(e) {}
 }
+
+// On page load — if URL has ?point=<name>, lock the view to that point.
+(function applyUrlPointParam() {
+  try {
+    var p = new URLSearchParams(window.location.search).get('point');
+    if (p) {
+      window._empPickupPoint = decodeURIComponent(p);
+    }
+  } catch(e) {}
+})();
+
+// On page load — if URL has ?token=<jwt>, bypass login entirely.
+// The token is signed by /admin/pickup-share-token and hard-scopes the
+// session to one pickup. Used by the "Share link" button in admin.
+(function applyShareTokenLogin() {
+  try {
+    var t = new URLSearchParams(window.location.search).get('token');
+    if (!t) return;
+    // Decode the JWT payload (no verification on client — server verifies on every API call)
+    var payload = JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    if (payload.kind !== 'pickup_share') return;
+    sessionStorage.setItem('empToken', t);
+    window._token = t;
+    window._empPickupPoint = payload.pickupPoint || '';
+    // Hide login, show app
+    var login = document.getElementById('loginScreen');
+    var app = document.getElementById('appScreen');
+    if (login) login.style.display = 'none';
+    if (app) app.style.display = 'block';
+    // Set defaults so the existing init flow continues correctly
+    var topbarUser = document.getElementById('topbarUser');
+    if (topbarUser) topbarUser.textContent = '🔗 גישה לפי קישור';
+    var topbarPoint = document.getElementById('topbarPoint');
+    if (topbarPoint) topbarPoint.textContent = '📌 ' + (payload.pickupPoint || '');
+    // Trigger the same data flow as a normal login
+    document.addEventListener('DOMContentLoaded', function() {
+      if (typeof loadPickupPoints === 'function') loadPickupPoints();
+      if (typeof loadData === 'function') loadData();
+    });
+    // Also fire immediately in case DOMContentLoaded already fired
+    if (document.readyState !== 'loading') {
+      if (typeof loadPickupPoints === 'function') loadPickupPoints();
+      if (typeof loadData === 'function') loadData();
+      // Auto-refresh
+      if (!window._shareRefreshInterval) {
+        window._shareRefreshInterval = setInterval(function(){ if (!document.hidden && window._token) loadData(); }, 15000);
+      }
+    }
+  } catch(e) { console.warn('share-token init failed', e); }
+})();
 
 async function loadData() {
   const from = document.getElementById('dateFrom').value || getMonday();

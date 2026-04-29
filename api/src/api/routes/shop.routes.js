@@ -2666,6 +2666,30 @@ router.post('/broadcast-whatsapp', async (req, res) => {
 // ============================================
 
 // GET /api/shop/admin/pickup-tracking
+// POST /api/shop/admin/pickup-share-token
+// Admin-only. Issues a 30-day signed JWT scoped to ONE pickup point.
+// The link can be sent to a non-admin worker — opens employee.html
+// directly (no login required) but only ever sees that point's data.
+router.post('/admin/pickup-share-token', verifyShopToken, async (req, res) => {
+  try {
+    if (!req.shopUser.isAdmin) return res.status(403).json({ error: 'אין הרשאה' });
+    const db = await getDb();
+    let cleanPickup;
+    try { cleanPickup = await assertValidPickupPoint(db, req.body.pickupPoint); }
+    catch (e) { return res.status(e.code || 400).json({ error: e.msg }); }
+    const token = jwt.sign(
+      { kind: 'pickup_share', pickupPoint: cleanPickup, isEmployee: true, name: 'עובד נקודה' },
+      JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+    const baseUrl = process.env.SHOP_URL || 'https://shop.buypower.co.il';
+    const url = baseUrl + '/employee.html?token=' + encodeURIComponent(token);
+    res.json({ ok: true, token, url, pickupPoint: cleanPickup, expiresInDays: 30 });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.get('/admin/pickup-tracking', verifyShopToken, async (req, res) => {
   try {
     const db = await getDb();
@@ -2691,7 +2715,11 @@ router.get('/admin/pickup-tracking', verifyShopToken, async (req, res) => {
       createdAt: { $gte: weekStart, $lte: weekEnd },
       status: { $in: ['paid', 'confirmed', 'handled', 'collected', 'ready'] }
     };
-    if (req.query.pickupPoint) {
+    // Share-link tokens are HARD-scoped to their pickup point — overrides any
+    // ?pickupPoint= the client tried to pass.
+    if (req.shopUser.kind === 'pickup_share' && req.shopUser.pickupPoint) {
+      query.pickupLocation = req.shopUser.pickupPoint;
+    } else if (req.query.pickupPoint) {
       query.pickupLocation = req.query.pickupPoint;
     }
 
@@ -2755,6 +2783,13 @@ router.get('/admin/pickup-tracking', verifyShopToken, async (req, res) => {
 router.post('/admin/pickup-tracking/:orderId/mark', verifyShopToken, async (req, res) => {
   try {
     const db = await getDb();
+    // Share-link tokens can only mark orders that belong to their own pickup point
+    if (req.shopUser.kind === 'pickup_share') {
+      const ord = await db.collection('shop_orders').findOne({ _id: new ObjectId(req.params.orderId) }, { projection: { pickupLocation: 1 } });
+      if (!ord || ord.pickupLocation !== req.shopUser.pickupPoint) {
+        return res.status(403).json({ error: 'אין הרשאה לסמן הזמנה מחוץ לנקודה' });
+      }
+    }
     const { pickedUp, markedBy } = req.body;
     const update = { pickedUp: !!pickedUp, pickedUpBy: markedBy || req.shopUser.name || '' };
     if (pickedUp) {
