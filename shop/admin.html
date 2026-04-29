@@ -981,6 +981,10 @@ input:checked + .slider::before { transform: translateX(20px); }
               <option value="chart">📊 גרף</option>
             </select>
           </div>
+          <div style="display:flex;gap:6px;align-self:flex-end">
+            <button onclick="exportProfitExcel()" style="padding:8px 14px;background:#15803d;color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit;font-size:13px">📥 Excel</button>
+            <button onclick="exportProfitPDF()" style="padding:8px 14px;background:#dc2626;color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit;font-size:13px">📄 PDF</button>
+          </div>
         </div>
       </div>
       <!-- Summary cards -->
@@ -5875,6 +5879,137 @@ function renderProfitView() {
       }).join('') +
       '</tbody></table></div>';
   }
+}
+
+// Export the current profit-analysis table to Excel (.xlsx via SheetJS)
+function exportProfitExcel() {
+  if (!_profitData || !_profitData.length) { alert('אין נתונים להפקה'); return; }
+  const from = (document.getElementById('profitFrom')||{}).value || '';
+  const to = (document.getElementById('profitTo')||{}).value || '';
+  const cat = (document.getElementById('profitCategory')||{}).value || 'כל הקטגוריות';
+  // Build totals row
+  const totalQty = _profitData.reduce((s,p)=>s+p.qty,0);
+  const totalRev = _profitData.reduce((s,p)=>s+p.revenue,0);
+  const totalCost = _profitData.reduce((s,p)=>s+p.cost,0);
+  const totalProfit = totalRev - totalCost;
+  const totalMargin = totalRev > 0 ? ((totalProfit/totalRev)*100).toFixed(1) + '%' : '—';
+  const rows = _profitData.map(p => {
+    const profit = p.revenue - p.cost;
+    const margin = p.revenue > 0 && p.cost > 0 ? Math.round(profit/p.revenue*100) + '%' : '—';
+    return {
+      'מוצר': p.name,
+      'קטגוריה': p.category || '',
+      'כמות': p.qty,
+      'הכנסות': Math.round(p.revenue),
+      'עלות': p.cost > 0 ? Math.round(p.cost) : '',
+      'רווח': Math.round(profit),
+      'מרווח %': margin,
+    };
+  });
+  rows.push({});
+  rows.push({ 'מוצר': 'סה"כ', 'קטגוריה': '', 'כמות': totalQty, 'הכנסות': Math.round(totalRev), 'עלות': Math.round(totalCost), 'רווח': Math.round(totalProfit), 'מרווח %': totalMargin });
+  // Use SheetJS if available, otherwise CSV fallback
+  if (typeof XLSX !== 'undefined') {
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'רווח גולמי');
+    XLSX.writeFile(wb, 'profit-' + (from||'all') + '_' + (to||'').replace(/-/g,'') + '.xlsx');
+  } else {
+    // CSV fallback
+    const header = Object.keys(rows[0] || {'מוצר':1,'קטגוריה':1,'כמות':1,'הכנסות':1,'עלות':1,'רווח':1,'מרווח %':1});
+    const csv = '﻿' + header.join(',') + '\n' + rows.map(r => header.map(h => '"' + String(r[h]==null?'':r[h]).replace(/"/g,'""') + '"').join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'profit-' + (from||'all') + '_' + (to||'') + '.csv';
+    link.click();
+  }
+}
+
+// Open a printable HTML page (PDF via the browser print dialog) for the
+// current profit-analysis filters.
+function exportProfitPDF() {
+  if (!_profitData || !_profitData.length) { alert('אין נתונים להפקה'); return; }
+  const from = (document.getElementById('profitFrom')||{}).value || '';
+  const to = (document.getElementById('profitTo')||{}).value || '';
+  const cat = (document.getElementById('profitCategory')||{}).value || '';
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  const totalQty = _profitData.reduce((s,p)=>s+p.qty,0);
+  const totalRev = _profitData.reduce((s,p)=>s+p.revenue,0);
+  const totalCost = _profitData.reduce((s,p)=>s+p.cost,0);
+  const totalProfit = totalRev - totalCost;
+  const totalMargin = totalRev > 0 ? ((totalProfit/totalRev)*100).toFixed(1) : 0;
+  const trs = _profitData.map((p, i) => {
+    const profit = p.revenue - p.cost;
+    const margin = p.revenue > 0 && p.cost > 0 ? Math.round(profit/p.revenue*100) + '%' : '—';
+    return '<tr>' +
+      '<td class="num">' + (i+1) + '</td>' +
+      '<td class="name">' + esc(p.name) + '</td>' +
+      '<td class="cat">' + esc(p.category || '') + '</td>' +
+      '<td class="qty">' + p.qty + '</td>' +
+      '<td class="rev">₪' + Math.round(p.revenue) + '</td>' +
+      '<td class="cost">' + (p.cost > 0 ? '₪' + Math.round(p.cost) : '—') + '</td>' +
+      '<td class="profit ' + (profit>=0?'pos':'neg') + '">₪' + Math.round(profit) + '</td>' +
+      '<td class="margin">' + margin + '</td>' +
+    '</tr>';
+  }).join('');
+  const tags = [];
+  if (from || to) tags.push('📅 ' + (from||'') + (from && to ? ' — ' : '') + (to||''));
+  if (cat) tags.push('🏷️ ' + esc(cat));
+  const html = '<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="UTF-8">' +
+    '<title>ניתוח רווח גולמי</title><style>' +
+      '@page{size:A4;margin:14mm}*{box-sizing:border-box}' +
+      'body{font-family:-apple-system,"Segoe UI",Arial,sans-serif;direction:rtl;color:#111;margin:0}' +
+      '.toolbar{position:sticky;top:0;background:#14532d;color:white;padding:12px 18px;display:flex;justify-content:space-between;align-items:center;z-index:5}' +
+      '.toolbar h1{margin:0;font-size:1rem}' +
+      '.toolbar button{background:white;color:#14532d;border:none;padding:8px 18px;font-weight:800;border-radius:8px;cursor:pointer;font-family:inherit}' +
+      '.body{padding:14mm}' +
+      'h1.title{font-size:18pt;color:#14532d;margin:0 0 6px}' +
+      '.meta{color:#555;font-size:10pt;margin-top:4px}' +
+      '.tags{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap}' +
+      '.tag{background:#f0fdf4;border:1.5px solid #86efac;color:#14532d;padding:4px 10px;border-radius:14px;font-size:9.5pt;font-weight:700}' +
+      '.totals{margin:14px 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}' +
+      '.total{padding:12px;border-radius:10px;font-weight:800;text-align:center}' +
+      '.t-rev{background:#f0fdf4;color:#14532d;border:2px solid #86efac}' +
+      '.t-cost{background:#fef2f2;color:#991b1b;border:2px solid #fca5a5}' +
+      '.t-profit{background:#faf5ff;color:#6b21a8;border:2px solid #c4b5fd}' +
+      '.t-margin{background:#fefce8;color:#854d0e;border:2px solid #fde68a}' +
+      '.total .v{font-size:1.3rem;display:block}' +
+      '.total .l{font-size:.78rem;font-weight:600;opacity:.85}' +
+      'table{width:100%;border-collapse:collapse;font-size:10.5pt;margin-top:6px}' +
+      'th{background:#14532d;color:white;padding:7px 8px;text-align:right;font-size:10pt}' +
+      'th.num,th.qty,th.rev,th.cost,th.profit,th.margin,th.cat{text-align:center}' +
+      'td{padding:5px 8px;border-bottom:1px solid #e5e7eb}' +
+      'td.num,td.qty,td.rev,td.cost,td.profit,td.margin,td.cat{text-align:center}' +
+      'td.name{font-weight:700}' +
+      'td.rev{color:#14532d;font-weight:700}' +
+      'td.cost{color:#dc2626}' +
+      'td.profit.pos{color:#15803d;font-weight:800}' +
+      'td.profit.neg{color:#dc2626;font-weight:800}' +
+      'tr:nth-child(even) td{background:#f9fafb}' +
+      '@media print{.toolbar{display:none}.body{padding:0}}' +
+    '</style></head><body>' +
+    '<div class="toolbar"><h1>📊 ניתוח רווח גולמי</h1><button onclick="window.print()">🖨️ שמור / הדפס</button></div>' +
+    '<div class="body">' +
+      '<h1 class="title">📊 ניתוח רווח גולמי</h1>' +
+      '<div class="meta">הופק: ' + new Date().toLocaleString('he-IL') + '</div>' +
+      (tags.length ? '<div class="tags">' + tags.map(t => '<span class="tag">' + t + '</span>').join('') + '</div>' : '') +
+      '<div class="totals">' +
+        '<div class="total t-rev"><span class="v">₪' + Math.round(totalRev) + '</span><span class="l">הכנסות</span></div>' +
+        '<div class="total t-cost"><span class="v">₪' + Math.round(totalCost) + '</span><span class="l">עלות מלאי</span></div>' +
+        '<div class="total t-profit"><span class="v">₪' + Math.round(totalProfit) + '</span><span class="l">רווח גולמי</span></div>' +
+        '<div class="total t-margin"><span class="v">' + totalMargin + '%</span><span class="l">מרווח</span></div>' +
+      '</div>' +
+      '<table>' +
+        '<thead><tr><th class="num">#</th><th class="name">מוצר</th><th class="cat">קטגוריה</th><th class="qty">כמות</th><th class="rev">הכנסות</th><th class="cost">עלות</th><th class="profit">רווח</th><th class="margin">%</th></tr></thead>' +
+        '<tbody>' + trs + '</tbody>' +
+      '</table>' +
+    '</div>' +
+    '<script>window.addEventListener("load",function(){setTimeout(function(){window.print();},500)});</' + 'script>' +
+    '</body></html>';
+  const w = window.open('', '_blank');
+  w.document.write(html);
+  w.document.close();
 }
 
 // Init profit tab with this week
