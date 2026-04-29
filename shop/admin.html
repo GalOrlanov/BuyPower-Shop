@@ -307,17 +307,13 @@ input:checked + .slider::before { transform: translateX(20px); }
     <div class="tabs-inner">
       <button class="tab-btn active" onclick="showTab('orders')">📦 הזמנות</button>
       <button class="tab-btn" id="pickupTrackingTabBtn" onclick="showTab('pickupTracking');loadPickupTracking()">📍 מעקב איסוף</button>
-      <button class="tab-btn" id="staffTabBtn" onclick="showTab('staff');loadStaff()">👷 עובדים</button>
-      <button class="tab-btn" onclick="showTab('raffle');loadRaffleAdmin()">🎰 הגרלה</button>
       <button class="tab-btn" onclick="showTab('pickup');setPickupThisWeek();if(_orders&&_orders.length){renderPickup();}else{loadOrders();}">🚚 סיכום איסוף</button>
       <button class="tab-btn" onclick="showTab('summary');renderSummary&&renderSummary()">📊 סיכום</button>
-      <button class="tab-btn" onclick="showTab('announcements')">📢 הודעות</button>
       <button class="tab-btn" onclick="showTab('settings')">⚙️ הגדרות</button>
-      <button class="tab-btn" onclick="showTab('users'); loadUsers();">👥 משתמשים</button>
+      <button class="tab-btn" onclick="showTab('users'); loadUsers(); try{loadCrm()}catch(e){}">👥 משתמשים</button>
       <button class="tab-btn" onclick="showTab('payment');setPayDateRange('month')">💳 תשלום Grow</button>
       <button class="tab-btn" onclick="showTab('pricing');loadPricing()">📊 מחירון שבועי</button>
       <button class="tab-btn" onclick="showTab('finance');initFinanceTab()">💰 פיננסים</button>
-      <button class="tab-btn" onclick="showTab('crm');loadCrm()">👥 לקוחות</button>
       <button class="tab-btn" onclick="window.location.href='supplier.html'">🏭 ספקים</button>
     </div>
   </div>
@@ -443,15 +439,32 @@ input:checked + .slider::before { transform: translateX(20px); }
 
     <!-- SUMMARY TAB -->
     <div id="tab-summary" class="tab-panel">
-      <div class="card">
+      <div class="card" style="margin-bottom:12px">
         <div class="card-title">📊 סיכום הזמנות השבוע לפי מוצר</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:6px">
+          <div style="flex:1;min-width:170px">
+            <label style="font-size:.82rem;color:#374151;font-weight:600;display:block;margin-bottom:4px">קטגוריה</label>
+            <select id="summaryCategoryFilter" onchange="renderSummary()" style="width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.9rem">
+              <option value="">כל הקטגוריות</option>
+            </select>
+          </div>
+          <div style="flex:2;min-width:200px">
+            <label style="font-size:.82rem;color:#374151;font-weight:600;display:block;margin-bottom:4px">חיפוש מוצר</label>
+            <input id="summaryProductFilter" type="text" oninput="renderSummary()" placeholder="חיפוש לפי שם מוצר..."
+              style="width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.9rem">
+          </div>
+          <button onclick="document.getElementById('summaryCategoryFilter').value='';document.getElementById('summaryProductFilter').value='';renderSummary()" style="padding:8px 16px;background:#f3f4f6;color:#374151;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.85rem;cursor:pointer">נקה</button>
+        </div>
+        <div id="summaryStats" style="margin-top:10px;font-size:.85rem;color:#6b7280"></div>
+      </div>
+      <div class="card">
         <div style="overflow-x:auto">
           <table id="summaryTable">
             <thead>
-              <tr><th>מוצר</th><th>כמות כוללת</th><th>וריאנטים</th><th>הכנסות</th></tr>
+              <tr><th>מוצר</th><th>קטגוריה</th><th>כמות כוללת</th><th>וריאנטים</th><th>הכנסות</th></tr>
             </thead>
             <tbody id="summaryTbody">
-              <tr><td colspan="4" style="text-align:center;color:#9ca3af;padding:24px">טוען...</td></tr>
+              <tr><td colspan="5" style="text-align:center;color:#9ca3af;padding:24px">טוען...</td></tr>
             </tbody>
           </table>
         </div>
@@ -1583,35 +1596,89 @@ function renderSummary() {
   // Derives from _orders — same data source as pickup summary
   const tbody = document.getElementById('summaryTbody');
   if (!tbody) return;
-  if (!_orders || !_orders.length) { tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#9ca3af;padding:24px">אין הזמנות</td></tr>'; return; }
+  if (!_orders || !_orders.length) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#9ca3af;padding:24px">אין הזמנות</td></tr>'; return; }
   // Apply global pickup filter + skip cancelled/duplicate orders so they don't inflate totals
   const SKIP_STATUSES_S = ['cancelled', 'cancelled_duplicate', 'merged_into_paid'];
   const _gp = getActivePickup();
   const _scopedOrders = (_gp ? _orders.filter(function(o){ return (o.pickupLocation || '') === _gp; }) : _orders)
                          .filter(function(o){ return !SKIP_STATUSES_S.includes(o.status); });
+
+  // Build a name→category map from cached products (if available) so we can
+  // tag every aggregated row with a category and filter by it.
+  const nameToCat = {};
+  (window._allProductsForSummary || []).forEach(function(p){
+    if (p.name) nameToCat[p.name.trim()] = p.category || 'אחר';
+  });
+  function catFor(itemName) {
+    var n = (itemName || '').trim();
+    if (nameToCat[n]) return nameToCat[n];
+    // Fuzzy: longest matching product name
+    var best = '';
+    Object.keys(nameToCat).forEach(function(pn) {
+      if (n.startsWith(pn) && pn.length > best.length) best = pn;
+    });
+    return best ? nameToCat[best] : 'אחר';
+  }
+
+  // Aggregate
   const summary = {};
   _scopedOrders.forEach(function(order) {
     (order.items || []).forEach(function(item) {
       const key = item.variant ? item.name + '|' + item.variant : item.name;
-      if (!summary[key]) summary[key] = { name: item.name, variant: item.variant || null, qty: 0, unit: item.unit || '', total: 0 };
+      if (!summary[key]) summary[key] = { name: item.name, variant: item.variant || null, qty: 0, unit: item.unit || '', total: 0, category: catFor(item.name) };
       summary[key].qty += (item.qty || 1);
       summary[key].total += ((item.price || 0) * (item.qty || 1));
     });
   });
-  const rows = Object.values(summary).sort(function(a,b){ return a.name.localeCompare(b.name, 'he'); });
+  let rows = Object.values(summary).sort(function(a,b){ return a.name.localeCompare(b.name, 'he'); });
+
+  // Populate category dropdown (only unique categories present in the data)
+  const catSel = document.getElementById('summaryCategoryFilter');
+  if (catSel) {
+    const knownCats = Array.from(new Set(rows.map(function(r){ return r.category; }))).sort(function(a,b){ return a.localeCompare(b, 'he'); });
+    const cur = catSel.value;
+    catSel.innerHTML = '<option value="">כל הקטגוריות</option>' +
+      knownCats.map(function(c){ return '<option value="' + c + '"' + (c === cur ? ' selected' : '') + '>' + c + '</option>'; }).join('');
+  }
+
+  // Apply user filters
+  const catFilter = (catSel && catSel.value) || '';
+  const nameQuery = (document.getElementById('summaryProductFilter')?.value || '').toLowerCase().trim();
+  if (catFilter) rows = rows.filter(function(r){ return r.category === catFilter; });
+  if (nameQuery) rows = rows.filter(function(r){
+    const label = (r.name + ' ' + (r.variant || '')).toLowerCase();
+    return label.includes(nameQuery);
+  });
+
+  // Stats summary line
+  const totalUnits = rows.reduce(function(s,r){ return s + r.qty; }, 0);
+  const totalRevenue = rows.reduce(function(s,r){ return s + r.total; }, 0);
+  const statsEl = document.getElementById('summaryStats');
+  if (statsEl) statsEl.textContent = '✦ ' + rows.length + ' מוצרים · ' + totalUnits + ' יחידות · ₪' + totalRevenue.toFixed(2).replace(/\.00$/,'');
+
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#9ca3af;padding:24px">אין הזמנות</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#9ca3af;padding:24px">אין תוצאות לפילטרים שנבחרו</td></tr>';
     return;
   }
   tbody.innerHTML = rows.map(function(item) {
     return '<tr>' +
       '<td><strong>' + item.name + '</strong>' + (item.variant ? ' <span style="font-size:.8rem;color:#6b7280">(' + item.variant + ')</span>' : '') + '</td>' +
+      '<td style="font-size:.85rem;color:#374151">' + (item.category || '') + '</td>' +
       '<td style="text-align:center;font-weight:700;font-size:1.1rem;color:#15803d">' + item.qty + '</td>' +
       '<td style="font-size:0.82rem;color:#6b7280">' + (item.unit || '—') + '</td>' +
       '<td style="font-size:0.88rem;font-weight:700;color:#14532d">₪' + item.total.toFixed(2) + '</td>' +
       '</tr>';
   }).join('');
 }
+
+// Pre-load products so renderSummary can map names → categories without
+// adding a fetch on every render.
+(async function _preloadProductsForSummary() {
+  try {
+    const r = await fetch('/api/shop/products');
+    if (r.ok) window._allProductsForSummary = await r.json();
+  } catch(e) {}
+})();
 async function loadSummary() {
   try {
     const res = await fetch(API + '/orders/summary/products');
