@@ -3328,11 +3328,20 @@ async function moSearchCustomers() {
       if (!window._moAllUsers) {
         window._moAllUsers = await fetch(API + '/users/activity').then(r => r.json());
       }
+      // Split the query so name-match and phone-match are independent.
+      // Bug fix: when q is Hebrew, q.replace(/\D/g,'') becomes '' and p.includes('')
+      // returns true for every user — so the dropdown showed everybody.
+      const qDigits = q.replace(/\D/g, '');
+      const qLetters = q.replace(/[\d\s\-]+/g, '').trim();
       const matches = (window._moAllUsers || []).filter(u => {
         const n = (u.name || '').toLowerCase();
         const p = (u.phone || '').replace(/\D/g, '');
-        return n.includes(q) || p.includes(q.replace(/\D/g, ''));
-      }).slice(0, 12);
+        const phoneMatch = qDigits.length >= 3 && p.includes(qDigits);
+        const nameMatch = qLetters.length >= 1 && n.includes(qLetters);
+        // If query has only digits, match by phone; only letters, match by name;
+        // mixed → either side is enough.
+        return phoneMatch || nameMatch;
+      }).slice(0, 20);
       if (!matches.length) {
         resultsEl.innerHTML = '<div style="padding:10px;color:#9ca3af;font-size:.82rem;text-align:center">אין תוצאות — תוכל להמשיך עם הטלפון למטה (לקוח חדש)</div>';
         resultsEl.style.display = 'block';
