@@ -334,6 +334,19 @@ function getTotalQty() {
   return Object.values(variantQtys).reduce(function(s,q){ return s+q; }, 0);
 }
 
+// Cart limit — block adding a 21st DISTINCT line (different product/variant).
+// Increasing the qty of an existing line is unlimited.
+const CART_MAX_ITEMS = 20;
+function blockedByNewLines(numNewLines) {
+  if (cart.length + (numNewLines || 1) > CART_MAX_ITEMS) {
+    var msg = 'זמנית לא ניתן להוסיף יותר מ-' + CART_MAX_ITEMS + ' מוצרים לסל, ניתן לפצל את ההזמנה.';
+    if (typeof showToast === 'function') showToast('⚠️ ' + msg);
+    else alert(msg);
+    return true;
+  }
+  return false;
+}
+
 function sanitizeId(name) {
   // Use index-based ID by hashing the name to avoid Hebrew char issues
   var hash = 0;
@@ -414,6 +427,12 @@ function switchMainImage(url) {
 function changeQty(variantName, delta) {
   var current = variantQtys[variantName] || 0;
   var next = Math.max(0, Math.min(99, current + delta));
+  if (delta > 0 && current === 0 && next > 0 && currentProduct) {
+    // Going 0 → positive on this variant creates a new cart line in saveVariantsToCart.
+    var cartKey = currentProduct._id + '_' + variantName;
+    var existingLine = cart.find(function(i){ return i.cartKey === cartKey; });
+    if (!existingLine && blockedByNewLines(1)) return;
+  }
   variantQtys[variantName] = next;
   var sid = sanitizeId(variantName);
   var dispEl = document.getElementById('qty_' + sid);
@@ -473,6 +492,17 @@ function addAllToCart() {
     showToast('⚠️ יש לבחור לפחות ' + minQty + ' בקבוקים');
     return;
   }
+  // Count variants that would create NEW cart lines (no existing line for that cartKey).
+  var newLines = 0;
+  if (currentProduct.variants && currentProduct.variants.length) {
+    currentProduct.variants.forEach(function(v) {
+      var qty = variantQtys[v.name] || 0;
+      if (qty === 0) return;
+      var cartKey = currentProduct._id + '_' + v.name;
+      if (!cart.find(function(i){ return i.cartKey === cartKey; })) newLines++;
+    });
+  }
+  if (newLines > 0 && blockedByNewLines(newLines)) return;
   var mainImg = (currentProduct.imageUrls && currentProduct.imageUrls.length)
     ? currentProduct.imageUrls[0] : (currentProduct.imageUrl || '');
   var added = 0;
@@ -495,7 +525,8 @@ function addAllToCart() {
 var novarQty = 1;
 function novarChangeQty(delta) {
   var minQ = (currentProduct && currentProduct.minQuantity) || 1;
-  novarQty = Math.max(minQ, novarQty + delta);
+  var nextQty = Math.max(minQ, novarQty + delta);
+  novarQty = nextQty;
   var el = document.getElementById('novar-qty');
   if (el) el.textContent = novarQty;
   var btn = document.getElementById('novar-minus');
@@ -508,6 +539,8 @@ function addSingleToCart() {
     ? currentProduct.imageUrls[0] : (currentProduct.imageUrl || '');
   var cartKey = currentProduct._id;
   var qty = novarQty || 1;
+  // Block only if this would create a NEW line (product not already in cart).
+  if (!cart.find(function(i){ return i.cartKey === cartKey; }) && blockedByNewLines(1)) return;
   var effectivePrice = currentProduct.shopPrice;
   if (currentProduct.quantityDeals && currentProduct.quantityDeals.length) {
     var sorted = currentProduct.quantityDeals.slice().sort(function(a,b){ return b.qty - a.qty; });

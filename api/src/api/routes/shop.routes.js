@@ -90,6 +90,22 @@ function userPickupUpdate(name) {
   return { pickupPoint: name, pickupLocation: name };
 }
 
+// ─── Phone normalization ─────────────────────────────────────────────────────
+// Single canonical format: 10-digit Israeli "0XXXXXXXXX". Accepts inputs with
+// "+972", "972", spaces, dashes, etc., and converts to the canonical form. Used
+// at every entry point where we read or write a phone, so lookups (and the user
+// guard in /orders POST) always see the same string regardless of how the user
+// typed it.
+function normalizePhone(input) {
+  if (!input) return '';
+  let p = String(input).replace(/\D/g, '');
+  if (p.startsWith('972')) p = '0' + p.slice(3);
+  return p;
+}
+function isValidIsraeliPhone(p) {
+  return /^0\d{8,9}$/.test(p);
+}
+
 const INFORU_API_TOKEN = process.env.INFORU_API_TOKEN || 'Ym95cG93ZXI6ZjA2MDYwNTMtZjY2OS00NGQzLTkzNjAtMDYzNmNiNDE2NzVh';
 const INFORU_SENDER = process.env.INFORU_SENDER || 'BuyPower';
 
@@ -612,8 +628,8 @@ router.post('/orders', async (req, res) => {
     catch (e) { return res.status(e.code || 400).json({ error: e.msg }); }
 
     // 2. Customer must be a registered shop_user (no anonymous / guest orders)
-    const cleanPhone = (phone || '').replace(/\D/g, '');
-    if (cleanPhone.length < 9) {
+    const cleanPhone = normalizePhone(phone);
+    if (!isValidIsraeliPhone(cleanPhone)) {
       return res.status(400).json({ error: 'מספר טלפון לא תקין' });
     }
     const user = await db.collection('shop_users').findOne({ phone: cleanPhone });
@@ -641,7 +657,7 @@ router.post('/orders', async (req, res) => {
 
     const doc = {
       customerName,
-      phone,
+      phone: cleanPhone,
       items,
       totalAmount,
       pickupLocation,
@@ -654,9 +670,9 @@ router.post('/orders', async (req, res) => {
     const result = await db.collection('shop_orders').insertOne(doc);
     const orderId = result.insertedId.toString();
     // Update user's pickupLocation by phone
-    if (phone && pickupLocation) {
+    if (cleanPhone && pickupLocation) {
       await db.collection('shop_users').updateOne(
-        { phone: phone.replace(/\D/g,'') },
+        { phone: cleanPhone },
         { $set: { pickupLocation } },
         { upsert: false }
       ).catch(()=>{});
@@ -1184,8 +1200,8 @@ router.post('/users/register', async (req, res) => {
     const { name, phone, email, city, idNumber, password } = req.body;
     let bcrypt; try { bcrypt = require('bcryptjs'); } catch(e) { bcrypt = null; }
     const pickupPoint = (req.body.pickupPoint || '').trim();
-    const cleanPhone = (phone||'').replace(/[^0-9]/g,'');
-    if (!name || cleanPhone.length < 9) return res.status(400).json({ error: 'פרטים חסרים' });
+    const cleanPhone = normalizePhone(phone);
+    if (!name || !isValidIsraeliPhone(cleanPhone)) return res.status(400).json({ error: 'פרטים חסרים או טלפון לא תקין' });
 
     // Validate pickup point is required and must be a valid location
     if (!pickupPoint) return res.status(400).json({ error: 'נא לבחור נקודת איסוף' });
@@ -1219,7 +1235,7 @@ router.post('/users/register', async (req, res) => {
 router.post('/users/login', async (req, res) => {
   try {
     const db = await getDb();
-    const cleanPhone = (req.body.phone||'').replace(/[^0-9]/g,'');
+    const cleanPhone = normalizePhone(req.body.phone);
     const password = req.body.password || '';
     const user = await db.collection('shop_users').findOne({ phone: cleanPhone });
     if (!user) return res.json({ user: null, error: 'טלפון לא נמצא' });
@@ -1256,8 +1272,8 @@ router.post('/admin/auth', async (req, res) => {
 router.post('/users/send-otp', async (req, res) => {
   try {
     const db = await getDb();
-    const cleanPhone = (req.body.phone||'').replace(/[^0-9]/g,'');
-    if (!cleanPhone || cleanPhone.length < 9) return res.status(400).json({ error: 'מספר טלפון לא תקין' });
+    const cleanPhone = normalizePhone(req.body.phone);
+    if (!isValidIsraeliPhone(cleanPhone)) return res.status(400).json({ error: 'מספר טלפון לא תקין' });
     const user = await db.collection('shop_users').findOne({ phone: cleanPhone });
     if (!user) return res.json({ error: 'מספר הטלפון לא נמצא — אנא הירשם תחילה' });
     const method = req.body.method || 'sms';
@@ -1304,7 +1320,7 @@ router.post('/users/send-otp', async (req, res) => {
 router.post('/users/verify-otp', async (req, res) => {
   try {
     const db = await getDb();
-    const cleanPhone = (req.body.phone||'').replace(/[^0-9]/g,'');
+    const cleanPhone = normalizePhone(req.body.phone);
     const otp = (req.body.otp||'').trim();
     const user = await db.collection('shop_users').findOne({ phone: cleanPhone });
     if (!user) return res.json({ error: 'מספר הטלפון לא נמצא' });
@@ -1324,11 +1340,11 @@ router.post('/users/forgot-password', async (req, res) => {
     const db = await getDb();
     const method = req.body.method || 'email'; // 'email' or 'sms'
     const email = (req.body.email||'').trim().toLowerCase();
-    const phone = (req.body.phone||'').replace(/[^0-9]/g, '');
+    const phone = normalizePhone(req.body.phone);
 
     let user = null;
     if (method === 'sms') {
-      if (!phone || phone.length < 9) return res.status(400).json({ error: 'נא להזין מספר טלפון תקין' });
+      if (!isValidIsraeliPhone(phone)) return res.status(400).json({ error: 'נא להזין מספר טלפון תקין' });
       user = await db.collection('shop_users').findOne({ phone });
     } else {
       if (!email) return res.status(400).json({ error: 'נא להזין כתובת מייל' });
@@ -1415,6 +1431,7 @@ router.post('/payment/create', async (req, res) => {
       products = [],
       cartItems,
       totalAmount: passedTotalAmount,
+      pickupLocation: passedPickupLocation,
       success_url: custom_success_url,
       fail_url: custom_fail_url,
       notify_url: custom_notify_url,
@@ -1447,15 +1464,19 @@ router.post('/payment/create', async (req, res) => {
       fail_url: custom_fail_url || `${BASE_URL_PAY}/cart.html?error=1`,
       notify_url: custom_notify_url || `${BASE_URL_PAY}/api/shop/payment/webhook`,
       notify_invoice_url: custom_notify_invoice_url || `${BASE_URL_PAY}/api/shop/payment/notify-invoice`,
-      products: products.map(p => ({
-        catalog_number: p.catalog_number || p.id || '0',
-        name: p.name,
-        price: Number(p.price),
-        quantity: Number(p.quantity) || 1,
-        minimum_quantity: Number(p.minimum_quantity) || 1,
-        productUrl: p.productUrl || p.imageUrl || '',
-        vatType: 1
-      }))
+      products: products.map(p => {
+        const qty = Number(p.quantity) || 1;
+        const minQty = Number(p.minQuantity ?? p.minimum_quantity) || qty;
+        return {
+          catalog_number: p.catalog_number || p.id || '0',
+          name: p.name,
+          price: Number(p.price),
+          quantity: qty,
+          minQuantity: minQty,
+          productUrl: p.productUrl || p.imageUrl || '',
+          vatType: 1
+        };
+      })
     };
 
     console.log('[PAYMENT CREATE] Payload to Make.com:', JSON.stringify({
@@ -1503,11 +1524,11 @@ router.post('/payment/create', async (req, res) => {
 
     // Save payment link to existing pending order (don't create a duplicate!)
     const db = await getDb();
-    const cleanPhone = phone.replace(/\D/g, '');
+    const cleanPhone = normalizePhone(phone);
     // Resolve pickup: explicit body param wins, else lookup from user profile.
     // This guarantees orders created via the Grow flow always carry a pickup so
     // they show up correctly in the Orders/Summary tabs.
-    let resolvedPickup = (req.body.pickupLocation || req.body.pickupPoint || '').trim();
+    let resolvedPickup = (passedPickupLocation || req.body.pickupPoint || '').trim();
     if (!resolvedPickup) {
       const user = await db.collection('shop_users').findOne({ phone: cleanPhone });
       resolvedPickup = (user?.pickupPoint || user?.pickupLocation || '').trim();

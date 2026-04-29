@@ -438,6 +438,34 @@ let minOrderAmount = 0;
 
 function saveCart() { localStorage.setItem('yedidya_cart', JSON.stringify(cart)); }
 
+// Canonical Israeli phone format: "0XXXXXXXXX". Strips non-digits and converts
+// "+972"/"972" prefixes to "0". Server normalizes too (defense in depth) but doing
+// it here keeps the UI input in one consistent shape and avoids server round-trips.
+function normalizePhoneInput(input) {
+  if (!input) return '';
+  let p = String(input).replace(/\D/g, '');
+  if (p.startsWith('972')) p = '0' + p.slice(3);
+  return p;
+}
+// Lock the phone input: only digits, "+", spaces and dashes typed in, but the
+// stored .value is always normalized digits-only.
+document.addEventListener('DOMContentLoaded', function() {
+  var phoneInput = document.getElementById('gf-phone');
+  if (!phoneInput) return;
+  phoneInput.addEventListener('input', function(e) {
+    var caret = e.target.selectionStart;
+    var raw = e.target.value;
+    var clean = normalizePhoneInput(raw);
+    if (clean !== raw) {
+      e.target.value = clean;
+      try { e.target.setSelectionRange(clean.length, clean.length); } catch(_) {}
+    }
+  });
+  phoneInput.setAttribute('inputmode', 'numeric');
+  phoneInput.setAttribute('pattern', '0[0-9]{8,9}');
+  phoneInput.setAttribute('maxlength', '10');
+});
+
 function renderCart() {
   const itemsEl = document.getElementById('cartItems');
   const emptyEl = document.getElementById('emptyCart');
@@ -488,7 +516,7 @@ function changeQty(idx, delta) {
   cart[idx].qty += delta;
   if (cart[idx].qty <= 0) cart.splice(idx, 1);
   saveCart();
-  
+
 fixAndRender();
 }
 function removeItem(idx) {
@@ -706,7 +734,7 @@ function openGrowForm() {
         document.getElementById('gf-fname').value = parts[0] || '';
         document.getElementById('gf-lname').value = parts.slice(1).join(' ') || '';
       }
-      if (u.phone) document.getElementById('gf-phone').value = u.phone;
+      if (u.phone) document.getElementById('gf-phone').value = normalizePhoneInput(u.phone);
       if (u.email) document.getElementById('gf-email').value = u.email;
     } catch(e) {}
   }
@@ -781,9 +809,23 @@ async function submitGrowForm() {
     document.getElementById('pickupLocations')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
   }
-  const _gfPhone = (function(p){ p=p.replace(/[^0-9]/g,''); return p.startsWith('972') ? ('0'+p.slice(3)) : p; })(phone);
+  const _gfPhone = normalizePhoneInput(phone);
+  // Block submission if the phone isn't a valid Israeli number (10 digits starting
+  // with 0). Server enforces this too, but failing fast here avoids the round-trip.
+  if (!/^0\d{8,9}$/.test(_gfPhone)) {
+    btn.disabled = false;
+    btn.textContent = '💳 המשך לתשלום מאובטח';
+    errEl.style.display = 'block';
+    errEl.textContent = 'מספר טלפון לא תקין — צריך להיות בפורמט 05XXXXXXXX';
+    document.getElementById('gf-phone').style.borderColor = '#ef4444';
+    return;
+  }
   const _gfTotal = Math.round(cart.reduce(function(s,i){ return s + calcItemTotal(i); }, 0) * 100) / 100;
-  // Step 1: Save order first to get orderId (for Grow success URL)
+  // Step 1: Save order first to get orderId (for Grow success URL).
+  // CRITICAL: must succeed before allowing payment. If /orders rejects (guest not
+  // registered, pickup mismatch, etc.) we abort here — otherwise the /payment/create
+  // fallback would create an order without the validations enforced upstream
+  // (no pickupLocation, no productId on items, no user/profile guarantees).
   var _orderId = null;
   try {
     var _orRes = await fetch('/api/shop/orders', {
@@ -801,8 +843,21 @@ async function submitGrowForm() {
       })
     });
     var _orData = await _orRes.json();
+    if (!_orRes.ok) {
+      btn.disabled = false;
+      btn.textContent = '💳 המשך לתשלום מאובטח';
+      errEl.style.display = 'block';
+      errEl.textContent = (_orData && _orData.error) || 'לא ניתן ליצור הזמנה. בדוק את הפרטים ונסה שוב.';
+      return;
+    }
     _orderId = _orData.orderId || _orData._id || null;
-  } catch(e2) {}
+  } catch(e2) {
+    btn.disabled = false;
+    btn.textContent = '💳 המשך לתשלום מאובטח';
+    errEl.style.display = 'block';
+    errEl.textContent = 'שגיאת רשת ביצירת ההזמנה: ' + e2.message;
+    return;
+  }
   var _successUrl = 'https://shop.buypower.co.il/success.html' +
     (_orderId ? ('?orderId=' + _orderId + '&name=' + encodeURIComponent(fname + ' ' + lname)) : '');
   try {
@@ -819,13 +874,22 @@ async function submitGrowForm() {
         payment_type: 'Payments',
         max_or_custom: 'Max Payments',
         products: cart.map(item => {
-          let growVatType = 1; // Always 1 per Make/Meshulam requirement
+          const growVatType = 1; // Always 1 per Make/Meshulam requirement
+          const lineTotal = calcItemTotal(item);
+          const lineCents = Math.round(lineTotal * 100);
+          const qty = Number(item.qty) || 1;
+          // Send real quantity when total/qty is a clean per-unit price (in agorot).
+          // Falls back to {qty:1, price:total} only when quantity-deal math leaves a
+          // non-integer agora per unit — keeps the Grow charge exact to the cent.
+          const cleanPerUnit = qty > 0 && lineCents % qty === 0;
+          const baseName = item.name + (item.variant ? ' (' + item.variant + ')' : '');
+          const sendQty = cleanPerUnit ? qty : 1;
           return {
             catalog_number: item._id || item.id || item.productId || (item.cartKey ? item.cartKey.split('_')[0] : '1'),
-            name: item.name + (item.variant ? ' (' + item.variant + ')' : '') + (item.qty > 1 ? ' x' + item.qty : ''),
-            price: calcItemTotal(item),
-            quantity: 1,
-            minimum_quantity: 1,
+            name: cleanPerUnit ? baseName : baseName + (qty > 1 ? ' x' + qty : ''),
+            price: cleanPerUnit ? Math.round(lineCents / qty) / 100 : lineTotal,
+            quantity: sendQty,
+            minQuantity: sendQty,
             productUrl: item.imageUrl || '',
             vatType: growVatType,
             description: item.variant || ''
@@ -833,6 +897,7 @@ async function submitGrowForm() {
         }),
         cartItems: cart,
         totalAmount: _gfTotal,
+        pickupLocation: _pLoc,
         success_url: _successUrl,
         fail_url: 'https://shop.buypower.co.il/cart.html?error=1' + (_orderId ? '&orderId=' + _orderId : '')
       })

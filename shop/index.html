@@ -714,6 +714,19 @@ function updateBadge() {
 }
 updateBadge();
 
+// Cart limit — block adding a 21st DISTINCT line (different product/variant).
+// Increasing the qty of an existing line is unlimited.
+const CART_MAX_ITEMS = 20;
+function blockedByNewLine() {
+  if (cart.length >= CART_MAX_ITEMS) {
+    var msg = 'זמנית לא ניתן להוסיף יותר מ-' + CART_MAX_ITEMS + ' מוצרים לסל, ניתן לפצל את ההזמנה.';
+    if (typeof showToast === 'function') showToast('⚠️ ' + msg);
+    else alert(msg);
+    return true;
+  }
+  return false;
+}
+
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -798,6 +811,7 @@ function addToCart(pid, pname, pprice, pimg, variantSelectId) {
   var finalPrice = pprice + extraPrice;
   var cartKey = pid + (variantName ? '_' + variantName : '');
   var existing = cart.find(function(i){ return i.cartKey === cartKey; });
+  if (!existing && blockedByNewLine()) return;
   if (existing) existing.qty++;
   else cart.push({ cartKey: cartKey, productId: pid, name: pname, price: finalPrice, imageUrl: pimg, qty: 1, variant: variantName });
   saveCart();
@@ -1361,6 +1375,7 @@ function qtyDirect(pid, delta, e) {
   var existing0 = cart.findIndex(function(i){ return i.id === pid || i.productId === pid; });
   var cur0 = existing0 >= 0 ? (cart[existing0].qty||0) : 0;
   var newQty0 = Math.max(0, cur0 + delta);
+  if (delta > 0 && existing0 < 0 && blockedByNewLine()) return;
   // Apply quantity deals
   var price = basePrice;
   if (pData.quantityDeals && pData.quantityDeals.length) {

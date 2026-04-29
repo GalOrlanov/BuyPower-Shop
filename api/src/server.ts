@@ -14,8 +14,11 @@ const app = express();
 
 // Middleware
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Default body limit (100kb) was rejecting big carts and Grow webhooks with full
+// productData — caller saw HTML 413 from express's default error handler. Bump
+// to 5mb so the body parser succeeds and routes return JSON.
+app.use(express.json({ limit: '5mb' }));
+app.use(express.urlencoded({ limit: '5mb', extended: true }));
 app.use('/api', apiLimiter);
 
 // Swagger docs

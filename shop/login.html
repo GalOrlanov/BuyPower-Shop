@@ -187,10 +187,36 @@ function togglePw(id, btn) {
   inp.type = inp.type === 'password' ? 'text' : 'password';
   btn.textContent = inp.type === 'password' ? '👁' : '🙈';
 }
+
+// Canonical Israeli phone: "0XXXXXXXXX". "+972"/"972" prefixes are folded to "0".
+function normalizePhoneInput(input) {
+  if (!input) return '';
+  var p = String(input).replace(/\D/g, '');
+  if (p.startsWith('972')) p = '0' + p.slice(3);
+  return p;
+}
+function isValidIsraeliPhone(p) { return /^0\d{8,9}$/.test(p); }
+// Lock all tel inputs to the canonical format on every keystroke.
+document.addEventListener('DOMContentLoaded', function() {
+  ['loginPhone', 'regPhone', 'otpPhone'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.setAttribute('inputmode', 'numeric');
+    el.setAttribute('pattern', '0[0-9]{8,9}');
+    el.setAttribute('maxlength', '10');
+    el.addEventListener('input', function(e) {
+      var clean = normalizePhoneInput(e.target.value);
+      if (clean !== e.target.value) {
+        e.target.value = clean;
+        try { e.target.setSelectionRange(clean.length, clean.length); } catch(_) {}
+      }
+    });
+  });
+});
 async function doLogin() {
-  var phone = document.getElementById('loginPhone').value.trim().replace(/\D/g,'');
+  var phone = normalizePhoneInput(document.getElementById('loginPhone').value);
   var password = document.getElementById('loginPassword') ? document.getElementById('loginPassword').value : '';
-  if (phone.length < 9) return showError('נא להזין מספר טלפון תקין');
+  if (!isValidIsraeliPhone(phone)) return showError('נא להזין מספר טלפון תקין (05XXXXXXXX)');
   if (!password) return showError('נא להזין סיסמה');
   try {
     var res = await fetch('/api/shop/users/login', {
@@ -272,14 +298,14 @@ loadPickupPoints();
 
 async function doRegister() {
   var name = document.getElementById('regName').value.trim();
-  var phone = document.getElementById('regPhone').value.trim().replace(/\D/g,'');
+  var phone = normalizePhoneInput(document.getElementById('regPhone').value);
   var email = document.getElementById('regEmail').value.trim();
   var password = document.getElementById('regPassword') ? document.getElementById('regPassword').value : '';
   if (!name) return showError('נא להזין שם מלא');
   if (!password || password.length < 6) return showError('הסיסמה חייבת להכיל לפחות 6 תווים');
   var email = document.getElementById('regEmail').value.trim();
   if (!email || !email.includes('@')) return showError('נא להזין כתובת מייל תקינה');
-  if (phone.length < 9) return showError('נא להזין מספר טלפון תקין');
+  if (!isValidIsraeliPhone(phone)) return showError('נא להזין מספר טלפון תקין (05XXXXXXXX)');
   try {
     var regPP = document.getElementById('regPickupPoint').value;
     if (!regPP) return showError('נא לבחור נקודת איסוף');
@@ -309,8 +335,8 @@ var _otpTimer = null;
 var _otpResendTimer = null;
 
 function doQueryOtp() {
-  var phone = document.getElementById('otpPhone').value.trim().replace(/\D/g,'');
-  if (phone.length < 9) return showError('נא להזין מספר טלפון תקין');
+  var phone = normalizePhoneInput(document.getElementById('otpPhone').value);
+  if (!isValidIsraeliPhone(phone)) return showError('נא להזין מספר טלפון תקין (05XXXXXXXX)');
   document.getElementById('otpSendBtn').disabled = true;
   fetch('/api/shop/users/send-otp', {
     method: 'POST',
@@ -333,7 +359,7 @@ function doQueryOtp() {
 }
 
 function doSendOtp(method) {
-  var phone = document.getElementById('otpPhone').value.trim().replace(/\D/g,'');
+  var phone = normalizePhoneInput(document.getElementById('otpPhone').value);
   document.getElementById('otpMethodPicker').style.display = 'none';
   fetch('/api/shop/users/send-otp', {
     method: 'POST',
@@ -364,7 +390,7 @@ function startOtpCountdown(seconds) {
 }
 
 async function doVerifyOtp() {
-  var phone = document.getElementById('otpPhone').value.trim().replace(/\D/g,'');
+  var phone = normalizePhoneInput(document.getElementById('otpPhone').value);
   var otp = document.getElementById('otpCode').value.trim();
   if (!otp || otp.length !== 6) return showError('נא להזין קוד 6 ספרות');
   try {
