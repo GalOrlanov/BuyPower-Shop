@@ -425,6 +425,13 @@ function switchMainImage(url) {
 }
 
 function changeQty(variantName, delta) {
+  // Must be a registered (non-guest) user to add to cart.
+  var u = JSON.parse(localStorage.getItem('shopUser') || '{}');
+  if (delta > 0 && (!u || !u.phone || u.isGuest)) {
+    localStorage.setItem('afterLoginRedirect', window.location.href);
+    window.location.href = '/login.html?tab=register&msg=יש+להירשם+כדי+להוסיף+מוצרים+לעגלה';
+    return;
+  }
   var current = variantQtys[variantName] || 0;
   var next = Math.max(0, Math.min(99, current + delta));
   if (delta > 0 && current === 0 && next > 0 && currentProduct) {

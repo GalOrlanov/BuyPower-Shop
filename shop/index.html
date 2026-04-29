@@ -1368,6 +1368,13 @@ async function loadFeatured() {
 
 function qtyDirect(pid, delta, e) {
   if (e) { e.stopPropagation(); e.preventDefault(); }
+  // Must be a registered (non-guest) user to add to cart.
+  var u = JSON.parse(localStorage.getItem('shopUser') || '{}');
+  if (!u || !u.phone || u.isGuest) {
+    localStorage.setItem('afterLoginRedirect', window.location.href);
+    window.location.href = '/login.html?tab=register&msg=יש+להירשם+כדי+להוסיף+מוצרים+לעגלה';
+    return;
+  }
   var pData = allProducts.find(function(x){return x._id===pid;});
   if (!pData) return;
   // Base price

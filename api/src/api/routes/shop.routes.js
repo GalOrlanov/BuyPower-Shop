@@ -1682,6 +1682,24 @@ router.post('/payment/create', async (req, res) => {
       return res.status(400).json({ error: 'חסרים שדות חובה: title, full_name, phone, products' });
     }
 
+    // Pre-flight: refuse to create a payment link for an unregistered customer.
+    // Every registered user already has a pickup point (registration enforces it),
+    // so requiring registration here guarantees the resulting order will carry a
+    // pickupLocation. Blocks orphan orders at the source.
+    {
+      const dbPre = await getDb();
+      const phonePre = (phone || '').replace(/\D/g, '');
+      const userPre = await dbPre.collection('shop_users').findOne({ phone: phonePre });
+      const pickupPre = (req.body.pickupLocation || req.body.pickupPoint || userPre?.pickupPoint || userPre?.pickupLocation || '').trim();
+      if (!pickupPre) {
+        return res.status(400).json({
+          error: !userPre
+            ? 'הלקוח אינו רשום במערכת. הוא חייב להירשם לפני יצירת קישור תשלום (הרשמה כוללת בחירת נקודת איסוף).'
+            : 'בפרופיל של הלקוח חסרה נקודת איסוף. ערוך את המשתמש בטאב "משתמשים" → קבע לו נקודה ונסה שוב.',
+        });
+      }
+    }
+
     const BASE_URL_PAY = process.env.SHOP_URL || 'https://shop.buypower.co.il';
     const payload = {
       message_text,
@@ -1760,13 +1778,21 @@ router.post('/payment/create', async (req, res) => {
     // Save payment link to existing pending order (don't create a duplicate!)
     const db = await getDb();
     const cleanPhone = normalizePhone(phone);
-    // Resolve pickup: explicit body param wins, else lookup from user profile.
-    // This guarantees orders created via the Grow flow always carry a pickup so
-    // they show up correctly in the Orders/Summary tabs.
+    // Resolve pickup. Strict: registered user is the source of truth.
+    // Refuse to create payment links for unregistered phones — registration
+    // requires picking a pickup, so every legit customer already has one.
+    // This blocks the orphan-orders class of bug at its source.
     let resolvedPickup = (passedPickupLocation || req.body.pickupPoint || '').trim();
+    const user = await db.collection('shop_users').findOne({ phone: cleanPhone });
     if (!resolvedPickup) {
-      const user = await db.collection('shop_users').findOne({ phone: cleanPhone });
       resolvedPickup = (user?.pickupPoint || user?.pickupLocation || '').trim();
+    }
+    if (!resolvedPickup) {
+      return res.status(400).json({
+        error: !user
+          ? 'הלקוח אינו רשום במערכת. הוא חייב להירשם לפני יצירת קישור תשלום (הרשמה כוללת בחירת נקודת איסוף).'
+          : 'בפרופיל של הלקוח חסרה נקודת איסוף. ערוך את המשתמש בטאב "משתמשים" → קבע לו נקודה ונסה שוב.',
+      });
     }
     const existingOrder = await db.collection('shop_orders').findOne(
       { phone: cleanPhone, status: 'pending_payment' },
