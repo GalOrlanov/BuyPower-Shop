@@ -5628,17 +5628,17 @@ async function executeOpenWeek(btn) {
       <button onclick="document.getElementById('supplierOrderModal').style.display='none'" style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:#6b7280">✕</button>
     </div>
     <div style="margin-bottom:12px">
-      <label style="font-size:.83rem;font-weight:700;color:#dc2626;display:block;margin-bottom:4px">📍 נקודת איסוף (חובה)</label>
-      <select id="soPickupPoint" onchange="rebuildSoEntriesFromPickup()" style="width:100%;padding:10px 12px;border:2px solid #fca5a5;border-radius:10px;font-family:inherit;font-size:.9rem">
-        <option value="">— בחר נקודה —</option>
+      <label style="font-size:.83rem;font-weight:700;color:#dc2626;display:block;margin-bottom:4px">🏭 ספק (חובה)</label>
+      <select id="soSupplier" onchange="rebuildSoByPoint()" style="width:100%;padding:10px 12px;border:2px solid #fca5a5;border-radius:10px;font-family:inherit;font-size:.95rem">
+        <option value="">— בחר ספק —</option>
       </select>
-      <div style="font-size:.74rem;color:#6b7280;margin-top:4px">סכומי המוצרים יחושבו רק מהזמנות בנקודה הזו, וההזמנה תישמר תחת השם שלה.</div>
     </div>
-    <div style="margin-bottom:14px">
-      <label style="font-size:.83rem;font-weight:700;color:#374151;display:block;margin-bottom:4px">בחר ספק (אופציונלי — לסינון מוצרים ושמירה)</label>
-      <select id="soSupplier" style="width:100%;padding:10px 12px;border:2px solid #d1fae5;border-radius:10px;font-family:inherit;font-size:.9rem" onchange="filterSupplierProducts()">
-        <option value="">📦 כל המוצרים</option>
+    <div style="margin-bottom:12px">
+      <label style="font-size:.83rem;font-weight:700;color:#374151;display:block;margin-bottom:4px">📍 נקודת איסוף</label>
+      <select id="soPickupPoint" onchange="rebuildSoByPoint()" style="width:100%;padding:10px 12px;border:2px solid #d1fae5;border-radius:10px;font-family:inherit;font-size:.9rem">
+        <option value="__all__">🌐 כל הנקודות (קטע לכל נקודה ב-PDF)</option>
       </select>
+      <div style="font-size:.74rem;color:#6b7280;margin-top:4px">"כל הנקודות" → ה-PDF יכלול קטע נפרד לכל נקודה, ממוין א'ב'.</div>
     </div>
     <div id="soProductsList" style="max-height:300px;overflow-y:auto;margin-bottom:14px;border:1.5px solid #d1fae5;border-radius:10px;padding:8px"></div>
     <div style="display:flex;gap:10px;margin-bottom:8px">
@@ -5654,167 +5654,267 @@ var _allSuppliers = [];
 var _soEntries = [];
 var _soFilteredEntries = [];
 
+// Cached state — rebuilt every time supplier/pickup changes
+var _soByPoint = {};       // { 'pickup-name': [ {name, variant, total, ...} ], ... }
+var _soInvBySupplier = {}; // supplier name (lowercase) → list of inventory item names
+
 async function openSupplierOrderModal() {
-  // Always load fresh orders so we can aggregate by point.
-  if (typeof loadOrders === 'function') {
-    await loadOrders();
-  }
-  // Populate pickup-point selector — pre-select the global filter if one is active.
+  if (typeof loadOrders === 'function') await loadOrders();
+
+  // Suppliers (required first)
+  try {
+    var sRes = await fetch('/api/shop/suppliers');
+    _allSuppliers = await sRes.json();
+    var sSel = document.getElementById('soSupplier');
+    sSel.innerHTML = '<option value="">— בחר ספק —</option>' +
+      _allSuppliers.map(function(s){
+        return '<option value="' + s._id + '" data-name="' + (s.name||'').replace(/"/g,'&quot;') + '">🏭 ' + s.name + '</option>';
+      }).join('');
+  } catch(e){ console.warn(e); }
+
+  // Pickup-points dropdown — defaults to "all"; admin can narrow to one.
   try {
     var pts = await fetch('/api/shop/pickup-points').then(function(r){ return r.json(); });
     var preSel = (typeof getActivePickup === 'function') ? getActivePickup() : '';
     var ppSel = document.getElementById('soPickupPoint');
-    ppSel.innerHTML = '<option value="">— בחר נקודה —</option>' +
-      (pts || []).map(function(p) {
+    ppSel.innerHTML = '<option value="__all__">🌐 כל הנקודות (קטע לכל נקודה ב-PDF)</option>' +
+      (pts || []).map(function(p){
         var name = (p.name||'').replace(/"/g,'&quot;');
         return '<option value="' + name + '"' + (name === preSel ? ' selected' : '') + '>📍 ' + p.name + '</option>';
       }).join('');
-  } catch(e) { console.warn('pickup-points load fail', e); }
+    if (!preSel) ppSel.value = '__all__';
+  } catch(e){ console.warn(e); }
 
-  // Suppliers list
-  var res = await fetch('/api/shop/suppliers', { headers: { 'Content-Type': 'application/json', 'x-admin-password': 'yedidya2024' } });
-  _allSuppliers = await res.json();
-  var sel = document.getElementById('soSupplier');
-  sel.innerHTML = '<option value="">📦 כל המוצרים</option>' +
-    _allSuppliers.map(function(s) { return '<option value="' + s._id + '" data-name="' + s.name + '">' + s.name + '</option>'; }).join('');
+  // Pre-load inventory so the supplier filter resolves instantly
+  try {
+    var inv = await fetch('/api/shop/inventory').then(function(r){return r.json();});
+    _soInvBySupplier = {};
+    (inv || []).forEach(function(i){
+      var s = (i.supplier || '').toLowerCase();
+      if (!s) return;
+      (_soInvBySupplier[s] = _soInvBySupplier[s] || []).push((i.name || '').toLowerCase());
+    });
+  } catch(e){ console.warn(e); }
 
-  _soEntries = [];
-  _soFilteredEntries = [];
-  rebuildSoEntriesFromPickup(); // builds entries scoped to selected pickup
+  _soByPoint = {};
+  rebuildSoByPoint();
   document.getElementById('soErr').style.display = 'none';
   document.getElementById('supplierOrderModal').style.display = 'flex';
 }
 
-// Rebuild aggregated product list using ONLY orders for the selected pickup point.
-// This is the fix for the cross-point mixing bug — pickup is the primary filter, not an afterthought.
-function rebuildSoEntriesFromPickup() {
-  var pp = document.getElementById('soPickupPoint').value;
-  if (!pp) {
-    _soEntries = [];
-    _soFilteredEntries = [];
-    renderSoProducts([]);
-    return;
-  }
-  var byProd = {};
-  (_orders || [])
-    .filter(function(o){ return (o.pickupLocation || '') === pp; })
-    .forEach(function(o) {
-      (o.items || []).forEach(function(item) {
-        var key = item.name + (item.variant ? '__' + item.variant : '');
-        if (!byProd[key]) byProd[key] = { name: item.name, variant: item.variant || '', total: 0 };
-        byProd[key].total += (item.qty || item.quantity || 1);
-      });
-    });
-  _soEntries = Object.entries(byProd);
-  _soFilteredEntries = _soEntries;
-  renderSoProducts(_soEntries);
-}
-
-async function filterSupplierProducts() {
+// Rebuild the supplier-aggregation map keyed by pickup point.
+// {pickup1: [{name, variant, total, unitPrice}, ...], pickup2: [...]}
+// Items within each pickup are Hebrew-alphabetical.
+function rebuildSoByPoint() {
+  _soByPoint = {};
   var supplierId = document.getElementById('soSupplier').value;
   var supplierName = supplierId ? document.getElementById('soSupplier').selectedOptions[0].dataset.name : '';
-  var entries = _soEntries;
-  if (supplierId && supplierName) {
-    var inv = await fetch('/api/shop/inventory', { headers: { 'x-admin-password': 'yedidya2024' } }).then(function(r){return r.json();});
-    var supplierProducts = inv.filter(function(i) { return i.supplier && i.supplier.toLowerCase() === supplierName.toLowerCase(); }).map(function(i){ return i.name.toLowerCase(); });
-    entries = entries.filter(function(e) {
-      var pName = e[1].name.toLowerCase();
-      return supplierProducts.some(function(sp){ return pName.includes(sp) || sp.includes(pName); });
-    });
+  var pickupChoice = document.getElementById('soPickupPoint').value || '__all__';
+  if (!supplierId) { renderSoByPoint(); return; }
+
+  // Determine which inventory item-names belong to this supplier
+  var supplierProducts = _soInvBySupplier[(supplierName||'').toLowerCase()] || [];
+  function isThisSuppliersProduct(itemName) {
+    var n = (itemName || '').toLowerCase();
+    return supplierProducts.some(function(sp){ return n.includes(sp) || sp.includes(n); });
   }
-  _soFilteredEntries = entries;
-  renderSoProducts(entries);
+
+  // Aggregate
+  (_orders || []).forEach(function(o) {
+    var pp = o.pickupLocation || '(לא צוינה נקודה)';
+    if (pickupChoice !== '__all__' && pp !== pickupChoice) return;
+    (o.items || []).forEach(function(item) {
+      if (!isThisSuppliersProduct(item.name)) return;
+      var key = (item.name || '') + (item.variant ? '__' + item.variant : '');
+      var bucket = (_soByPoint[pp] = _soByPoint[pp] || {});
+      if (!bucket[key]) bucket[key] = {
+        name: item.name || '',
+        variant: item.variant || '',
+        total: 0,
+      };
+      bucket[key].total += (item.qty || item.quantity || 1);
+    });
+  });
+
+  renderSoByPoint();
 }
 
-function renderSoProducts(entries) {
+function renderSoByPoint() {
   var el = document.getElementById('soProductsList');
-  if (!entries.length) { el.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:20px;font-size:.85rem">אין מוצרים לספק זה בטווח הנבחר</div>'; return; }
-  el.innerHTML = entries.map(function(e) {
-    var label = e[1].name + (e[1].variant ? ' — ' + e[1].variant : '');
-    return '<div style="display:flex;justify-content:space-between;padding:8px 10px;border-radius:8px;margin-bottom:4px;background:#f9fafb;border:1px solid #e5e7eb"><span style="font-weight:700;font-size:.88rem">' + label + '</span><span style="font-size:1.1rem;font-weight:900;color:#14532d;min-width:40px;text-align:center">' + e[1].total + '</span></div>';
+  var supplierId = document.getElementById('soSupplier').value;
+  if (!supplierId) {
+    el.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:20px;font-size:.88rem">בחר ספק כדי לראות את המוצרים שלו לפי נקודה</div>';
+    return;
+  }
+  var pointNames = Object.keys(_soByPoint).sort(function(a,b){ return String(a).localeCompare(b, 'he'); });
+  if (!pointNames.length) {
+    el.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:20px;font-size:.88rem">אין הזמנות לספק הזה בטווח / נקודה הנבחרת</div>';
+    return;
+  }
+  el.innerHTML = pointNames.map(function(pp){
+    var items = Object.values(_soByPoint[pp]).sort(function(a,b){
+      var aLabel = a.name + (a.variant ? ' — ' + a.variant : '');
+      var bLabel = b.name + (b.variant ? ' — ' + b.variant : '');
+      return aLabel.localeCompare(bLabel, 'he');
+    });
+    var totalUnits = items.reduce(function(s,i){ return s + i.total; }, 0);
+    return '<div style="margin-bottom:10px">' +
+      '<div style="background:#14532d;color:white;padding:7px 12px;border-radius:8px 8px 0 0;font-weight:700;font-size:.88rem;display:flex;justify-content:space-between"><span>📍 ' + pp + '</span><span>' + items.length + ' פריטים · ' + totalUnits + ' יח׳</span></div>' +
+      '<div style="border:1px solid #d1fae5;border-top:none;border-radius:0 0 8px 8px;padding:6px">' +
+      items.map(function(it){
+        var label = it.name + (it.variant ? ' — ' + it.variant : '');
+        return '<div style="display:flex;justify-content:space-between;padding:5px 8px;border-radius:6px;background:#f9fafb;margin-bottom:2px;font-size:.85rem"><span>' + label + '</span><span style="font-weight:900;color:#14532d">' + it.total + '</span></div>';
+      }).join('') +
+      '</div></div>';
   }).join('');
 }
 
 async function doExportSupplierPDF(saveToSupplier) {
-  var pickupPoint = document.getElementById('soPickupPoint').value;
-  if (!pickupPoint) { document.getElementById('soErr').textContent = 'יש לבחור נקודת איסוף'; document.getElementById('soErr').style.display='block'; return; }
-  var entries = _soFilteredEntries.length ? _soFilteredEntries : _soEntries;
-  if (!entries.length) { document.getElementById('soErr').textContent = 'אין מוצרים בנקודה זו בטווח התאריכים'; document.getElementById('soErr').style.display='block'; return; }
   var supplierId = document.getElementById('soSupplier').value;
-  var supplierName = supplierId ? document.getElementById('soSupplier').selectedOptions[0].dataset.name : 'כללי';
-  if (saveToSupplier && !supplierId) { document.getElementById('soErr').textContent = 'יש לבחור ספק כדי לשמור'; document.getElementById('soErr').style.display='block'; return; }
+  if (!supplierId) {
+    document.getElementById('soErr').textContent = 'יש לבחור ספק';
+    document.getElementById('soErr').style.display='block'; return;
+  }
+  var supplierName = document.getElementById('soSupplier').selectedOptions[0].dataset.name || 'ספק';
+  var pointNames = Object.keys(_soByPoint).sort(function(a,b){ return String(a).localeCompare(b, 'he'); });
+  if (!pointNames.length) {
+    document.getElementById('soErr').textContent = 'אין הזמנות לספק זה בטווח / נקודה הנבחרת';
+    document.getElementById('soErr').style.display='block'; return;
+  }
   var fromEl = document.getElementById('pickupFrom');
   var toEl = document.getElementById('pickupTo');
   var fromVal = fromEl ? fromEl.value : '';
   var toVal = toEl ? toEl.value : '';
   var dateRange = (fromVal||toVal) ? (fromVal||'')+(fromVal&&toVal?' — ':'')+(toVal||'') : 'כל התאריכים';
 
-  // Fetch inventory to get purchase prices
+  // Pull inventory once for unit prices
   var invMap = {};
   try {
-    var invList = await fetch('/api/shop/inventory', { headers: { 'x-admin-password': 'yedidya2024' } }).then(function(r){ return r.json(); });
-    invList.forEach(function(i){ invMap[i.name.toLowerCase().trim()] = i.purchasePrice || 0; });
+    var invList = await fetch('/api/shop/inventory').then(function(r){ return r.json(); });
+    (invList || []).forEach(function(i){ invMap[(i.name||'').toLowerCase().trim()] = i.purchasePrice || 0; });
   } catch(e) {}
 
-  var items = entries.map(function(e) {
-    var productName = e[1].name + (e[1].variant ? ' — ' + e[1].variant : '');
-    var qty = e[1].total;
-    var unitPrice = invMap[e[1].name.toLowerCase().trim()] || 0;
-    var lineTotal = unitPrice * qty;
-    return { name: productName, qty: qty, unitPrice: unitPrice, lineTotal: lineTotal };
-  });
+  function escHtml(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-  var totalUnits = items.reduce(function(s,i){ return s+i.qty; }, 0);
-  var totalCost = items.reduce(function(s,i){ return s+i.lineTotal; }, 0);
+  // Build per-point sections, alphabetically sorted within each.
+  var grandUnits = 0;
+  var grandCost = 0;
+  // Per-point payload for saving (one purchase order per point)
+  var perPointSavePayload = {};
 
+  var sectionsHtml = pointNames.map(function(pp, idx) {
+    var bucket = _soByPoint[pp] || {};
+    var items = Object.values(bucket).map(function(it){
+      var qty = it.total;
+      var displayName = it.name + (it.variant ? ' — ' + it.variant : '');
+      var unitPrice = invMap[(it.name||'').toLowerCase().trim()] || 0;
+      var lineTotal = unitPrice * qty;
+      return { name: displayName, qty: qty, unitPrice: unitPrice, lineTotal: lineTotal };
+    }).sort(function(a,b){ return a.name.localeCompare(b.name, 'he'); });
+
+    var pointUnits = items.reduce(function(s,i){ return s + i.qty; }, 0);
+    var pointCost = items.reduce(function(s,i){ return s + i.lineTotal; }, 0);
+    grandUnits += pointUnits;
+    grandCost += pointCost;
+    perPointSavePayload[pp] = { items: items, totalUnits: pointUnits, totalCost: pointCost };
+
+    var rows = items.map(function(it, i){
+      return '<tr>' +
+        '<td class="num">' + (i+1) + '</td>' +
+        '<td class="name">' + escHtml(it.name) + '</td>' +
+        '<td class="qty">' + it.qty + '</td>' +
+      '</tr>';
+    }).join('');
+
+    return '<section class="pickup-section' + (idx > 0 ? ' break' : '') + '">' +
+      '<div class="pp-header">' +
+        '<div class="pp-title">📍 ' + escHtml(pp) + '</div>' +
+        '<div class="pp-stats">' + items.length + ' פריטים · ' + pointUnits + ' יח׳</div>' +
+      '</div>' +
+      '<table class="items">' +
+        '<thead><tr><th class="num">#</th><th class="name">מוצר</th><th class="qty">כמות</th></tr></thead>' +
+        '<tbody>' + rows + '</tbody>' +
+        '<tfoot><tr><td colspan="2" class="totlabel">📦 סה״כ נקודה</td><td class="qty"><strong>' + pointUnits + '</strong></td></tr></tfoot>' +
+      '</table>' +
+    '</section>';
+  }).join('');
+
+  // Save: ONE purchase-order row per pickup point (so history stays clean)
   if (saveToSupplier) {
-    var r = await fetch('/api/shop/suppliers/' + supplierId + '/orders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-admin-password': 'yedidya2024' },
-      body: JSON.stringify({ items: items, dateRange: dateRange, totalCost: totalCost, notes: '', pickupPoint: pickupPoint })
-    });
-    if (!r.ok) {
-      var errBody; try { errBody = await r.json(); } catch(e) { errBody = {}; }
-      document.getElementById('soErr').textContent = errBody.error || 'שגיאה בשמירה';
+    var saveErrors = [];
+    for (var k = 0; k < pointNames.length; k++) {
+      var pp = pointNames[k];
+      var data = perPointSavePayload[pp];
+      try {
+        var r = await fetch('/api/shop/suppliers/' + supplierId + '/orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            items: data.items, dateRange: dateRange, totalCost: data.totalCost,
+            notes: '', pickupPoint: pp
+          })
+        });
+        if (!r.ok) {
+          var errBody; try { errBody = await r.json(); } catch(e) { errBody = {}; }
+          saveErrors.push(pp + ': ' + (errBody.error || r.status));
+        }
+      } catch(e) { saveErrors.push(pp + ': ' + e.message); }
+    }
+    if (saveErrors.length) {
+      document.getElementById('soErr').textContent = 'שגיאה בשמירה — ' + saveErrors.join(' · ');
       document.getElementById('soErr').style.display='block';
       return;
     }
   }
 
-  var showPrices = false;
+  var htmlOut = '<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>הזמנה לספק — ' + escHtml(supplierName) + '</title>' +
+    '<style>' +
+    '@page{size:A4;margin:14mm}' +
+    '*{box-sizing:border-box}' +
+    'body{font-family:Arial,sans-serif;direction:rtl;color:#111;font-size:11.5pt;margin:0}' +
+    '.toolbar{position:sticky;top:0;background:#14532d;color:white;padding:12px 18px;display:flex;gap:10px;align-items:center;z-index:5}' +
+    '.toolbar h1{margin:0;font-size:1rem;flex:1}' +
+    '.toolbar button{background:white;color:#14532d;border:none;padding:8px 18px;font-weight:800;border-radius:8px;cursor:pointer;font-family:inherit}' +
+    '.cover{padding:14mm;border-bottom:1px solid #e5e7eb;page-break-after:always}' +
+    '.cover h1{font-size:18pt;color:#14532d;margin:0 0 6px}' +
+    '.cover .meta{color:#555;font-size:10pt;margin-top:4px}' +
+    '.cover .grand{margin-top:18px;padding:14px 18px;background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:2px solid #15803d;border-radius:10px;font-weight:800;font-size:1.1rem;color:#14532d;display:flex;justify-content:space-between}' +
+    '.pickup-section{padding:8mm 14mm 12mm}' +
+    '.pickup-section.break{page-break-before:always}' +
+    '.pp-header{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #14532d;padding-bottom:6px;margin-bottom:10px}' +
+    '.pp-title{font-size:14pt;color:#14532d;font-weight:800}' +
+    '.pp-stats{font-size:10pt;color:#6b7280}' +
+    'table.items{width:100%;border-collapse:collapse;font-size:11pt}' +
+    'table.items th{background:#14532d;color:white;padding:7px 10px;text-align:right;font-size:10.5pt}' +
+    'table.items th.num,table.items th.qty{text-align:center}' +
+    'table.items td{padding:6px 10px;border-bottom:1px solid #e5e7eb}' +
+    'table.items td.num,table.items td.qty{text-align:center}' +
+    'table.items td.name{font-weight:600}' +
+    'table.items tr:nth-child(even) td{background:#f9fafb}' +
+    'table.items tfoot td{background:#f0fdf4;font-weight:900;border-top:2px solid #14532d}' +
+    'table.items td.totlabel{padding:8px 10px}' +
+    '@media print{.toolbar{display:none}.cover{padding:0;border:none}.pickup-section{padding:0}}' +
+    '</style></head><body>' +
+    '<div class="toolbar"><h1>📋 הזמנה לספק — ' + escHtml(supplierName) + '</h1>' +
+      '<button onclick="window.print()">🖨️ שמור / הדפס PDF</button>' +
+    '</div>' +
+    '<div class="cover">' +
+      '<h1>📋 הזמנה לספק — ' + escHtml(supplierName) + '</h1>' +
+      '<div class="meta">תאריכים: ' + escHtml(dateRange) + ' &nbsp;·&nbsp; הופק: ' + new Date().toLocaleString('he-IL') + '</div>' +
+      '<div class="meta">נקודות איסוף בהזמנה: ' + pointNames.length + ' (' + pointNames.map(function(p){return escHtml(p);}).join(', ') + ')</div>' +
+      '<div class="grand"><span>📦 סה״כ כל הנקודות</span><span>' + grandUnits + ' יח׳</span></div>' +
+    '</div>' +
+    sectionsHtml +
+    '<script>window.addEventListener(\'load\',function(){setTimeout(function(){window.print();},500);});</' + 'script>' +
+    '</body></html>';
 
-  var rows = items.map(function(item,i){
-    return '<tr>' +
-      '<td style="padding:10px 14px;text-align:center">'+(i+1)+'</td>' +
-      '<td style="padding:10px 14px;font-weight:700">'+item.name+'</td>' +
-      '<td style="padding:10px 14px;text-align:center;font-weight:900;color:#14532d">'+item.qty+'</td>' +
-      (showPrices ? '<td style="padding:10px 14px;text-align:center">'+(item.unitPrice ? '₪'+item.unitPrice.toFixed(2) : '—')+'</td>' +
-      '<td style="padding:10px 14px;text-align:center;font-weight:700">'+(item.lineTotal ? '₪'+item.lineTotal.toFixed(2) : '—')+'</td>' : '') +
-      '</tr>';
-  }).join('');
-
-  var w = window.open('','_blank');
-  w.document.write('<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>הזמנה לספק</title><style>@page{size:A4;margin:20mm}body{font-family:Arial,sans-serif;direction:rtl;color:#111;font-size:12pt}h1{font-size:17pt;color:#14532d;margin-bottom:4px}.meta{color:#555;font-size:10pt;margin-bottom:20px}table{width:100%;border-collapse:collapse;margin-top:8px}th{background:#14532d;color:white;padding:10px 14px;text-align:right;font-size:11pt}td{border-bottom:1px solid #e5e7eb}tr:nth-child(even) td{background:#f9fafb}.total-row td{background:#f0fdf4;font-weight:900;border-top:3px solid #14532d;font-size:1.1rem}.btn{position:fixed;top:16px;left:16px;background:#14532d;color:white;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;font-weight:700;font-size:12pt}@media print{.btn{display:none}}</style></head><body>' +
-    '<button class="btn" onclick="window.print()">🖨️ שמור / הדפס</button>' +
-    '<h1>📋 הזמנה לספק — '+supplierName+'</h1>' +
-    '<div class="meta">📍 נקודת איסוף: <strong>'+pickupPoint+'</strong> &nbsp;·&nbsp; תאריכים: '+dateRange+' &nbsp;·&nbsp; הופק: '+new Date().toLocaleString("he-IL")+'</div>' +
-    '<table><thead><tr>' +
-    '<th style="width:40px;text-align:center">#</th>' +
-    '<th>מוצר</th>' +
-    '<th style="width:70px;text-align:center">כמות</th>' +
-    (showPrices ? '<th style="width:90px;text-align:center">מחיר ליח\'</th>' +
-    '<th style="width:100px;text-align:center">סה"כ שורה</th>' : '') +
-    '</tr></thead><tbody>' +
-    rows +
-    '<tr class="total-row">' +
-    '<td colspan="2" style="padding:10px 14px">📦 סה"כ</td>' +
-    '<td style="padding:10px 14px;text-align:center">'+totalUnits+'</td>' +
-    (showPrices ? '<td style="padding:10px 14px"></td>' +
-    '<td style="padding:10px 14px;text-align:center;color:#14532d">₪'+totalCost.toFixed(2)+'</td>' : '') +
-    '</tr></tbody></table></body></html>');
+  var w = window.open('', '_blank');
+  w.document.write(htmlOut);
   w.document.close();
-  document.getElementById('supplierOrderModal').style.display='none';
-  if (saveToSupplier) { setTimeout(function(){ alert('✅ ההזמנה נשמרה בכרטיס הספק'); }, 300); }
+  document.getElementById('supplierOrderModal').style.display = 'none';
+  if (saveToSupplier) {
+    setTimeout(function(){ alert('✅ נשמרו ' + pointNames.length + ' רשומות בכרטיס הספק (אחת לכל נקודה)'); }, 300);
+  }
 }
 </script>
 
