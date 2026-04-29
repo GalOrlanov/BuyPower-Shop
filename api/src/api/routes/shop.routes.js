@@ -598,6 +598,57 @@ router.post('/admin/orders/manual', async (req, res) => {
   }
 });
 
+// PUT /api/shop/admin/orders/:id/cancel — soft-cancel an order, restore stock
+router.put('/admin/orders/:id/cancel', async (req, res) => {
+  try {
+    const db = await getDb();
+    const order = await db.collection('shop_orders').findOne({ _id: new ObjectId(req.params.id) });
+    if (!order) return res.status(404).json({ error: 'הזמנה לא נמצאה' });
+    if (order.status === 'cancelled') return res.status(400).json({ error: 'ההזמנה כבר מבוטלת' });
+
+    // Restore stock if the order had previously been paid (= stock was decremented)
+    const wasPaid = ['paid', 'collected', 'handled', 'confirmed', 'ready'].includes(order.status);
+    if (wasPaid) {
+      for (const item of (order.items || [])) {
+        const prodId = item.productId || item.id;
+        if (!prodId) continue;
+        try {
+          const prod = await db.collection('shop_products').findOne(
+            { _id: new ObjectId(prodId) },
+            { projection: { inventoryId: 1, hasUnlimitedStock: 1 } }
+          );
+          if (!prod || prod.hasUnlimitedStock) continue;
+          await db.collection('shop_products').updateOne(
+            { _id: new ObjectId(prodId) },
+            { $inc: { stock: (item.qty || 1) } }
+          );
+          if (prod.inventoryId) {
+            await db.collection('shop_inventory').updateOne(
+              { _id: new ObjectId(prod.inventoryId) },
+              { $inc: { quantity: (item.qty || 1) } }
+            );
+          }
+        } catch (e) { /* ignore stock errors */ }
+      }
+    }
+
+    await db.collection('shop_orders').updateOne(
+      { _id: order._id },
+      { $set: {
+          status: 'cancelled',
+          cancelledAt: new Date(),
+          cancelReason: req.body.reason || '',
+          stockRestored: wasPaid,
+          previousStatus: order.status,
+      } }
+    );
+    res.json({ ok: true, stockRestored: wasPaid });
+  } catch (e) {
+    console.error('[cancel order]', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ===== ORDERS PRINT-PDF (per-customer pages) =====
 // Returns a printable HTML page (one customer per page). Admin opens it,
 // browser fires the print dialog, user saves as PDF. Native RTL + Hebrew.

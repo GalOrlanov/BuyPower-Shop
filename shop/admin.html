@@ -2984,6 +2984,7 @@ async function loadOrders() {
       '<td style="white-space:nowrap">' +
         '<button class="btn btn-sm" style="background:#e0f2fe;color:#0369a1;margin-left:4px" onclick="openOrderModal(\'' + o._id + '\')">👁️ פרטים</button>' +
         (o.status !== 'handled' && o.status !== 'paid' ? '<button class="btn btn-sm btn-green" onclick="markPaid(\'' + o._id + '\')">✓ שולם</button>' : '<span style="color:#15803d;font-size:.8rem;font-weight:700">✓ טופל</span>') +
+        (o.status !== 'cancelled' ? '<button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;margin-right:4px" onclick="cancelOrder(\'' + o._id + '\')">🚫 בטל</button>' : '<span style="color:#dc2626;font-size:.8rem;font-weight:700;margin-right:4px">🚫 מבוטל</span>') +
         '</td>' +
       '</tr>'
     ).join('');
@@ -3587,6 +3588,26 @@ async function markPaid(id) {
     body: JSON.stringify({ status: 'paid' })
   });
   loadOrders();
+}
+
+async function cancelOrder(id) {
+  if (!confirm('לבטל את ההזמנה? הסטטוס יתעדכן ל"מבוטל" וכמויות יוחזרו למלאי.')) return;
+  const reason = prompt('סיבת הביטול (אופציונלי):', '') || '';
+  try {
+    const r = await fetch(API + '/admin/orders/' + id + '/cancel', {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ reason })
+    });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      alert('שגיאה: ' + (j.error || r.status));
+      return;
+    }
+    loadOrders();
+  } catch(e) {
+    alert('שגיאה: ' + e.message);
+  }
 }
 
 
