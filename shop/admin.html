@@ -3064,6 +3064,15 @@ async function openManualOrderModal() {
         </div>
         <div style="padding:18px 20px;display:flex;flex-direction:column;gap:14px">
 
+          <!-- Customer search (existing customer lookup) -->
+          <div style="position:relative">
+            <label style="font-size:.85rem;font-weight:700;color:#374151;display:block;margin-bottom:4px">🔍 חיפוש לקוח קיים <span style="color:#9ca3af;font-weight:400">(לפי שם או טלפון)</span></label>
+            <input type="text" id="moCustomerSearch" placeholder="הקלד שם או טלפון..." oninput="moSearchCustomers()" autocomplete="off"
+              style="width:100%;padding:10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:.95rem">
+            <div id="moSearchResults" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1.5px solid #d1d5db;border-top:none;border-radius:0 0 8px 8px;max-height:220px;overflow-y:auto;z-index:10001;box-shadow:0 4px 12px rgba(0,0,0,.1)"></div>
+          </div>
+          <div style="text-align:center;color:#9ca3af;font-size:.78rem;margin:-6px 0">— או הקלד טלפון של לקוח חדש —</div>
+
           <!-- Phone + auto-lookup -->
           <div>
             <label style="font-size:.85rem;font-weight:700;color:#374151;display:block;margin-bottom:4px">📞 טלפון לקוח</label>
@@ -3138,8 +3147,14 @@ async function openManualOrderModal() {
   document.getElementById('moName').value = '';
   document.getElementById('moCustomerStatus').textContent = '';
   document.getElementById('moErr').style.display = 'none';
+  const searchEl = document.getElementById('moCustomerSearch');
+  if (searchEl) searchEl.value = '';
+  const resultsEl = document.getElementById('moSearchResults');
+  if (resultsEl) resultsEl.style.display = 'none';
   window._moItems = [];
   window._moExistingUser = null;
+  window._moAllUsers = null;        // refresh on each open so newly-registered users show up
+  window._moAllProducts = null;     // refresh products too
   moRenderItems();
   // Load pickup points
   try {
@@ -3273,16 +3288,90 @@ function moRenderPickerList() {
   const list = (window._moAllProducts || []).filter(p => !q || (p.name || '').toLowerCase().includes(q));
   const el = document.getElementById('moPickerList');
   if (!list.length) { el.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:20px">אין מוצרים</div>'; return; }
-  el.innerHTML = list.map(p => {
-    const hasVariants = Array.isArray(p.variants) && p.variants.length > 0;
-    const onclick = hasVariants ? "moPickVariantOf('"+ p._id +"')" : "moAddItem('"+ p._id +"',null)";
-    return '<div onclick="' + onclick + '" style="padding:10px;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center">' +
-      '<div><div style="font-weight:700;font-size:.9rem">' + (p.name || '') + '</div>' +
-      '<div style="font-size:.78rem;color:#6b7280">₪' + (p.shopPrice || 0) + (hasVariants ? ' · ' + p.variants.length + ' סוגים' : '') + '</div></div>' +
-      (hasVariants ? '<span style="color:#15803d;font-weight:700">▶</span>' : '<span style="color:#15803d;font-weight:700">+</span>') +
+  // Group by category, then alphabetical (Hebrew) within each
+  const byCategory = {};
+  list.forEach(p => {
+    const cat = (p.category || 'אחר').trim() || 'אחר';
+    (byCategory[cat] = byCategory[cat] || []).push(p);
+  });
+  const cats = Object.keys(byCategory).sort((a,b) => a.localeCompare(b, 'he'));
+  el.innerHTML = cats.map(cat => {
+    const products = byCategory[cat].sort((a,b) => (a.name||'').localeCompare(b.name||'', 'he'));
+    const rows = products.map(p => {
+      const hasVariants = Array.isArray(p.variants) && p.variants.length > 0;
+      const onclick = hasVariants ? "moPickVariantOf('"+ p._id +"')" : "moAddItem('"+ p._id +"',null)";
+      return '<div onclick="' + onclick + '" style="padding:9px 10px;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:5px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;background:white">' +
+        '<div><div style="font-weight:700;font-size:.88rem">' + (p.name || '') + '</div>' +
+        '<div style="font-size:.76rem;color:#6b7280">₪' + (p.shopPrice || 0) + (hasVariants ? ' · ' + p.variants.length + ' סוגים' : '') + '</div></div>' +
+        (hasVariants ? '<span style="color:#15803d;font-weight:700">▶</span>' : '<span style="color:#15803d;font-weight:700">+</span>') +
+      '</div>';
+    }).join('');
+    return '<div style="margin-bottom:12px">' +
+      '<div style="background:#14532d;color:white;padding:5px 10px;border-radius:6px;font-weight:700;font-size:.82rem;margin-bottom:5px">' + cat + ' <span style="opacity:.7;font-weight:400;font-size:.75rem">(' + products.length + ')</span></div>' +
+      rows +
     '</div>';
   }).join('');
 }
+
+// === Customer search (existing customer lookup by name or phone) ===
+let _moSearchTimer = null;
+async function moSearchCustomers() {
+  clearTimeout(_moSearchTimer);
+  const q = document.getElementById('moCustomerSearch').value.trim().toLowerCase();
+  const resultsEl = document.getElementById('moSearchResults');
+  if (q.length < 2) {
+    resultsEl.style.display = 'none';
+    return;
+  }
+  _moSearchTimer = setTimeout(async () => {
+    try {
+      if (!window._moAllUsers) {
+        window._moAllUsers = await fetch(API + '/users/activity').then(r => r.json());
+      }
+      const matches = (window._moAllUsers || []).filter(u => {
+        const n = (u.name || '').toLowerCase();
+        const p = (u.phone || '').replace(/\D/g, '');
+        return n.includes(q) || p.includes(q.replace(/\D/g, ''));
+      }).slice(0, 12);
+      if (!matches.length) {
+        resultsEl.innerHTML = '<div style="padding:10px;color:#9ca3af;font-size:.82rem;text-align:center">אין תוצאות — תוכל להמשיך עם הטלפון למטה (לקוח חדש)</div>';
+        resultsEl.style.display = 'block';
+        return;
+      }
+      resultsEl.innerHTML = matches.map(u => {
+        const nameEsc = (u.name||'').replace(/'/g, "\\'");
+        return '<div onclick="moSelectExistingCustomer(\'' + (u.phone||'') + '\',\'' + nameEsc + '\')" style="padding:9px 12px;border-bottom:1px solid #f3f4f6;cursor:pointer;display:flex;justify-content:space-between;align-items:center" onmouseover="this.style.background=\'#f0fdf4\'" onmouseout="this.style.background=\'white\'">' +
+          '<div><div style="font-weight:700;font-size:.88rem">' + (u.name || '(ללא שם)') + '</div>' +
+          '<div style="font-size:.76rem;color:#6b7280">📞 ' + (u.phone || '') + (u.pickupPoint ? ' · 📍 ' + u.pickupPoint : '') + '</div></div>' +
+          '<span style="color:#15803d;font-weight:700">+</span>' +
+        '</div>';
+      }).join('');
+      resultsEl.style.display = 'block';
+    } catch(e) {
+      resultsEl.innerHTML = '<div style="padding:10px;color:#dc2626">שגיאה: ' + e.message + '</div>';
+      resultsEl.style.display = 'block';
+    }
+  }, 250);
+}
+
+function moSelectExistingCustomer(phone, name) {
+  document.getElementById('moPhone').value = phone;
+  document.getElementById('moName').value = name;
+  document.getElementById('moCustomerSearch').value = name + ' (' + phone + ')';
+  document.getElementById('moSearchResults').style.display = 'none';
+  // Trigger lookup to populate pickup + lock fields
+  moLookupCustomer();
+}
+
+// Hide search results when clicking outside
+document.addEventListener('click', function(e) {
+  const results = document.getElementById('moSearchResults');
+  const search = document.getElementById('moCustomerSearch');
+  if (!results || !search) return;
+  if (e.target !== search && !results.contains(e.target)) {
+    results.style.display = 'none';
+  }
+});
 
 function moPickVariantOf(productId) {
   const p = (window._moAllProducts || []).find(x => x._id === productId);
