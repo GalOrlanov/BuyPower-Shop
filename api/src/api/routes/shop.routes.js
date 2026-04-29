@@ -495,6 +495,109 @@ router.put('/settings', async (req, res) => {
   }
 });
 
+// ===== MANUAL ORDER (admin entry) =====
+// One endpoint for admin to log an order that came in by phone/WhatsApp/etc.
+// Pickup point comes from the registered user's profile (if exists), or must
+// be supplied for a brand-new walk-in customer (in which case we create a
+// minimal shop_users record so the order is fully traceable like any other).
+router.post('/admin/orders/manual', async (req, res) => {
+  try {
+    const db = await getDb();
+    const { phone, customerName, email, pickupLocation, items, paymentMethod, notes } = req.body;
+    const cleanPhone = (phone || '').replace(/\D/g, '');
+
+    if (cleanPhone.length < 9) return res.status(400).json({ error: 'מספר טלפון לא תקין' });
+    if (!Array.isArray(items) || !items.length) return res.status(400).json({ error: 'אין פריטים בהזמנה' });
+    const validPayments = ['cash', 'credit', 'bit', 'transfer'];
+    if (!validPayments.includes(paymentMethod)) return res.status(400).json({ error: 'אמצעי תשלום לא תקין' });
+
+    // Resolve customer + pickup
+    let user = await db.collection('shop_users').findOne({ phone: cleanPhone });
+    let resolvedPickup = '';
+    let resolvedName = '';
+    if (user) {
+      resolvedPickup = (user.pickupPoint || user.pickupLocation || '').trim();
+      resolvedName = user.name || customerName || '';
+    } else {
+      // New customer — must supply name + pickup
+      if (!customerName || !customerName.trim()) return res.status(400).json({ error: 'לקוח חדש — נדרש שם' });
+      if (!pickupLocation) return res.status(400).json({ error: 'לקוח חדש — נדרשת נקודת איסוף' });
+      try { resolvedPickup = await assertValidPickupPoint(db, pickupLocation); }
+      catch (e) { return res.status(e.code || 400).json({ error: e.msg }); }
+      resolvedName = customerName.trim();
+      // Create a minimal user record (no password — passive customer)
+      const newUser = {
+        name: resolvedName,
+        phone: cleanPhone,
+        email: email || '',
+        ...userPickupUpdate(resolvedPickup),
+        passwordHash: '',
+        isWalkIn: true,
+        createdAt: new Date(),
+      };
+      const r = await db.collection('shop_users').insertOne(newUser);
+      newUser._id = r.insertedId;
+      user = newUser;
+    }
+    if (!resolvedPickup) return res.status(400).json({ error: 'בפרופיל הלקוח חסרה נקודת איסוף' });
+
+    // Calculate total in the server (do not trust client total)
+    const cleanItems = items.map(it => ({
+      name: it.name || '',
+      variant: it.variant || '',
+      qty: Number(it.qty) || 1,
+      price: Number(it.price) || 0,
+      productId: it.productId || it._id || null,
+    }));
+    const totalAmount = cleanItems.reduce((s, i) => s + (i.price * i.qty), 0);
+
+    const orderDoc = {
+      customerName: resolvedName,
+      phone: cleanPhone,
+      email: email || user.email || '',
+      items: cleanItems,
+      totalAmount,
+      pickupLocation: resolvedPickup,
+      paymentMethod,                  // cash / credit / bit / transfer
+      status: 'paid',                 // manual entry = already paid
+      paidAt: new Date(),
+      paidAmount: totalAmount,
+      source: 'manual_admin',
+      createdBy: 'admin',
+      notes: notes || '',
+      createdAt: new Date(),
+    };
+    const result = await db.collection('shop_orders').insertOne(orderDoc);
+
+    // Decrease stock (same logic as Grow webhook)
+    for (const item of cleanItems) {
+      if (!item.productId) continue;
+      try {
+        const prod = await db.collection('shop_products').findOne(
+          { _id: new ObjectId(item.productId) },
+          { projection: { inventoryId: 1, hasUnlimitedStock: 1 } }
+        );
+        if (!prod || prod.hasUnlimitedStock) continue;
+        await db.collection('shop_products').updateOne(
+          { _id: new ObjectId(item.productId) },
+          { $inc: { stock: -(item.qty || 1) } }
+        );
+        if (prod.inventoryId) {
+          await db.collection('shop_inventory').updateOne(
+            { _id: new ObjectId(prod.inventoryId) },
+            { $inc: { quantity: -(item.qty || 1) } }
+          );
+        }
+      } catch (e) { /* ignore stock errors — order still saved */ }
+    }
+
+    res.json({ ok: true, orderId: result.insertedId, totalAmount });
+  } catch (e) {
+    console.error('[manual order]', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ===== ORDERS PRINT-PDF (per-customer pages) =====
 // Returns a printable HTML page (one customer per page). Admin opens it,
 // browser fires the print dialog, user saves as PDF. Native RTL + Hebrew.
