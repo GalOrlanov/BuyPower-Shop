@@ -373,6 +373,7 @@ input:checked + .slider::before { transform: translateX(20px); }
           <div style="display:flex;gap:6px;align-items:center">
             <button onclick="exportOrdersExcel()" style="background:#15803d;color:white;border:none;padding:6px 14px;border-radius:7px;font-size:13px;cursor:pointer">📥 Excel הזמנות</button>
             <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;font-weight:700" onclick="exportOrdersPDF()">📄 PDF הזמנות</button>
+            <button class="btn btn-sm" style="background:#dbeafe;color:#1d4ed8;font-weight:700" onclick="exportPerCustomerPDF()">🧾 PDF לכל לקוח</button>
           </div>
         </div>
         <div style="overflow-x:auto">
@@ -3045,6 +3046,99 @@ function printPickupPDF() {
     }
   }
   window.print();
+}
+
+// Per-customer PDF: opens a printable page where each customer is on their own A4 page.
+// Auto-fires the print dialog so the admin gets a PDF in two clicks.
+async function exportPerCustomerPDF() {
+  // Build modal once
+  let modal = document.getElementById('perCustomerPDFModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'perCustomerPDFModal';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center;font-family:inherit';
+    modal.innerHTML = `
+      <div style="background:white;border-radius:18px;padding:0;width:min(480px,96vw);max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+        <div style="background:#1d4ed8;color:white;padding:18px 22px;border-radius:18px 18px 0 0;display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:1.1rem;font-weight:700">🧾 PDF לכל לקוח</span>
+          <button onclick="document.getElementById('perCustomerPDFModal').style.display='none'" style="background:none;border:none;color:white;font-size:1.4rem;cursor:pointer;line-height:1">✕</button>
+        </div>
+        <div style="padding:22px;display:flex;flex-direction:column;gap:14px">
+          <div>
+            <label style="font-size:.85rem;font-weight:700;color:#374151;display:block;margin-bottom:4px">📍 נקודת איסוף</label>
+            <select id="pcPickup" style="width:100%;padding:10px;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.92rem">
+              <option value="">🌐 כל הנקודות (מקובץ לפי נקודה)</option>
+            </select>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div>
+              <label style="font-size:.85rem;font-weight:700;color:#374151;display:block;margin-bottom:4px">📅 מתאריך</label>
+              <input type="date" id="pcFrom" style="width:100%;padding:9px;border:1.5px solid #d1d5db;border-radius:8px;box-sizing:border-box">
+            </div>
+            <div>
+              <label style="font-size:.85rem;font-weight:700;color:#374151;display:block;margin-bottom:4px">עד תאריך</label>
+              <input type="date" id="pcTo" style="width:100%;padding:9px;border:1.5px solid #d1d5db;border-radius:8px;box-sizing:border-box">
+            </div>
+          </div>
+          <div>
+            <label style="font-size:.85rem;font-weight:700;color:#374151;display:block;margin-bottom:6px">סטטוס</label>
+            <select id="pcStatus" style="width:100%;padding:10px;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.92rem">
+              <option value="">רק ששולמו (ברירת מחדל)</option>
+              <option value="paid">שולמו בלבד</option>
+              <option value="pending_payment">ממתינים לתשלום בלבד</option>
+              <option value="all">הכל</option>
+            </select>
+          </div>
+          <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:6px">
+            <button onclick="document.getElementById('perCustomerPDFModal').style.display='none'" style="padding:10px 20px;background:#f3f4f6;border:none;border-radius:8px;font-size:.92rem;cursor:pointer;font-family:inherit">ביטול</button>
+            <button onclick="runPerCustomerPDF()" style="padding:10px 24px;background:#1d4ed8;color:white;border:none;border-radius:8px;font-size:.92rem;font-weight:700;cursor:pointer;font-family:inherit">📥 הפק PDF</button>
+          </div>
+          <div style="font-size:.78rem;color:#6b7280;text-align:center;line-height:1.5">
+            עמוד נפרד לכל לקוח &nbsp;·&nbsp; דיאלוג ההדפסה ייפתח אוטומטית — בחר ״Save as PDF״
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+
+  // Populate pickup-point dropdown from canonical /pickup-points
+  try {
+    const pts = await fetch(API + '/pickup-points').then(r=>r.json());
+    const sel = document.getElementById('pcPickup');
+    while (sel.options.length > 1) sel.remove(1);
+    (pts||[]).forEach(p => {
+      const o = document.createElement('option');
+      o.value = p.name; o.textContent = '📍 ' + p.name;
+      sel.appendChild(o);
+    });
+    // Default to the global filter if set
+    const active = (typeof getActivePickup === 'function') ? getActivePickup() : '';
+    if (active) sel.value = active;
+  } catch(e){}
+
+  // Default date range = this week (Sun-Sat)
+  const now = new Date();
+  const sunday = new Date(now); sunday.setDate(now.getDate() - now.getDay()); sunday.setHours(0,0,0,0);
+  const saturday = new Date(sunday); saturday.setDate(sunday.getDate() + 6);
+  document.getElementById('pcFrom').value = sunday.toISOString().slice(0,10);
+  document.getElementById('pcTo').value = saturday.toISOString().slice(0,10);
+
+  modal.style.display = 'flex';
+}
+
+function runPerCustomerPDF() {
+  const pickup = document.getElementById('pcPickup').value;
+  const from = document.getElementById('pcFrom').value;
+  const to = document.getElementById('pcTo').value;
+  const status = document.getElementById('pcStatus').value;
+  const params = [];
+  if (pickup) params.push('pickupPoint=' + encodeURIComponent(pickup));
+  if (from) params.push('from=' + encodeURIComponent(from));
+  if (to) params.push('to=' + encodeURIComponent(to));
+  if (status && status !== 'all') params.push('status=' + encodeURIComponent(status));
+  const url = API + '/admin/orders/print' + (params.length ? '?' + params.join('&') : '');
+  window.open(url, '_blank');
+  document.getElementById('perCustomerPDFModal').style.display = 'none';
 }
 
 function exportOrdersPDF() {

@@ -495,6 +495,181 @@ router.put('/settings', async (req, res) => {
   }
 });
 
+// ===== ORDERS PRINT-PDF (per-customer pages) =====
+// Returns a printable HTML page (one customer per page). Admin opens it,
+// browser fires the print dialog, user saves as PDF. Native RTL + Hebrew.
+router.get('/admin/orders/print', async (req, res) => {
+  try {
+    const db = await getDb();
+    const { pickupPoint, from, to, status } = req.query;
+    const filter = {};
+    if (pickupPoint) filter.pickupLocation = pickupPoint;
+    if (status) filter.status = status;
+    else filter.status = { $in: ['paid', 'collected', 'handled', 'confirmed', 'ready'] };
+    if (from || to) {
+      filter.createdAt = {};
+      if (from) filter.createdAt.$gte = new Date(from);
+      if (to)   filter.createdAt.$lte = new Date(to + 'T23:59:59');
+    }
+    const orders = await db.collection('shop_orders').find(filter).sort({ pickupLocation: 1, customerName: 1 }).toArray();
+
+    // Group by pickup point so each section can be visually separated
+    const byPoint = {};
+    orders.forEach(o => {
+      const pp = o.pickupLocation || '(לא צוינה נקודה)';
+      (byPoint[pp] = byPoint[pp] || []).push(o);
+    });
+
+    // Pickup-point details for the header per page
+    const ppDoc = await db.collection('shop_settings').findOne({ key: 'pickupPoints' });
+    const pointInfo = {};
+    (ppDoc?.points || []).forEach(p => { pointInfo[p.name] = p; });
+
+    const escapeHtml = (s) => String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+    const fmtDate = (d) => {
+      if (!d) return '';
+      const dt = new Date(d);
+      return dt.toLocaleDateString('he-IL', { day:'2-digit', month:'2-digit', year:'numeric' }) +
+             ' ' + dt.toLocaleTimeString('he-IL', { hour:'2-digit', minute:'2-digit' });
+    };
+
+    const renderOrderPage = (o, pickupName) => {
+      const pi = pointInfo[pickupName] || {};
+      const items = (o.items || o.cart || []);
+      const rows = items.map((it, i) => {
+        const qty = Number(it.qty || it.quantity || 1);
+        const price = Number(it.price || 0);
+        const variant = it.variant ? ' — ' + escapeHtml(it.variant) : '';
+        const total = (qty * price).toFixed(2).replace(/\.00$/, '');
+        return `<tr>
+          <td class="num">${i+1}</td>
+          <td class="name">${escapeHtml(it.name || '')}${variant}</td>
+          <td class="qty">${qty}</td>
+          <td class="price">₪${price.toFixed(2).replace(/\.00$/, '')}</td>
+          <td class="total">₪${total}</td>
+        </tr>`;
+      }).join('');
+      const total = (o.totalAmount || items.reduce((s,it)=>s+Number(it.price||0)*Number(it.qty||it.quantity||1),0)).toFixed(2).replace(/\.00$/,'');
+      const paidBadge = ['paid','collected','handled','confirmed'].includes(o.status)
+        ? `<span class="badge paid">✓ שולם${o.cardSuffix ? ' • '+escapeHtml(o.cardBrand||'')+' •••• '+escapeHtml(o.cardSuffix) : ''}</span>`
+        : `<span class="badge pending">ממתין לתשלום</span>`;
+      return `
+      <section class="order-page">
+        <header class="hdr">
+          <div class="brand">🌿 נלחמים ביוקר המחיה</div>
+          <div class="pp-info">
+            <div class="pp-name">📍 ${escapeHtml(pickupName)}</div>
+            ${pi.address ? `<div class="pp-meta">${escapeHtml(pi.address)}</div>` : ''}
+            <div class="pp-meta">${pi.days ? '🗓️ יום '+escapeHtml(pi.days) : ''} ${pi.hours ? ' • ⏰ '+escapeHtml(pi.hours) : ''}</div>
+          </div>
+        </header>
+
+        <div class="customer-row">
+          <div>
+            <div class="customer-name">שלום ${escapeHtml(o.customerName || 'לקוח')} 👋</div>
+            <div class="customer-meta">📞 ${escapeHtml(o.phone || '')}${o.email ? ' • ✉️ '+escapeHtml(o.email) : ''}</div>
+          </div>
+          <div class="order-meta">
+            <div class="meta-row">תאריך הזמנה: <strong>${fmtDate(o.createdAt)}</strong></div>
+            <div class="meta-row">מס׳ הזמנה: <strong>#${String(o._id).slice(-6).toUpperCase()}</strong></div>
+            <div class="meta-row">${paidBadge}</div>
+          </div>
+        </div>
+
+        <h3 class="items-title">📦 פרטי ההזמנה</h3>
+        <table class="items">
+          <thead><tr>
+            <th class="num">#</th><th class="name">מוצר</th><th class="qty">כמות</th><th class="price">מחיר</th><th class="total">סה"כ</th>
+          </tr></thead>
+          <tbody>${rows || '<tr><td colspan="5" style="text-align:center;color:#9ca3af;padding:20px">אין פריטים</td></tr>'}</tbody>
+        </table>
+
+        <div class="grand-total">
+          <span>💰 סה״כ לתשלום</span>
+          <span class="amount">₪${total}</span>
+        </div>
+
+        <footer class="ftr">תודה רבה! נשמח לראותך שוב 🌿 &nbsp;·&nbsp; shop.buypower.co.il</footer>
+      </section>`;
+    };
+
+    const sections = Object.entries(byPoint).map(([pickupName, list]) =>
+      list.map(o => renderOrderPage(o, pickupName)).join('\n')
+    ).join('\n');
+
+    const totalOrders = orders.length;
+    const totalPoints = Object.keys(byPoint).length;
+
+    const html = `<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+<meta charset="UTF-8">
+<title>הזמנות לקוחות (${totalOrders}) — להדפסה</title>
+<style>
+@page { size: A4; margin: 14mm 14mm 14mm 14mm; }
+* { box-sizing: border-box; }
+body { font-family: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif; direction: rtl; color: #111; margin: 0; background: #f3f4f6; }
+.toolbar { position: sticky; top: 0; background: #14532d; color: white; padding: 14px 20px; display: flex; gap: 12px; align-items: center; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,.2); }
+.toolbar h1 { font-size: 1rem; margin: 0; flex: 1; }
+.toolbar button { background: white; color: #14532d; border: none; padding: 9px 22px; font-weight: 800; border-radius: 8px; cursor: pointer; font-family: inherit; font-size: .95rem; }
+.toolbar .meta { font-size: .82rem; opacity: .85 }
+.order-page { background: white; max-width: 800px; margin: 16px auto; padding: 28px 30px; box-shadow: 0 1px 3px rgba(0,0,0,.08); page-break-after: always; }
+.order-page:last-child { page-break-after: auto; }
+.hdr { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 14px; border-bottom: 3px solid #14532d; margin-bottom: 18px; }
+.brand { font-size: 1.15rem; font-weight: 800; color: #14532d; }
+.pp-info { text-align: left; font-size: .82rem; color: #374151; }
+.pp-name { font-weight: 800; color: #15803d; font-size: .95rem; }
+.pp-meta { margin-top: 2px; }
+.customer-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; gap: 20px; }
+.customer-name { font-size: 1.1rem; font-weight: 800; color: #111; margin-bottom: 4px; }
+.customer-meta { font-size: .85rem; color: #6b7280; }
+.order-meta { text-align: left; font-size: .82rem; color: #374151; }
+.meta-row { margin-bottom: 3px; }
+.badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: .75rem; font-weight: 700; }
+.badge.paid { background: #dcfce7; color: #14532d; border: 1px solid #86efac; }
+.badge.pending { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+.items-title { font-size: 1rem; color: #14532d; margin: 14px 0 8px; }
+table.items { width: 100%; border-collapse: collapse; font-size: .9rem; }
+table.items th { background: #14532d; color: white; padding: 9px 10px; text-align: right; font-weight: 700; }
+table.items th.num, table.items th.qty, table.items th.price, table.items th.total { text-align: center; }
+table.items td { padding: 9px 10px; border-bottom: 1px solid #e5e7eb; }
+table.items td.num, table.items td.qty, table.items td.price, table.items td.total { text-align: center; }
+table.items td.name { font-weight: 600; }
+table.items tr:nth-child(even) td { background: #f9fafb; }
+.grand-total { margin-top: 14px; padding: 14px 16px; background: linear-gradient(135deg, #f0fdf4, #dcfce7); border: 2px solid #15803d; border-radius: 10px; display: flex; justify-content: space-between; align-items: center; font-weight: 800; font-size: 1.1rem; color: #14532d; }
+.grand-total .amount { font-size: 1.4rem; }
+.ftr { margin-top: 18px; padding-top: 12px; border-top: 1px dashed #d1d5db; text-align: center; font-size: .8rem; color: #9ca3af; }
+@media print {
+  body { background: white; }
+  .toolbar { display: none; }
+  .order-page { box-shadow: none; margin: 0; padding: 0; max-width: none; }
+}
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <h1>🧾 הזמנות לקוחות — ${totalOrders} הזמנות, ${totalPoints} נקודות</h1>
+  <span class="meta">${pickupPoint ? '📍 ' + escapeHtml(pickupPoint) : 'כל הנקודות'}</span>
+  <button onclick="window.print()">🖨️ שמור / הדפס PDF</button>
+</div>
+${sections || '<div style="text-align:center;padding:60px;color:#9ca3af;font-size:1rem">אין הזמנות בטווח שנבחר</div>'}
+<script>
+// Auto-fire the print dialog so admins get a PDF in two clicks
+window.addEventListener('load', function() { setTimeout(function(){ window.print(); }, 600); });
+</script>
+</body>
+</html>`;
+
+    res.set('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  } catch (e) {
+    console.error('[orders/print]', e);
+    res.status(500).send('שגיאה ביצירת ה-PDF: ' + e.message);
+  }
+});
+
 // ===== PICKUP POINTS CRUD =====
 // Single source of truth. Settings does NOT touch this collection.
 
