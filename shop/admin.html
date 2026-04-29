@@ -4899,10 +4899,10 @@ async function generatePickupShareLink() {
   const btn = document.getElementById('psGenerate');
   btn.disabled = true; btn.textContent = '⏳ מנפיק...';
   try {
-    const token = localStorage.getItem('shopAdminToken') || localStorage.getItem('shopToken') || '';
+    // Use the same auth as every other admin endpoint in this page
     const r = await fetch(API + '/admin/pickup-share-token', {
       method: 'POST',
-      headers: { 'Content-Type':'application/json', 'Authorization': 'Bearer ' + token },
+      headers: authHeaders(),
       body: JSON.stringify({ pickupPoint: point })
     });
     const j = await r.json();
