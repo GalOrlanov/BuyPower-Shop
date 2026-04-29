@@ -5801,6 +5801,8 @@ async function doExportSupplierPDF(saveToSupplier) {
   var grandCost = 0;
   // Per-point payload for saving (one purchase order per point)
   var perPointSavePayload = {};
+  // Matrix for the summary table at the end: itemLabel → {byPoint:{pp:qty}, total}
+  var summaryByItem = {};
 
   var sectionsHtml = pointNames.map(function(pp, idx) {
     var bucket = _soByPoint[pp] || {};
@@ -5817,6 +5819,13 @@ async function doExportSupplierPDF(saveToSupplier) {
     grandUnits += pointUnits;
     grandCost += pointCost;
     perPointSavePayload[pp] = { items: items, totalUnits: pointUnits, totalCost: pointCost };
+
+    // Feed the cross-pickup summary matrix
+    items.forEach(function(it){
+      if (!summaryByItem[it.name]) summaryByItem[it.name] = { label: it.name, byPoint: {}, total: 0 };
+      summaryByItem[it.name].byPoint[pp] = (summaryByItem[it.name].byPoint[pp] || 0) + it.qty;
+      summaryByItem[it.name].total += it.qty;
+    });
 
     var rows = items.map(function(it, i){
       return '<tr>' +
@@ -5867,6 +5876,47 @@ async function doExportSupplierPDF(saveToSupplier) {
     }
   }
 
+  // Build the cross-pickup SUMMARY table (one row per item, one column per point + total)
+  var summaryItemNames = Object.keys(summaryByItem).sort(function(a,b){ return a.localeCompare(b, 'he'); });
+  var pointTotals = {};
+  pointNames.forEach(function(pp){ pointTotals[pp] = 0; });
+  var summaryRowsHtml = summaryItemNames.map(function(itemName, idx){
+    var row = summaryByItem[itemName];
+    var cells = pointNames.map(function(pp){
+      var qty = row.byPoint[pp] || 0;
+      pointTotals[pp] += qty;
+      return '<td class="qty">' + (qty > 0 ? qty : '—') + '</td>';
+    }).join('');
+    return '<tr>' +
+      '<td class="num">' + (idx + 1) + '</td>' +
+      '<td class="name">' + escHtml(itemName) + '</td>' +
+      '<td class="qty total"><strong>' + row.total + '</strong></td>' +
+      cells +
+    '</tr>';
+  }).join('');
+  var pointCols = pointNames.map(function(pp){ return '<th class="qty">📍 ' + escHtml(pp) + '</th>'; }).join('');
+  var pointTotalCells = pointNames.map(function(pp){ return '<td class="qty"><strong>' + (pointTotals[pp] || 0) + '</strong></td>'; }).join('');
+  var summarySectionHtml = '<section class="summary-section">' +
+    '<div class="pp-header">' +
+      '<div class="pp-title">📊 סיכום פר-פריט (כל הנקודות)</div>' +
+      '<div class="pp-stats">' + summaryItemNames.length + ' פריטים שונים</div>' +
+    '</div>' +
+    '<table class="items summary">' +
+      '<thead><tr>' +
+        '<th class="num">#</th>' +
+        '<th class="name">פריט</th>' +
+        '<th class="qty total">סה״כ</th>' +
+        pointCols +
+      '</tr></thead>' +
+      '<tbody>' + summaryRowsHtml + '</tbody>' +
+      '<tfoot><tr>' +
+        '<td colspan="2" class="totlabel">📦 סה״כ נקודה</td>' +
+        '<td class="qty total"><strong>' + grandUnits + '</strong></td>' +
+        pointTotalCells +
+      '</tr></tfoot>' +
+    '</table>' +
+  '</section>';
+
   var htmlOut = '<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>הזמנה לספק — ' + escHtml(supplierName) + '</title>' +
     '<style>' +
     '@page{size:A4;margin:14mm}' +
@@ -5893,7 +5943,13 @@ async function doExportSupplierPDF(saveToSupplier) {
     'table.items tr:nth-child(even) td{background:#f9fafb}' +
     'table.items tfoot td{background:#f0fdf4;font-weight:900;border-top:2px solid #14532d}' +
     'table.items td.totlabel{padding:8px 10px}' +
-    '@media print{.toolbar{display:none}.cover{padding:0;border:none}.pickup-section{padding:0}}' +
+    '.summary-section{padding:8mm 14mm 12mm;page-break-before:always}' +
+    'table.items.summary{font-size:9.5pt}' +
+    'table.items.summary th{padding:5px 6px;font-size:9pt}' +
+    'table.items.summary td{padding:4px 6px}' +
+    'table.items.summary td.total,table.items.summary th.total{background:#dcfce7;color:#14532d}' +
+    'table.items.summary tfoot td{background:#14532d;color:white;font-weight:900}' +
+    '@media print{.toolbar{display:none}.cover{padding:0;border:none}.pickup-section,.summary-section{padding:0}}' +
     '</style></head><body>' +
     '<div class="toolbar"><h1>📋 הזמנה לספק — ' + escHtml(supplierName) + '</h1>' +
       '<button onclick="window.print()">🖨️ שמור / הדפס PDF</button>' +
@@ -5905,6 +5961,7 @@ async function doExportSupplierPDF(saveToSupplier) {
       '<div class="grand"><span>📦 סה״כ כל הנקודות</span><span>' + grandUnits + ' יח׳</span></div>' +
     '</div>' +
     sectionsHtml +
+    summarySectionHtml +
     '<script>window.addEventListener(\'load\',function(){setTimeout(function(){window.print();},500);});</' + 'script>' +
     '</body></html>';
 
