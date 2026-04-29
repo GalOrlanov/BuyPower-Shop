@@ -828,9 +828,13 @@ async function submitGrowForm() {
   // (no pickupLocation, no productId on items, no user/profile guarantees).
   var _orderId = null;
   try {
+    var _shopToken = localStorage.getItem('shopToken') || '';
     var _orRes = await fetch('/api/shop/orders', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: Object.assign(
+        { 'Content-Type': 'application/json' },
+        _shopToken ? { 'Authorization': 'Bearer ' + _shopToken } : {}
+      ),
       body: JSON.stringify({
         customerName: fname + ' ' + lname,
         phone: _gfPhone,

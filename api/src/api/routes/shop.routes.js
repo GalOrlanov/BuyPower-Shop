@@ -627,12 +627,29 @@ router.post('/orders', async (req, res) => {
     try { cleanPickup = await assertValidPickupPoint(db, pickupLocation); }
     catch (e) { return res.status(e.code || 400).json({ error: e.msg }); }
 
-    // 2. Customer must be a registered shop_user (no anonymous / guest orders)
+    // 2. Customer must be a registered shop_user (no anonymous / guest orders).
+    // PRIMARY auth: a valid Authorization JWT — the userId in it is the source of
+    // truth. This survives phone-format edge cases AND the user staying logged in
+    // even if their record was somehow renamed/duplicated. Falls back to phone
+    // lookup so older clients (no token in their localStorage) still work.
     const cleanPhone = normalizePhone(phone);
     if (!isValidIsraeliPhone(cleanPhone)) {
       return res.status(400).json({ error: 'מספר טלפון לא תקין' });
     }
-    const user = await db.collection('shop_users').findOne({ phone: cleanPhone });
+    let user = null;
+    const authHdr = req.headers['authorization'] || '';
+    const token = authHdr.startsWith('Bearer ') ? authHdr.slice(7) : null;
+    if (token) {
+      try {
+        const payload = jwt.verify(token, JWT_SECRET);
+        if (payload && payload.userId) {
+          user = await db.collection('shop_users').findOne({ _id: new ObjectId(payload.userId) });
+        }
+      } catch (_) { /* invalid/expired — fall through to phone lookup */ }
+    }
+    if (!user) {
+      user = await db.collection('shop_users').findOne({ phone: cleanPhone });
+    }
     if (!user) {
       return res.status(401).json({ error: 'יש להירשם לפני ביצוע הזמנה' });
     }
