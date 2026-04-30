@@ -434,9 +434,177 @@ function cardHtml(order) {
         <button class="btn-pickup ${order.pickedUp || allCollected ? 'done' : 'pending'}" onclick="togglePickup('${order._id}', ${!!order.pickedUp})">
           ${order.pickedUp || allCollected ? '✅ נאסף' : '⬜ סמן איסוף'}
         </button>
+        <button onclick="openCreditModal('${order._id}')"
+          style="padding:8px 14px;background:${(order.creditAmount||0)>0?'#fef3c7':'#fde68a'};color:#92400e;border:none;border-radius:8px;cursor:pointer;font-size:.85rem;font-family:inherit;font-weight:700;margin-top:6px">
+          💸 ${(order.creditAmount||0)>0 ? 'ערוך זיכוי (₪'+order.creditAmount+')' : 'זיכוי'}
+        </button>
       </div>
     </div>
   </div>`;
+}
+
+// ── CREDITS ──
+// Tracking-only — refund happens manually outside the system.
+async function openCreditModal(orderId) {
+  let modal = document.getElementById('creditModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'creditModal';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center;font-family:inherit;direction:rtl';
+    modal.innerHTML = `
+      <div style="background:white;border-radius:18px;width:min(560px,96vw);max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+        <div style="background:#f59e0b;color:white;padding:13px 18px;display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:1.05rem;font-weight:800">💸 זיכוי לקוח</span>
+          <button onclick="document.getElementById('creditModal').style.display='none'" style="background:none;border:none;color:white;font-size:1.4rem;cursor:pointer">✕</button>
+        </div>
+        <div style="padding:18px">
+          <div id="cmCustomerInfo" style="margin-bottom:12px;padding:11px;background:#fef3c7;border:1.5px solid #fcd34d;border-radius:10px;font-size:.9rem"></div>
+          <div style="font-weight:700;color:#374151;margin-bottom:6px;font-size:.9rem">סמן פריטים לזיכוי:</div>
+          <div id="cmItems" style="display:flex;flex-direction:column;gap:7px;margin-bottom:12px"></div>
+          <div>
+            <label style="font-size:.82rem;font-weight:700;color:#374151;display:block;margin-bottom:4px">📝 סיבה (אופציונלי)</label>
+            <textarea id="cmReason" rows="2" placeholder="אזל מהמלאי / פגום..." style="width:100%;padding:8px;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.88rem;box-sizing:border-box"></textarea>
+          </div>
+          <div style="margin:12px 0;padding:11px 14px;background:linear-gradient(135deg,#fef3c7,#fde68a);border:2px solid #f59e0b;border-radius:10px;display:flex;justify-content:space-between;align-items:center">
+            <span style="font-weight:800;color:#92400e">💸 סה״כ זיכוי</span>
+            <span id="cmTotal" style="font-size:1.3rem;font-weight:900;color:#92400e">₪0</span>
+          </div>
+          <div id="cmErr" style="color:#dc2626;font-size:.82rem;display:none;margin-bottom:8px"></div>
+          <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+            <button onclick="document.getElementById('creditModal').style.display='none'" style="padding:9px 16px;background:#f3f4f6;border:none;border-radius:8px;cursor:pointer;font-family:inherit">ביטול</button>
+            <button onclick="resetCredit()" style="padding:9px 16px;background:#fee2e2;color:#dc2626;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700">✕ אפס</button>
+            <button onclick="saveCredit()" style="padding:9px 22px;background:#f59e0b;color:white;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:800">💾 שמור</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+  modal.dataset.orderId = orderId;
+  document.getElementById('cmErr').style.display = 'none';
+  document.getElementById('cmReason').value = '';
+  document.getElementById('cmItems').innerHTML = '<div style="color:#9ca3af;text-align:center;padding:14px">טוען...</div>';
+  modal.style.display = 'flex';
+
+  try {
+    const r = await fetch(API + '/admin/orders/' + orderId + '/credits', {
+      headers: { 'Authorization': 'Bearer ' + _token },
+    });
+    const d = await r.json();
+    if (!r.ok) { document.getElementById('cmErr').textContent = d.error || 'שגיאה'; document.getElementById('cmErr').style.display = 'block'; return; }
+
+    document.getElementById('cmCustomerInfo').innerHTML =
+      '<div style="font-weight:800;font-size:.96rem">' + (d.customerName || '—') + '</div>' +
+      '<div style="color:#92400e;margin-top:2px;font-size:.85rem">📞 ' + (d.phone || '') + '</div>';
+
+    const creditMap = {};
+    (d.credits || []).forEach(c => { creditMap[c.itemKey] = c.qty; });
+    document.getElementById('cmReason').value = d.creditReason || '';
+
+    const itemsEl = document.getElementById('cmItems');
+    if (!d.items || !d.items.length) {
+      itemsEl.innerHTML = '<div style="color:#9ca3af;text-align:center;padding:14px">אין פריטים</div>';
+      return;
+    }
+    itemsEl.innerHTML = d.items.map((it, idx) => {
+      const name = it.name || '';
+      const variant = it.variant || '';
+      const orderedQty = Number(it.qty || it.quantity || 1);
+      const unitPrice = Number(it.price || 0);
+      const key = name + '__' + variant;
+      const credQty = creditMap[key] || 0;
+      const checked = credQty > 0 ? 'checked' : '';
+      return '<div data-idx="' + idx + '" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:8px;background:#fafafa">' +
+        '<input type="checkbox" id="cmcb_' + idx + '" data-name="' + name.replace(/"/g,'&quot;') + '" data-variant="' + variant.replace(/"/g,'&quot;') + '" data-price="' + unitPrice + '" data-ordered="' + orderedQty + '" ' + checked + ' onchange="cmRecalc()" style="width:18px;height:18px;cursor:pointer">' +
+        '<div style="flex:1;font-size:.86rem;font-weight:600">' + name + (variant ? ' — ' + variant : '') + '</div>' +
+        '<div style="display:flex;align-items:center;gap:4px">' +
+          '<button onclick="cmAdjustQty(' + idx + ',-1)" style="width:24px;height:24px;border:1px solid #d1d5db;background:white;border-radius:4px;cursor:pointer;font-family:inherit">−</button>' +
+          '<input id="cmq_' + idx + '" type="number" min="0" max="' + orderedQty + '" step="0.5" value="' + (credQty || (checked ? orderedQty : 0)) + '" oninput="cmRecalc()" style="width:50px;padding:2px;text-align:center;border:1px solid #d1d5db;border-radius:4px;font-size:.86rem">' +
+          '<button onclick="cmAdjustQty(' + idx + ',1)" style="width:24px;height:24px;border:1px solid #d1d5db;background:white;border-radius:4px;cursor:pointer;font-family:inherit">+</button>' +
+          '<span style="font-size:.74rem;color:#6b7280">/' + orderedQty + '</span>' +
+        '</div>' +
+        '<div style="font-size:.78rem;color:#374151;min-width:48px;text-align:left">₪' + unitPrice + '</div>' +
+      '</div>';
+    }).join('');
+    cmRecalc();
+  } catch(e) {
+    document.getElementById('cmErr').textContent = e.message;
+    document.getElementById('cmErr').style.display = 'block';
+  }
+}
+
+function cmAdjustQty(idx, delta) {
+  const cb = document.getElementById('cmcb_' + idx);
+  const inp = document.getElementById('cmq_' + idx);
+  if (!cb || !inp) return;
+  const max = Number(cb.dataset.ordered);
+  let v = Number(inp.value || 0) + delta;
+  if (v < 0) v = 0;
+  if (v > max) v = max;
+  inp.value = v;
+  cb.checked = v > 0;
+  cmRecalc();
+}
+
+function cmRecalc() {
+  let total = 0;
+  document.querySelectorAll('#cmItems > div').forEach(row => {
+    const idx = row.dataset.idx;
+    const cb = document.getElementById('cmcb_' + idx);
+    const inp = document.getElementById('cmq_' + idx);
+    if (!cb || !inp) return;
+    let qty = Number(inp.value || 0);
+    if (!cb.checked) qty = 0;
+    if (cb.checked && qty === 0) qty = Number(cb.dataset.ordered);
+    inp.value = qty;
+    const price = Number(cb.dataset.price);
+    total += qty * price;
+    row.style.background = qty > 0 ? '#fef3c7' : '#fafafa';
+    row.style.borderColor = qty > 0 ? '#fcd34d' : '#e5e7eb';
+  });
+  document.getElementById('cmTotal').textContent = '₪' + total.toFixed(2).replace(/\.00$/, '');
+}
+
+async function saveCredit() {
+  const modal = document.getElementById('creditModal');
+  const orderId = modal.dataset.orderId;
+  const errEl = document.getElementById('cmErr');
+  errEl.style.display = 'none';
+  const items = [];
+  document.querySelectorAll('#cmItems > div').forEach(row => {
+    const idx = row.dataset.idx;
+    const cb = document.getElementById('cmcb_' + idx);
+    const inp = document.getElementById('cmq_' + idx);
+    if (!cb || !inp || !cb.checked) return;
+    const qty = Number(inp.value || 0);
+    if (qty <= 0) return;
+    items.push({ name: cb.dataset.name, variant: cb.dataset.variant, qty, unitPrice: Number(cb.dataset.price) });
+  });
+  const reason = document.getElementById('cmReason').value.trim();
+  try {
+    const r = await fetch(API + '/admin/orders/' + orderId + '/credits', {
+      method: 'PUT',
+      headers: { 'Authorization': 'Bearer ' + _token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items, reason }),
+    });
+    const d = await r.json();
+    if (!r.ok) { errEl.textContent = d.error || 'שגיאה'; errEl.style.display = 'block'; return; }
+    modal.style.display = 'none';
+    loadData();
+  } catch(e) { errEl.textContent = e.message; errEl.style.display = 'block'; }
+}
+
+async function resetCredit() {
+  const modal = document.getElementById('creditModal');
+  const orderId = modal.dataset.orderId;
+  if (!confirm('לאפס את הזיכוי?')) return;
+  try {
+    const r = await fetch(API + '/admin/orders/' + orderId + '/credits', {
+      method: 'DELETE', headers: { 'Authorization': 'Bearer ' + _token },
+    });
+    if (!r.ok) { const d = await r.json().catch(()=>({})); alert(d.error || 'שגיאה'); return; }
+    modal.style.display = 'none';
+    loadData();
+  } catch(e) { alert(e.message); }
 }
 
 // ── ACTIONS ──
