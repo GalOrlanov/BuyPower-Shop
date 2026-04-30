@@ -1085,6 +1085,7 @@ input:checked + .slider::before { transform: translateX(20px); }
           </div>
           <button onclick="loadPickupTracking()" style="margin-top:16px;padding:9px 18px;background:#15803d;color:white;border:none;border-radius:8px;font-family:inherit;font-size:0.9rem;cursor:pointer">🔄 רענן</button>
           <button onclick="openPickupShareModal()" style="margin-top:16px;padding:9px 18px;background:#f97316;color:white;border:none;border-radius:8px;font-family:inherit;font-size:0.9rem;cursor:pointer;font-weight:700">🔗 הנפק קישור</button>
+          <button onclick="openCreditsReport()" style="margin-top:16px;padding:9px 18px;background:#f59e0b;color:white;border:none;border-radius:8px;font-family:inherit;font-size:0.9rem;cursor:pointer;font-weight:700">💸 דוח זיכויים</button>
           <button onclick="showPickupSummaryModal()" style="margin-top:16px;padding:9px 18px;background:#0369a1;color:white;border:none;border-radius:8px;font-family:inherit;font-size:0.9rem;cursor:pointer">📊 סיכום כללי</button>
           <button onclick="sendPickupSMSToAll()" style="margin-top:16px;padding:9px 18px;background:#7c3aed;color:white;border:none;border-radius:8px;font-family:inherit;font-size:0.9rem;cursor:pointer">📱 שלח SMS לכולם</button>
           <button onclick="printPickupPDF()" style="background:#6366f1;color:white;border:none;padding:8px 16px;border-radius:8px;font-size:14px;cursor:pointer;margin:4px;margin-top:16px">🖨️ PDF</button>
@@ -4986,6 +4987,10 @@ function renderPickupTracking(data) {
       const itemsSummary = items.map(i => (i.name || i.productName || '') + ' x' + (i.quantity || i.qty || 1)).join(', ');
       const pickedStyle = order.pickedUp ? 'background:#f0fdf4;border-color:#15803d;opacity:0.75' : 'background:white;border-color:#e5e7eb';
       const pickedUpTime = order.pickedUpAt ? new Date(order.pickedUpAt).toLocaleString('he-IL', {day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
+      const credit = order.creditAmount || 0;
+      const creditBadge = credit > 0
+        ? `<div style="display:inline-block;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;padding:2px 9px;border-radius:14px;font-size:.78rem;font-weight:700;margin-top:4px">💸 זיכוי: ₪${credit.toFixed(0)}</div>`
+        : '';
       return `<div data-orderid="${order._id}" data-name="${(order.customerName||'').replace(/"/g,'')}" style="border:2px solid #e5e7eb;border-radius:12px;padding:14px;margin-bottom:10px;direction:rtl;${pickedStyle}">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
           <div style="flex:1;min-width:0">
@@ -4993,8 +4998,7 @@ function renderPickupTracking(data) {
             <div style="color:#6b7280;font-size:0.85rem;margin-top:2px">${order.customerPhone || ''}</div>
             <div style="font-size:0.85rem;color:#374151;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${itemsSummary}</div>
             ${order.pickedUp ? `<div style="font-size:0.82rem;color:#15803d;margin-top:4px;font-weight:600">✅ נאסף ב-${pickedUpTime}${order.pickedUpBy ? ' ע"י ' + order.pickedUpBy : ''}</div>` : ''}
-            ${order.pickupToken ? (order.pickedUp ? `<div style="font-size:0.78rem;color:#15803d;margin-top:2px">✅ SMS — אסף</div>` : `<div style="font-size:0.78rem;color:#7c3aed;margin-top:2px">📱 SMS נשלח</div>`) : `<div style="font-size:0.78rem;color:#9ca3af;margin-top:2px">SMS — לא נשלח</div>`}
-            ${order.pickupToken ? (order.pickedUp ? `<div style="font-size:0.78rem;color:#15803d;margin-top:2px">✅ SMS — אסף</div>` : `<div style="font-size:0.78rem;color:#7c3aed;margin-top:2px">📱 SMS נשלח</div>`) : `<div style="font-size:0.78rem;color:#9ca3af;margin-top:2px">SMS — לא נשלח</div>`}
+            ${creditBadge}
             ${order.pickupToken ? (order.pickedUp ? `<div style="font-size:0.78rem;color:#15803d;margin-top:2px">✅ SMS — אסף</div>` : `<div style="font-size:0.78rem;color:#7c3aed;margin-top:2px">📱 SMS נשלח</div>`) : `<div style="font-size:0.78rem;color:#9ca3af;margin-top:2px">SMS — לא נשלח</div>`}
           </div>
           <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
@@ -5003,6 +5007,7 @@ function renderPickupTracking(data) {
               ${order.pickedUp ? '✅ נאסף' : '⬜ סמן איסוף'}
             </button>
             <div style="display:flex;flex-direction:column;gap:6px;margin-top:4px">
+              <button onclick="openCreditModal('${order._id}')" style="padding:8px 14px;background:${credit>0?'#fef3c7':'#fde68a'};border:none;border-radius:8px;cursor:pointer;font-size:0.82rem;font-family:inherit;font-weight:700;color:#92400e;white-space:nowrap;text-align:center">💸 ${credit>0?'ערוך זיכוי':'זיכוי'}</button>
               <button onclick="sendPickupEmail('${order._id}')" style="padding:8px 14px;background:#dbeafe;border:none;border-radius:8px;cursor:pointer;font-size:0.82rem;font-family:inherit;font-weight:600;color:#1e40af;white-space:nowrap;text-align:center">📧 פירוט הזמנה במייל</button>
               <button onclick="sendPickupSMS('${order._id}')" style="padding:8px 14px;background:#fef9c3;border:none;border-radius:8px;cursor:pointer;font-size:0.82rem;font-family:inherit;font-weight:600;color:#92400e;white-space:nowrap;text-align:center">📱 SMS תזכורת לאיסוף</button>
             </div>
@@ -5217,6 +5222,333 @@ function showPickupSummaryModal() {
 
 function filterPickupList() {
   if (_pickupData) renderPickupTracking(_pickupData);
+}
+
+// ===== CREDITS / זיכויים =====
+// Tracking-only — actual refunds happen outside the system.
+
+async function openCreditModal(orderId) {
+  // Build modal once
+  let modal = document.getElementById('creditModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'creditModal';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center;font-family:inherit';
+    modal.innerHTML = `
+      <div style="background:white;border-radius:18px;width:min(580px,96vw);max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+        <div style="background:#f59e0b;color:white;padding:14px 20px;display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:1.05rem;font-weight:800">💸 זיכוי לקוח</span>
+          <button onclick="document.getElementById('creditModal').style.display='none'" style="background:none;border:none;color:white;font-size:1.4rem;cursor:pointer">✕</button>
+        </div>
+        <div style="padding:20px">
+          <div id="cmCustomerInfo" style="margin-bottom:14px;padding:12px;background:#fef3c7;border:1.5px solid #fcd34d;border-radius:10px;font-size:.92rem"></div>
+          <div style="font-weight:700;color:#374151;margin-bottom:8px;font-size:.92rem">סמן פריטים לזיכוי:</div>
+          <div id="cmItems" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px"></div>
+          <div>
+            <label style="font-size:.85rem;font-weight:700;color:#374151;display:block;margin-bottom:5px">📝 סיבה (אופציונלי)</label>
+            <textarea id="cmReason" rows="2" placeholder="אזל מהמלאי / פגום / חוסר..." style="width:100%;padding:9px;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.9rem;box-sizing:border-box"></textarea>
+          </div>
+          <div style="margin:14px 0;padding:12px 16px;background:linear-gradient(135deg,#fef3c7,#fde68a);border:2px solid #f59e0b;border-radius:10px;display:flex;justify-content:space-between;align-items:center">
+            <span style="font-weight:800;color:#92400e">💸 סה״כ זיכוי</span>
+            <span id="cmTotal" style="font-size:1.4rem;font-weight:900;color:#92400e">₪0</span>
+          </div>
+          <div id="cmErr" style="color:#dc2626;font-size:.85rem;display:none;margin-bottom:8px"></div>
+          <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+            <button onclick="document.getElementById('creditModal').style.display='none'" style="padding:10px 18px;background:#f3f4f6;border:none;border-radius:8px;cursor:pointer;font-family:inherit">ביטול</button>
+            <button onclick="resetCredit()" style="padding:10px 18px;background:#fee2e2;color:#dc2626;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700">✕ אפס זיכוי</button>
+            <button onclick="saveCredit()" style="padding:10px 24px;background:#f59e0b;color:white;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:800">💾 שמור</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+  document.getElementById('cmErr').style.display = 'none';
+  document.getElementById('cmReason').value = '';
+  document.getElementById('cmItems').innerHTML = '<div style="color:#9ca3af;text-align:center;padding:14px">טוען...</div>';
+  modal.style.display = 'flex';
+  modal.dataset.orderId = orderId;
+
+  try {
+    const r = await fetch(API + '/admin/orders/' + orderId + '/credits', { headers: authHeaders() });
+    const d = await r.json();
+    if (!r.ok) { document.getElementById('cmErr').textContent = d.error || 'שגיאה'; document.getElementById('cmErr').style.display = 'block'; return; }
+
+    const info = document.getElementById('cmCustomerInfo');
+    info.innerHTML = '<div style="font-weight:800;font-size:1rem">' + (d.customerName || '—') + '</div>' +
+      '<div style="color:#92400e;margin-top:2px">📞 ' + (d.phone || '') + (d.pickupLocation ? ' · 📍 ' + d.pickupLocation : '') + '</div>';
+
+    // Build a "currently credited" map by itemKey for pre-filling
+    const creditMap = {};
+    (d.credits || []).forEach(c => { creditMap[c.itemKey] = c.qty; });
+    document.getElementById('cmReason').value = d.creditReason || '';
+
+    const itemsEl = document.getElementById('cmItems');
+    if (!d.items || !d.items.length) {
+      itemsEl.innerHTML = '<div style="color:#9ca3af;text-align:center;padding:14px">אין פריטים בהזמנה</div>';
+      return;
+    }
+    itemsEl.innerHTML = d.items.map((it, idx) => {
+      const name = it.name || '';
+      const variant = it.variant || '';
+      const orderedQty = Number(it.qty || it.quantity || 1);
+      const unitPrice = Number(it.price || 0);
+      const key = name + '__' + variant;
+      const credQty = creditMap[key] || 0;
+      const checked = credQty > 0 ? 'checked' : '';
+      return '<div data-idx="' + idx + '" style="display:flex;align-items:center;gap:10px;padding:9px 12px;border:1.5px solid #e5e7eb;border-radius:8px;background:#fafafa">' +
+        '<input type="checkbox" id="cmcb_' + idx + '" data-name="' + name.replace(/"/g,'&quot;') + '" data-variant="' + variant.replace(/"/g,'&quot;') + '" data-price="' + unitPrice + '" data-ordered="' + orderedQty + '" ' + checked + ' onchange="cmRecalc()" style="width:18px;height:18px;cursor:pointer">' +
+        '<div style="flex:1;font-size:.9rem;font-weight:600">' + name + (variant ? ' — ' + variant : '') + '</div>' +
+        '<div style="display:flex;align-items:center;gap:5px">' +
+          '<button onclick="cmAdjustQty(' + idx + ',-1)" style="width:24px;height:24px;border:1px solid #d1d5db;background:white;border-radius:4px;cursor:pointer">−</button>' +
+          '<input id="cmq_' + idx + '" type="number" min="0" max="' + orderedQty + '" step="0.5" value="' + (credQty || (checked ? orderedQty : 0)) + '" oninput="cmRecalc()" style="width:55px;padding:3px;text-align:center;border:1px solid #d1d5db;border-radius:4px;font-size:.88rem">' +
+          '<button onclick="cmAdjustQty(' + idx + ',1)" style="width:24px;height:24px;border:1px solid #d1d5db;background:white;border-radius:4px;cursor:pointer">+</button>' +
+          '<span style="font-size:.78rem;color:#6b7280">/' + orderedQty + '</span>' +
+        '</div>' +
+        '<div style="font-size:.82rem;color:#374151;min-width:55px;text-align:left">₪' + unitPrice + '</div>' +
+      '</div>';
+    }).join('');
+    cmRecalc();
+  } catch(e) {
+    document.getElementById('cmErr').textContent = e.message;
+    document.getElementById('cmErr').style.display = 'block';
+  }
+}
+
+function cmAdjustQty(idx, delta) {
+  const cb = document.getElementById('cmcb_' + idx);
+  const inp = document.getElementById('cmq_' + idx);
+  if (!cb || !inp) return;
+  const max = Number(cb.dataset.ordered);
+  let v = Number(inp.value || 0) + delta;
+  if (v < 0) v = 0;
+  if (v > max) v = max;
+  inp.value = v;
+  cb.checked = v > 0;
+  cmRecalc();
+}
+
+function cmRecalc() {
+  let total = 0;
+  document.querySelectorAll('#cmItems > div').forEach(row => {
+    const idx = row.dataset.idx;
+    const cb = document.getElementById('cmcb_' + idx);
+    const inp = document.getElementById('cmq_' + idx);
+    if (!cb || !inp) return;
+    let qty = Number(inp.value || 0);
+    if (!cb.checked) qty = 0;
+    if (cb.checked && qty === 0) qty = Number(cb.dataset.ordered);
+    inp.value = qty;
+    const price = Number(cb.dataset.price);
+    total += qty * price;
+    row.style.background = qty > 0 ? '#fef3c7' : '#fafafa';
+    row.style.borderColor = qty > 0 ? '#fcd34d' : '#e5e7eb';
+  });
+  document.getElementById('cmTotal').textContent = '₪' + total.toFixed(2).replace(/\.00$/, '');
+}
+
+async function saveCredit() {
+  const modal = document.getElementById('creditModal');
+  const orderId = modal.dataset.orderId;
+  const errEl = document.getElementById('cmErr');
+  errEl.style.display = 'none';
+  const items = [];
+  document.querySelectorAll('#cmItems > div').forEach(row => {
+    const idx = row.dataset.idx;
+    const cb = document.getElementById('cmcb_' + idx);
+    const inp = document.getElementById('cmq_' + idx);
+    if (!cb || !inp || !cb.checked) return;
+    const qty = Number(inp.value || 0);
+    if (qty <= 0) return;
+    items.push({
+      name: cb.dataset.name,
+      variant: cb.dataset.variant,
+      qty,
+      unitPrice: Number(cb.dataset.price),
+    });
+  });
+  const reason = document.getElementById('cmReason').value.trim();
+  try {
+    const r = await fetch(API + '/admin/orders/' + orderId + '/credits', {
+      method: 'PUT', headers: authHeaders(),
+      body: JSON.stringify({ items, reason }),
+    });
+    const d = await r.json();
+    if (!r.ok) { errEl.textContent = d.error || 'שגיאה בשמירה'; errEl.style.display = 'block'; return; }
+    modal.style.display = 'none';
+    if (typeof loadPickupTracking === 'function') loadPickupTracking();
+  } catch(e) {
+    errEl.textContent = e.message; errEl.style.display = 'block';
+  }
+}
+
+async function resetCredit() {
+  const modal = document.getElementById('creditModal');
+  const orderId = modal.dataset.orderId;
+  if (!confirm('לאפס את הזיכוי להזמנה זו?')) return;
+  try {
+    const r = await fetch(API + '/admin/orders/' + orderId + '/credits', {
+      method: 'DELETE', headers: authHeaders(),
+    });
+    if (!r.ok) { const d = await r.json().catch(()=>({})); alert(d.error || 'שגיאה'); return; }
+    modal.style.display = 'none';
+    if (typeof loadPickupTracking === 'function') loadPickupTracking();
+  } catch(e) { alert(e.message); }
+}
+
+// ── Credits Report ──
+async function openCreditsReport() {
+  let modal = document.getElementById('creditsReportModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'creditsReportModal';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9998;align-items:center;justify-content:center;font-family:inherit';
+    modal.innerHTML = `
+      <div style="background:white;border-radius:18px;width:min(900px,96vw);max-height:92vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+        <div style="background:#f59e0b;color:white;padding:14px 20px;display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:1.05rem;font-weight:800">📋 דוח זיכויים — ממתינים לזיכוי ידני</span>
+          <button onclick="document.getElementById('creditsReportModal').style.display='none'" style="background:none;border:none;color:white;font-size:1.4rem;cursor:pointer">✕</button>
+        </div>
+        <div style="padding:14px 18px;background:#fffbeb;border-bottom:1.5px solid #fcd34d">
+          <div id="crSummary" style="font-size:.95rem;font-weight:700;color:#92400e">טוען...</div>
+        </div>
+        <div id="crBody" style="flex:1;overflow-y:auto;padding:18px"></div>
+        <div style="padding:12px 18px;border-top:1.5px solid #e5e7eb;display:flex;gap:8px;justify-content:flex-end;background:#f9fafb">
+          <button onclick="exportCreditsExcel()" style="padding:9px 18px;background:#15803d;color:white;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700">📥 Excel</button>
+          <button onclick="exportCreditsPDF()" style="padding:9px 18px;background:#dc2626;color:white;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700">📄 PDF</button>
+          <button onclick="document.getElementById('creditsReportModal').style.display='none'" style="padding:9px 18px;background:#f3f4f6;border:none;border-radius:8px;cursor:pointer;font-family:inherit">סגור</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+  modal.style.display = 'flex';
+
+  // Use the same date filters as pickup-tracking + global pickup filter
+  const from = document.getElementById('pickupWeekStart')?.value || '';
+  const to = document.getElementById('pickupWeekEnd')?.value || '';
+  const gp = (typeof getActivePickup === 'function' ? getActivePickup() : '') || (document.getElementById('pickupPointFilter')?.value || '');
+  const params = [];
+  if (from) params.push('from=' + encodeURIComponent(from));
+  if (to) params.push('to=' + encodeURIComponent(to));
+  if (gp) params.push('pickupPoint=' + encodeURIComponent(gp));
+  const url = API + '/admin/credits-report' + (params.length ? '?' + params.join('&') : '');
+  try {
+    const r = await fetch(url, { headers: authHeaders() });
+    const d = await r.json();
+    if (!r.ok) { document.getElementById('crBody').innerHTML = '<div style="color:#dc2626;padding:14px">שגיאה: ' + (d.error || r.status) + '</div>'; return; }
+    window._creditsReport = d;
+    renderCreditsReport(d, gp);
+  } catch(e) {
+    document.getElementById('crBody').innerHTML = '<div style="color:#dc2626;padding:14px">שגיאה: ' + e.message + '</div>';
+  }
+}
+
+function renderCreditsReport(d, scopeLabel) {
+  const summaryEl = document.getElementById('crSummary');
+  const bodyEl = document.getElementById('crBody');
+  summaryEl.innerHTML = '💸 סה״כ לזיכוי: <strong>₪' + (d.totalCredit || 0).toFixed(2).replace(/\.00$/,'') + '</strong> · ' + (d.count || 0) + ' לקוחות' + (scopeLabel ? ' · 📍 ' + scopeLabel : ' · 🌐 כל הנקודות');
+  if (!d.rows || !d.rows.length) {
+    bodyEl.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:30px">אין זיכויים בטווח שנבחר</div>';
+    return;
+  }
+  bodyEl.innerHTML = d.rows.map((r, i) => {
+    const items = (r.credits || []).map(c => (c.itemName + (c.variant ? ' — ' + c.variant : '')) + ' ×' + c.qty + ' (₪' + c.lineTotal + ')').join('<br>');
+    return '<div style="border:1.5px solid #fcd34d;border-radius:10px;padding:12px 14px;margin-bottom:10px;background:#fffbeb;display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">' +
+      '<div style="flex:0 0 28px;font-weight:800;color:#92400e">#' + (i+1) + '</div>' +
+      '<div style="flex:1;min-width:200px">' +
+        '<div style="font-weight:800;font-size:1rem">' + (r.customerName || '—') + '</div>' +
+        '<div style="font-size:.82rem;color:#6b7280;margin-top:2px">📞 ' + (r.phone || '') + ' · 📍 ' + (r.pickupLocation || '') + '</div>' +
+        '<div style="font-size:.85rem;color:#374151;margin-top:6px;line-height:1.5">' + items + '</div>' +
+        (r.creditReason ? '<div style="font-size:.78rem;color:#92400e;margin-top:4px;font-style:italic">📝 ' + r.creditReason + '</div>' : '') +
+      '</div>' +
+      '<div style="flex:0 0 110px;text-align:left">' +
+        '<div style="font-size:1.4rem;font-weight:900;color:#92400e">₪' + (r.creditAmount || 0).toFixed(2).replace(/\.00$/,'') + '</div>' +
+        '<button onclick="document.getElementById(\'creditsReportModal\').style.display=\'none\';openCreditModal(\'' + r.orderId + '\')" style="margin-top:6px;padding:5px 12px;background:white;border:1px solid #fcd34d;color:#92400e;border-radius:6px;font-size:.78rem;cursor:pointer;font-family:inherit;font-weight:700">✏️ ערוך</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function exportCreditsExcel() {
+  const d = window._creditsReport;
+  if (!d || !d.rows || !d.rows.length) { alert('אין נתונים'); return; }
+  const rows = [];
+  d.rows.forEach(r => {
+    if (!r.credits || !r.credits.length) {
+      rows.push({ 'שם': r.customerName, 'טלפון': r.phone, 'נקודה': r.pickupLocation, 'פריט': '', 'כמות': '', 'מחיר ליח׳': '', 'סה״כ שורה': '', 'סיבה': r.creditReason || '', 'סה״כ זיכוי': Math.round((r.creditAmount||0)*100)/100 });
+      return;
+    }
+    r.credits.forEach((c, idx) => {
+      rows.push({
+        'שם': idx === 0 ? r.customerName : '',
+        'טלפון': idx === 0 ? r.phone : '',
+        'נקודה': idx === 0 ? r.pickupLocation : '',
+        'פריט': c.itemName + (c.variant ? ' — ' + c.variant : ''),
+        'כמות': c.qty,
+        'מחיר ליח׳': c.unitPrice,
+        'סה״כ שורה': c.lineTotal,
+        'סיבה': idx === 0 ? (r.creditReason || '') : '',
+        'סה״כ זיכוי': idx === 0 ? Math.round((r.creditAmount||0)*100)/100 : '',
+      });
+    });
+  });
+  rows.push({});
+  rows.push({ 'שם': 'סה״כ', 'סה״כ זיכוי': Math.round((d.totalCredit||0)*100)/100 });
+  if (typeof XLSX === 'undefined') { alert('XLSX לא נטען'); return; }
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'זיכויים');
+  XLSX.writeFile(wb, 'credits-report.xlsx');
+}
+
+function exportCreditsPDF() {
+  const d = window._creditsReport;
+  if (!d || !d.rows || !d.rows.length) { alert('אין נתונים'); return; }
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  const trs = d.rows.map((r, i) => {
+    const items = (r.credits || []).map(c => esc((c.itemName + (c.variant ? ' — ' + c.variant : '')) + ' ×' + c.qty)).join('<br>');
+    return '<tr>' +
+      '<td class="num">' + (i+1) + '</td>' +
+      '<td class="name">' + esc(r.customerName) + '<div class="phone">' + esc(r.phone) + '</div></td>' +
+      '<td class="loc">' + esc(r.pickupLocation) + '</td>' +
+      '<td class="items">' + items + '</td>' +
+      '<td class="reason">' + esc(r.creditReason || '') + '</td>' +
+      '<td class="amount">₪' + (r.creditAmount || 0).toFixed(2).replace(/\.00$/, '') + '</td>' +
+    '</tr>';
+  }).join('');
+  const html = '<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="UTF-8"><title>דוח זיכויים</title><style>' +
+    '@page{size:A4;margin:14mm}*{box-sizing:border-box}' +
+    'body{font-family:-apple-system,"Segoe UI",Arial,sans-serif;direction:rtl;color:#111;margin:0}' +
+    '.toolbar{position:sticky;top:0;background:#92400e;color:white;padding:12px 18px;display:flex;justify-content:space-between;align-items:center;z-index:5}' +
+    '.toolbar h1{margin:0;font-size:1rem}.toolbar button{background:white;color:#92400e;border:none;padding:8px 18px;font-weight:800;border-radius:8px;cursor:pointer;font-family:inherit}' +
+    '.body{padding:14mm}' +
+    'h1.title{font-size:18pt;color:#92400e;margin:0 0 6px}' +
+    '.meta{color:#555;font-size:10pt;margin-top:4px}' +
+    '.grand{margin:14px 0;padding:12px 16px;background:linear-gradient(135deg,#fffbeb,#fef3c7);border:2px solid #f59e0b;border-radius:10px;font-weight:800;font-size:1rem;color:#92400e;display:flex;justify-content:space-between}' +
+    'table{width:100%;border-collapse:collapse;font-size:10.5pt}' +
+    'th{background:#92400e;color:white;padding:7px 8px;text-align:right;font-size:10pt}' +
+    'th.num,th.amount{text-align:center}' +
+    'td{padding:7px 8px;border-bottom:1px solid #e5e7eb;vertical-align:top}' +
+    'td.num,td.amount{text-align:center;font-weight:700}' +
+    'td.amount{color:#92400e;font-size:1.05em}' +
+    'td.name{font-weight:700}' +
+    'td.phone{font-size:9pt;color:#6b7280;font-weight:400;margin-top:2px}' +
+    'td.items{font-size:9.5pt;color:#374151}' +
+    'td.reason{font-size:9pt;color:#92400e;font-style:italic}' +
+    'tr:nth-child(even) td{background:#fffbeb}' +
+    '@media print{.toolbar{display:none}.body{padding:0}}' +
+    '</style></head><body>' +
+    '<div class="toolbar"><h1>📋 דוח זיכויים</h1><button onclick="window.print()">🖨️ שמור / הדפס</button></div>' +
+    '<div class="body">' +
+      '<h1 class="title">📋 דוח זיכויים — ממתינים לזיכוי ידני</h1>' +
+      '<div class="meta">הופק: ' + new Date().toLocaleString('he-IL') + '</div>' +
+      '<div class="grand"><span>👥 ' + d.count + ' לקוחות</span><span>💸 סה״כ ₪' + (d.totalCredit||0).toFixed(2).replace(/\.00$/,'') + '</span></div>' +
+      '<table><thead><tr><th class="num">#</th><th>לקוח</th><th>נקודה</th><th>פריטים</th><th>סיבה</th><th class="amount">סכום</th></tr></thead><tbody>' + trs + '</tbody></table>' +
+    '</div>' +
+    '<script>window.addEventListener("load",function(){setTimeout(function(){window.print();},500)});</' + 'script>' +
+    '</body></html>';
+  const w = window.open('', '_blank');
+  w.document.write(html);
+  w.document.close();
 }
 
 async function togglePickup(orderId, currentStatus) {

@@ -649,6 +649,136 @@ router.put('/admin/orders/:id/cancel', async (req, res) => {
   }
 });
 
+// ===== ORDER CREDITS (refund tracking) =====
+// Lightweight tracker for "who do I owe a refund to" — the actual refund is
+// done manually outside the system. Each order can carry a list of items
+// the admin/employee marked for credit, plus a free-text reason. The report
+// endpoint aggregates across orders so the admin gets a tidy worksheet.
+
+// Allow either full admin or a pickup-share-scoped employee. When the caller
+// is a share-token, we restrict to orders within their pickup point.
+function _scopeOk(req, order) {
+  if (req.shopUser && req.shopUser.kind === 'pickup_share') {
+    return order.pickupLocation === req.shopUser.pickupPoint;
+  }
+  return true; // admin / employee — full access
+}
+
+router.get('/admin/orders/:id/credits', verifyShopToken, async (req, res) => {
+  try {
+    const db = await getDb();
+    const order = await db.collection('shop_orders').findOne({ _id: new ObjectId(req.params.id) });
+    if (!order) return res.status(404).json({ error: 'הזמנה לא נמצאה' });
+    if (!_scopeOk(req, order)) return res.status(403).json({ error: 'אין הרשאה' });
+    res.json({
+      orderId: order._id,
+      customerName: order.customerName || '',
+      phone: order.phone || '',
+      pickupLocation: order.pickupLocation || '',
+      items: order.items || [],
+      credits: order.credits || [],
+      creditAmount: order.creditAmount || 0,
+      creditReason: order.creditReason || '',
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/admin/orders/:id/credits', verifyShopToken, async (req, res) => {
+  try {
+    const db = await getDb();
+    const order = await db.collection('shop_orders').findOne({ _id: new ObjectId(req.params.id) });
+    if (!order) return res.status(404).json({ error: 'הזמנה לא נמצאה' });
+    if (!_scopeOk(req, order)) return res.status(403).json({ error: 'אין הרשאה' });
+
+    const inputItems = Array.isArray(req.body.items) ? req.body.items : [];
+    const reason = (req.body.reason || '').toString().slice(0, 400);
+    // Build a quick lookup of what the customer actually ordered: name|variant → {qty, price}
+    const orderedMap = {};
+    (order.items || []).forEach(it => {
+      const key = (it.name || '') + '__' + (it.variant || '');
+      orderedMap[key] = { qty: Number(it.qty || it.quantity || 0), price: Number(it.price || 0), name: it.name || '', variant: it.variant || '' };
+    });
+
+    const credits = [];
+    let creditAmount = 0;
+    for (const c of inputItems) {
+      const name = (c.name || '').toString();
+      const variant = (c.variant || '').toString();
+      const qty = Number(c.qty) || 0;
+      if (qty <= 0) continue;
+      const key = name + '__' + variant;
+      const orig = orderedMap[key];
+      if (!orig) return res.status(400).json({ error: 'פריט לא קיים בהזמנה: ' + name + (variant ? ' (' + variant + ')' : '') });
+      if (qty > orig.qty + 1e-6) return res.status(400).json({ error: 'כמות זיכוי חורגת מהכמות שהוזמנה: ' + name });
+      const unitPrice = Number(c.unitPrice) || orig.price || 0;
+      const lineTotal = +(unitPrice * qty).toFixed(2);
+      credits.push({
+        itemKey: key, itemName: orig.name, variant: orig.variant,
+        qty, unitPrice, lineTotal,
+        reason: reason,
+        createdAt: new Date(),
+        createdBy: req.shopUser?.name || (req.shopUser?.kind === 'pickup_share' ? 'עובד נקודה' : 'admin'),
+      });
+      creditAmount += lineTotal;
+    }
+    creditAmount = +creditAmount.toFixed(2);
+
+    await db.collection('shop_orders').updateOne(
+      { _id: order._id },
+      { $set: { credits, creditAmount, creditReason: reason, creditUpdatedAt: new Date() } }
+    );
+    res.json({ ok: true, creditAmount, credits });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/admin/orders/:id/credits', verifyShopToken, async (req, res) => {
+  try {
+    const db = await getDb();
+    const order = await db.collection('shop_orders').findOne({ _id: new ObjectId(req.params.id) });
+    if (!order) return res.status(404).json({ error: 'הזמנה לא נמצאה' });
+    if (!_scopeOk(req, order)) return res.status(403).json({ error: 'אין הרשאה' });
+    await db.collection('shop_orders').updateOne(
+      { _id: order._id },
+      { $unset: { credits: '', creditAmount: '', creditReason: '', creditUpdatedAt: '' } }
+    );
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Report — list every order with credits, optionally filtered by date / pickup
+router.get('/admin/credits-report', verifyShopToken, async (req, res) => {
+  try {
+    const db = await getDb();
+    const { from, to } = req.query;
+    let pickupPoint = req.query.pickupPoint || '';
+    // Share-token employees: hard-scope to their point
+    if (req.shopUser && req.shopUser.kind === 'pickup_share') {
+      pickupPoint = req.shopUser.pickupPoint;
+    }
+    const filter = { creditAmount: { $gt: 0 } };
+    if (pickupPoint) filter.pickupLocation = pickupPoint;
+    if (from || to) {
+      filter.createdAt = {};
+      if (from) filter.createdAt.$gte = new Date(from);
+      if (to)   filter.createdAt.$lte = new Date(to + 'T23:59:59');
+    }
+    const orders = await db.collection('shop_orders').find(filter).sort({ creditAmount: -1 }).toArray();
+    const rows = orders.map(o => ({
+      orderId: o._id,
+      customerName: o.customerName || '',
+      phone: o.phone || '',
+      pickupLocation: o.pickupLocation || '',
+      creditAmount: o.creditAmount || 0,
+      creditReason: o.creditReason || '',
+      credits: o.credits || [],
+      createdAt: o.createdAt,
+      creditUpdatedAt: o.creditUpdatedAt || null,
+    }));
+    const totalCredit = rows.reduce((s, r) => s + (r.creditAmount || 0), 0);
+    res.json({ rows, totalCredit, count: rows.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ===== ORDERS PRINT-PDF (per-customer pages) =====
 // Returns a printable HTML page (one customer per page). Admin opens it,
 // browser fires the print dialog, user saves as PDF. Native RTL + Hebrew.
