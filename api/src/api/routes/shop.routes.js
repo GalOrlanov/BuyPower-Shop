@@ -745,6 +745,67 @@ router.delete('/admin/orders/:id/credits', verifyShopToken, async (req, res) => 
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Contacts — list every customer who ordered at a given pickup point.
+// Used for sending WhatsApp / SMS / pre-loading phone contacts. Aggregates
+// from shop_orders (one row per phone), enriched with shop_users info if
+// the customer is registered.
+router.get('/admin/contacts', verifyShopToken, async (req, res) => {
+  try {
+    const db = await getDb();
+    let pickupPoint = req.query.pickupPoint || '';
+    if (req.shopUser && req.shopUser.kind === 'pickup_share') {
+      pickupPoint = req.shopUser.pickupPoint;
+    }
+    const filter = {};
+    if (pickupPoint) filter.pickupLocation = pickupPoint;
+    if (req.query.from || req.query.to) {
+      filter.createdAt = {};
+      if (req.query.from) filter.createdAt.$gte = new Date(req.query.from);
+      if (req.query.to)   filter.createdAt.$lte = new Date(req.query.to + 'T23:59:59');
+    }
+    // Skip cancelled / duplicate orders
+    filter.status = { $nin: ['cancelled', 'cancelled_duplicate', 'merged_into_paid'] };
+    const orders = await db.collection('shop_orders').find(filter).sort({ createdAt: -1 }).toArray();
+    // Aggregate per phone
+    const byPhone = {};
+    orders.forEach(o => {
+      const ph = (o.phone || o.customerPhone || '').replace(/\D/g, '');
+      if (!ph) return;
+      if (!byPhone[ph]) {
+        byPhone[ph] = {
+          phone: ph,
+          name: o.customerName || '',
+          email: o.email || '',
+          pickupLocation: o.pickupLocation || pickupPoint || '',
+          orderCount: 0,
+          totalSpent: 0,
+          lastOrder: null,
+          lastStatus: o.status,
+        };
+      }
+      byPhone[ph].orderCount++;
+      const isPaid = ['paid', 'collected', 'handled', 'confirmed', 'ready'].includes(o.status);
+      if (isPaid) byPhone[ph].totalSpent += Number(o.totalAmount || 0);
+      const d = o.createdAt ? new Date(o.createdAt) : null;
+      if (d && (!byPhone[ph].lastOrder || d > byPhone[ph].lastOrder)) byPhone[ph].lastOrder = d;
+    });
+    // Enrich with email from shop_users where missing
+    const phones = Object.keys(byPhone);
+    if (phones.length) {
+      const users = await db.collection('shop_users').find({ phone: { $in: phones } }, { projection: { phone: 1, email: 1, name: 1 } }).toArray();
+      users.forEach(u => {
+        const e = byPhone[u.phone];
+        if (!e) return;
+        if (!e.email && u.email) e.email = u.email;
+        if (!e.name && u.name) e.name = u.name;
+      });
+    }
+    // Sort alphabetical by name (Hebrew)
+    const rows = Object.values(byPhone).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'he'));
+    res.json({ rows, count: rows.length, pickupPoint, from: req.query.from || null, to: req.query.to || null });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Report — list every order with credits, optionally filtered by date / pickup
 router.get('/admin/credits-report', verifyShopToken, async (req, res) => {
   try {
