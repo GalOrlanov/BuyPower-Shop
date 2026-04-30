@@ -786,6 +786,14 @@ input:checked + .slider::before { transform: translateX(20px); }
           style="padding:9px 14px;border:1px solid #d1fae5;border-radius:10px;font-size:14px;background:white;cursor:pointer">
           <option value="">📍 כל הנקודות</option>
         </select>
+        <select id="userTierFilter" onchange="renderUsersTable()"
+          style="padding:9px 14px;border:1px solid #d1fae5;border-radius:10px;font-size:14px;background:white;cursor:pointer">
+          <option value="">🎯 כל הפעילויות</option>
+          <option value="vip">⭐ VIP (2+ הזמנות בחודש)</option>
+          <option value="active">✅ פעיל (לפחות הזמנה אחת)</option>
+          <option value="inactive">💤 לא פעיל (אין הזמנות)</option>
+          <option value="hasSpend">💰 עם הוצאה כלשהי</option>
+        </select>
         <input id="userDateFrom" type="date" onchange="renderUsersTable()" title="נרשם מתאריך"
           style="padding:9px 12px;border:1px solid #d1fae5;border-radius:10px;font-size:14px;background:white;cursor:pointer"/>
         <input id="userDateTo" type="date" onchange="renderUsersTable()" title="נרשם עד תאריך"
@@ -1053,18 +1061,8 @@ input:checked + .slider::before { transform: translateX(20px); }
       <div id="pnlTable"></div>
       </div>
     </div>
-    <!-- CRM TAB -->
-    <div id="tab-crm" class="tab-panel">
-      <div class="card" style="margin-bottom:12px">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-          <div class="card-title" style="margin:0">👥 לקוחות</div>
-          <input type="text" id="crmSearch" placeholder="חיפוש שם / טלפון..." oninput="filterCrm()"
-            style="padding:9px 14px;border:2px solid #e5e7eb;border-radius:10px;font-family:inherit;font-size:.88rem;outline:none;min-width:200px">
-        </div>
-      </div>
-      <div id="crmSummary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:16px"></div>
-      <div id="crmTable"></div>
-    </div>
+    <!-- CRM merged into Users tab. Empty placeholder kept for any legacy code paths. -->
+    <div id="tab-crm" class="tab-panel"></div>
 
     <!-- PICKUP TRACKING TAB -->
     <div id="tab-pickupTracking" class="tab-panel">
@@ -1282,9 +1280,30 @@ async function loadUsers() {
   if (!el) return;
   el.innerHTML = '<p style="text-align:center;padding:24px;color:#9ca3af">טוען...</p>';
   try {
-    const res = await fetch(API + '/users/activity');
-    if (!res.ok) throw new Error('שגיאת שרת ' + res.status);
-    _allUsers = await res.json();
+    // Load users + CRM (orders aggregation per phone) in parallel.
+    // Building a phone → spending stats map lets the users table show financial
+    // behaviour next to identity (replaces the old separate לקוחות tab).
+    const [usersRes, ordersRes] = await Promise.all([
+      fetch(API + '/users/activity'),
+      fetch(API + '/orders'),
+    ]);
+    if (!usersRes.ok) throw new Error('שגיאת שרת ' + usersRes.status);
+    _allUsers = await usersRes.json();
+    const allOrders = ordersRes.ok ? await ordersRes.json() : [];
+    // Aggregate per phone — only paid/handled/confirmed/collected, ignore cancelled
+    const VALID = ['paid','handled','confirmed','collected'];
+    const stats = {};
+    (allOrders || []).forEach(o => {
+      const ph = (o.phone || o.customerPhone || '').replace(/\D/g, '');
+      if (!ph) return;
+      if (!stats[ph]) stats[ph] = { totalSpent: 0, orderCount: 0, lastOrder: null };
+      stats[ph].orderCount++;
+      const isValid = VALID.includes(o.status);
+      if (isValid) stats[ph].totalSpent += Number(o.totalAmount || 0);
+      const d = o.createdAt ? new Date(o.createdAt) : null;
+      if (d && (!stats[ph].lastOrder || d > stats[ph].lastOrder)) stats[ph].lastOrder = d;
+    });
+    window._userOrderStats = stats;
     renderUsersTable();
   } catch(e) { el.innerHTML = '<p style="color:red;padding:20px">שגיאה: ' + e.message + '</p>'; }
 }
@@ -1332,6 +1351,10 @@ function renderUsersTable() {
     }).catch(function(){});
   }
 
+  const tierFilterEl = document.getElementById('userTierFilter');
+  const tierFilter = tierFilterEl ? tierFilterEl.value : '';
+  const stats = window._userOrderStats || {};
+
   let users = _allUsers.filter(function(u) {
     const matchQ = !q || (u.name||'').toLowerCase().includes(q) || (u.phone||'').includes(q) || (u.email||'').toLowerCase().includes(q);
     const matchF = filter === 'all' || (filter === 'blocked' ? u.isBlocked : !u.isBlocked);
@@ -1339,14 +1362,45 @@ function renderUsersTable() {
     const matchL = !locFilter || userLoc === locFilter;
     const regDate = u.createdAt ? new Date(u.createdAt) : null;
     const matchDate = (!dateFrom || (regDate && regDate >= dateFrom)) && (!dateTo || (regDate && regDate <= dateTo));
-    return matchQ && matchF && matchL && matchDate;
+    // Tier filter — bridges identity + behavior in a single column
+    let matchTier = true;
+    if (tierFilter) {
+      if (tierFilter === 'vip') matchTier = !!u.isVip;
+      else if (tierFilter === 'active') matchTier = !!u.isActive;
+      else if (tierFilter === 'inactive') matchTier = !u.isActive;
+      else if (tierFilter === 'hasSpend') {
+        const ph = (u.phone||'').replace(/\D/g, '');
+        matchTier = !!(stats[ph] && stats[ph].totalSpent > 0);
+      }
+    }
+    return matchQ && matchF && matchL && matchDate && matchTier;
   });
 
   const col = _userSort.col, dir = _userSort.dir;
+  // Helper: pull a CRM-derived value (spend / order count / last-order date)
+  // from the per-phone stats map for the new sortable columns.
+  function _statFor(u, key) {
+    var ph = (u.phone||'').replace(/\D/g, '');
+    var s = stats[ph]; if (!s) return key === 'lastOrder' ? 0 : 0;
+    if (key === 'totalSpent') return s.totalSpent || 0;
+    if (key === 'orderCount') return s.orderCount || 0;
+    if (key === 'lastOrder') return s.lastOrder ? new Date(s.lastOrder).getTime() : 0;
+    return 0;
+  }
   users.sort(function(a,b) {
-    let av = a[col]||'', bv = b[col]||'';
-    if (col === 'createdAt' || col === 'lastLogin') { av = av ? new Date(av).getTime() : 0; bv = bv ? new Date(bv).getTime() : 0; }
-    else { av = String(av).toLowerCase(); bv = String(bv).toLowerCase(); }
+    let av, bv;
+    if (col === 'totalSpent' || col === 'orderCount' || col === 'lastOrder') {
+      av = _statFor(a, col); bv = _statFor(b, col);
+    } else if (col === 'createdAt' || col === 'lastLogin') {
+      av = a[col] ? new Date(a[col]).getTime() : 0;
+      bv = b[col] ? new Date(b[col]).getTime() : 0;
+    } else if (col === 'tier') {
+      // VIP > active > inactive
+      var rank = function(u){ return u.isVip ? 2 : (u.isActive ? 1 : 0); };
+      av = rank(a); bv = rank(b);
+    } else {
+      av = String(a[col]||'').toLowerCase(); bv = String(b[col]||'').toLowerCase();
+    }
     return av < bv ? -dir : av > bv ? dir : 0;
   });
 
@@ -1356,16 +1410,31 @@ function renderUsersTable() {
     return '<th onclick="sortUsers(\'' + colName + '\')" style="padding:11px 14px;text-align:right;border-bottom:1px solid #e5e7eb;cursor:pointer;white-space:nowrap;user-select:none;background:' + (active ? '#f0fdf4' : '#f9fafb') + '">' + label + arrow + '</th>';
   }
 
-  let html = '<div style="padding:10px 16px;background:#f0fdf4;font-size:13px;font-weight:700;color:#15803d;border-bottom:1px solid #86efac">' + users.length + ' משתמשים</div>';
+  // Aggregate financial totals for the headline strip
+  const totalSpend = users.reduce(function(s, u){
+    var ph = (u.phone||'').replace(/\D/g, '');
+    return s + ((stats[ph] && stats[ph].totalSpent) || 0);
+  }, 0);
+  const vipCount = users.filter(function(u){ return u.isVip; }).length;
+  const activeCount = users.filter(function(u){ return u.isActive; }).length;
+
+  let html = '<div style="padding:10px 16px;background:#f0fdf4;font-size:13px;font-weight:700;color:#15803d;border-bottom:1px solid #86efac;display:flex;gap:14px;flex-wrap:wrap">' +
+    '<span>👥 ' + users.length + ' משתמשים</span>' +
+    '<span>⭐ ' + vipCount + ' VIP</span>' +
+    '<span>✅ ' + activeCount + ' פעילים</span>' +
+    '<span>💰 סה״כ הוצאה: ₪' + totalSpend.toFixed(0) + '</span>' +
+  '</div>';
   html += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:14px">';
   html += '<thead><tr>';
   html += mkTh('שם','name') + mkTh('מייל','email') + mkTh('טלפון','phone');
-  html += mkTh('נקודת איסוף','pickupLocation') + mkTh('נרשם','createdAt') + mkTh('התחבר לאחרונה','lastLogin') + mkTh('סטטוס','isBlocked') + mkTh('פעילות','tier');
+  html += mkTh('נקודת איסוף','pickupLocation');
+  html += mkTh('💰 סך הוצאה','totalSpent') + mkTh('הזמנות','orderCount') + mkTh('הזמנה אחרונה','lastOrder');
+  html += mkTh('נרשם','createdAt') + mkTh('התחבר','lastLogin') + mkTh('סטטוס','isBlocked') + mkTh('פעילות','tier');
   html += '<th style="padding:11px 14px;border-bottom:1px solid #e5e7eb;background:#f9fafb">פעולות</th>';
   html += '</tr></thead><tbody>';
 
   if (!users.length) {
-    html += '<tr><td colspan="8" style="text-align:center;padding:24px;color:#9ca3af">לא נמצאו משתמשים</td></tr>';
+    html += '<tr><td colspan="11" style="text-align:center;padding:24px;color:#9ca3af">לא נמצאו משתמשים</td></tr>';
   }
   users.forEach(function(u) {
     var bg = u.isBlocked ? '#fff1f2' : 'white';
@@ -1385,6 +1454,17 @@ function renderUsersTable() {
     var locShort = uLoc ? (uLoc.length > 22 ? uLoc.slice(0,22)+'…' : uLoc) : '—';
     var locColor = uLoc ? '#15803d' : '#9ca3af';
     html += '<td style="padding:10px 14px;font-size:12px;font-weight:' + (uLoc?'700':'400') + ';color:' + locColor + '">' + locShort + '</td>';
+
+    // CRM data merged in by phone — replaces the old standalone לקוחות tab
+    var ph = (u.phone||'').replace(/\D/g, '');
+    var st = (stats && stats[ph]) ? stats[ph] : null;
+    var spend = st && st.totalSpent > 0 ? st.totalSpent : 0;
+    var ordCount = st ? st.orderCount : 0;
+    var lastOrd = st && st.lastOrder ? new Date(st.lastOrder).toLocaleDateString('he-IL') : '—';
+    html += '<td style="padding:10px 14px;font-size:13px;font-weight:700;color:' + (spend > 0 ? '#14532d' : '#9ca3af') + ';text-align:center">' + (spend > 0 ? '₪' + Math.round(spend) : '—') + '</td>';
+    html += '<td style="padding:10px 14px;font-size:13px;color:#374151;text-align:center">' + (ordCount || '—') + '</td>';
+    html += '<td style="padding:10px 14px;font-size:12px;color:#6b7280;text-align:center">' + lastOrd + '</td>';
+
     html += '<td style="padding:10px 14px;font-size:12px;color:#6b7280">' + created + '</td>';
     html += '<td style="padding:10px 14px;font-size:12px;color:#6b7280">' + ll + '</td>';
     html += '<td style="padding:10px 14px">' + statusBadge + '</td>';
