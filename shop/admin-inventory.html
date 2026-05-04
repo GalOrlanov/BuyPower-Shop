@@ -102,6 +102,7 @@
       <button class="btn btn-outline btn-sm" onclick="openCategoryManager()">🏷️ ניהול קטגוריות</button>
       <button class="btn btn-outline btn-sm" id="syncAllBtn" onclick="syncAllToShop()" style="background:#eff6ff;color:#1d4ed8;border-color:#93c5fd">🔄 סנכרן הכל לחנות</button>
       <button class="btn btn-outline btn-sm" onclick="loadInventory()" style="background:#f0fdf4;color:#15803d;border-color:#86efac;font-weight:800">↺ רענן רשימה</button>
+      <button class="btn btn-outline btn-sm" onclick="exportActiveItemsPDF()" style="background:#fef3c7;color:#92400e;border-color:#fcd34d;font-weight:800">📄 PDF להדפסה</button>
       <button class="btn btn-green" onclick="openAddModal()">+ הוסף פריט</button>
     </div>
   </div>
@@ -1313,6 +1314,100 @@ async function applyBulkSupplier() {
   clearSelection();
   await loadInventory();
   showToast('✅ ' + ids.length + ' מוצרים שויכו ל' + supplierName, '#15803d');
+}
+
+// ========== EXPORT ACTIVE ITEMS TO PDF (printable price list) ==========
+function exportActiveItemsPDF() {
+  const items = (window._allItems || allItems || []).filter(function(i) {
+    return i.isActive !== false && i.isActive !== null;
+  });
+  if (!items.length) { alert('אין פריטים פעילים לייצוא'); return; }
+
+  // Group by category, sort categories + items in Hebrew
+  const grouped = {};
+  items.forEach(function(it) {
+    const cat = it.category || 'כללי';
+    if (!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push(it);
+  });
+  const cats = Object.keys(grouped).sort(function(a, b) { return a.localeCompare(b, 'he'); });
+  cats.forEach(function(c) {
+    grouped[c].sort(function(a, b) { return (a.name || '').localeCompare(b.name || '', 'he'); });
+  });
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  function fmtPrice(p) {
+    const n = Number(p);
+    if (!isFinite(n) || n <= 0) return '—';
+    return (n % 1 === 0) ? String(n) : n.toFixed(2).replace(/\.?0+$/, '');
+  }
+
+  const today = new Date().toLocaleDateString('he-IL');
+  const totalCount = items.length;
+
+  let body = '';
+  cats.forEach(function(cat) {
+    body += '<section class="cat">';
+    body += '<h2 class="cat-title">' + esc(cat) + ' <span class="cat-count">(' + grouped[cat].length + ')</span></h2>';
+    body += '<div class="grid">';
+    grouped[cat].forEach(function(it) {
+      const price = fmtPrice(it.sellPrice);
+      const unit = esc(it.unit || 'יח׳');
+      const img = it.image ? '<div class="img"><img src="' + esc(it.image) + '" onerror="this.style.display=\'none\'"></div>' : '<div class="img placeholder">📦</div>';
+      body += '<div class="card">' +
+        img +
+        '<div class="info">' +
+          '<div class="name">' + esc(it.name || '—') + '</div>' +
+          '<div class="meta">' + unit + '</div>' +
+        '</div>' +
+        '<div class="price">' + price + '<span class="cur">₪</span></div>' +
+      '</div>';
+    });
+    body += '</div></section>';
+  });
+
+  const html =
+'<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="UTF-8">' +
+'<title>רשימת מוצרים פעילים</title>' +
+'<style>' +
+'@page { size: A4; margin: 12mm 10mm; }' +
+'* { box-sizing: border-box; }' +
+'body { font-family: "Heebo", "Arial Hebrew", Arial, sans-serif; margin: 0; padding: 16px; color: #111827; background: #fff; direction: rtl; }' +
+'.toolbar { position: sticky; top: 0; background: #14532d; color: white; padding: 12px 18px; border-radius: 12px; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center; gap: 12px; box-shadow: 0 2px 12px rgba(20,83,45,.2); }' +
+'.toolbar h1 { margin: 0; font-size: 1.05rem; font-weight: 800; }' +
+'.toolbar button { padding: 9px 18px; background: #fef3c7; color: #92400e; border: none; border-radius: 8px; font-weight: 800; cursor: pointer; font-family: inherit; font-size: .9rem; }' +
+'.title { text-align: center; font-size: 2rem; font-weight: 900; color: #14532d; margin: 8px 0 4px; }' +
+'.subtitle { text-align: center; font-size: .95rem; color: #6b7280; margin-bottom: 22px; }' +
+'.cat { margin-bottom: 22px; page-break-inside: avoid; }' +
+'.cat-title { font-size: 1.25rem; font-weight: 800; color: #14532d; margin: 0 0 10px; padding: 8px 14px; background: linear-gradient(90deg, #dcfce7, #f0fdf4); border-right: 5px solid #15803d; border-radius: 8px; }' +
+'.cat-count { font-size: .85rem; font-weight: 600; color: #6b7280; }' +
+'.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }' +
+'.card { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1.5px solid #e5e7eb; border-radius: 10px; background: #fff; page-break-inside: avoid; }' +
+'.img { width: 44px; height: 44px; flex-shrink: 0; border-radius: 8px; overflow: hidden; background: #f3f4f6; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; }' +
+'.img.placeholder { color: #9ca3af; }' +
+'.img img { width: 100%; height: 100%; object-fit: cover; }' +
+'.info { flex: 1; min-width: 0; }' +
+'.name { font-size: .92rem; font-weight: 700; color: #111827; line-height: 1.2; word-wrap: break-word; }' +
+'.meta { font-size: .72rem; color: #6b7280; margin-top: 2px; }' +
+'.price { font-size: 1.15rem; font-weight: 900; color: #14532d; white-space: nowrap; }' +
+'.price .cur { font-size: .85rem; font-weight: 700; margin-right: 2px; color: #15803d; }' +
+'@media print { .toolbar { display: none; } body { padding: 0; } }' +
+'</style></head><body>' +
+'<div class="toolbar"><h1>📦 רשימת מוצרים פעילים</h1><button onclick="window.print()">🖨️ שמור / הדפס</button></div>' +
+'<h1 class="title">📦 רשימת מוצרים פעילים</h1>' +
+'<div class="subtitle">' + totalCount + ' פריטים · הופק ' + today + '</div>' +
+body +
+'<script>setTimeout(function(){window.print();},600);<\/script>' +
+'</body></html>';
+
+  const w = window.open('', '_blank');
+  if (!w) { alert('חסום ע"י דפדפן — אפשר חלונות קופצים'); return; }
+  w.document.write(html);
+  w.document.close();
 }
 
 // ========== BULK PICKUP POINTS ==========
