@@ -310,6 +310,15 @@
           + הוסף מבצע
         </button>
       </div>
+      <div class="form-row full" style="border:2px solid #ede9fe;border-radius:12px;padding:14px;background:#faf5ff;margin-bottom:4px">
+        <label style="font-weight:800;color:#6b21a8;margin-bottom:6px;display:block">🎯 אפשרויות בחירה (וריאנטים)</label>
+        <div style="font-size:.8rem;color:#78716c;margin-bottom:10px">לדוגמה: מארז ירקות מעורב — חסה / פטרוזיליה / שמיר. הלקוח יוכל לבחור כמות מכל אופציה. השאר ריק אם המוצר לא צריך וריאנטים.</div>
+        <div id="fVariantsContainer"></div>
+        <button type="button" onclick="addInvVariantRow()"
+          style="margin-top:8px;padding:6px 14px;background:#f5f3ff;color:#6b21a8;border:1.5px solid #c4b5fd;border-radius:8px;font-size:.83rem;font-weight:700;cursor:pointer">
+          + הוסף אפשרות
+        </button>
+      </div>
       <div class="form-row full">
         <label>📍 נקודות חלוקה (בחר לאיזה נקודות המוצר שייך)</label>
         <div id="fPickupPointsContainer" style="display:flex;gap:8px;flex-wrap:wrap;padding:10px;border:1.5px solid #e5e7eb;border-radius:8px;background:#f9fafb;margin-bottom:12px">
@@ -780,6 +789,7 @@ function openEditModal(id) {
   document.getElementById('fFeatured').checked = item.isFeatured || false;
   document.getElementById('fSortOrder').value = item.sortOrder || 0;
   populateQuantityDeals(item.quantityDeals || []);
+  populateInvVariants(item);
   const unlimitedCb = document.getElementById('fUnlimited');
   if (unlimitedCb) {
     unlimitedCb.checked = !!item.hasUnlimitedStock;
@@ -810,6 +820,7 @@ function clearForm() {
   document.getElementById('fFeatured').checked = false;
   document.getElementById('fSortOrder').value = '0';
   populateQuantityDeals([]);
+  populateInvVariants({ variants: [] });
   document.getElementById('fQty').disabled = false;
 }
 
@@ -944,7 +955,8 @@ async function saveItem() {
     isFeatured: document.getElementById('fFeatured').checked,
     sortOrder: parseInt(document.getElementById('fSortOrder').value) || 0,
     hasUnlimitedStock: document.getElementById('fUnlimited') ? !!document.getElementById('fUnlimited').checked : false,
-    quantityDeals: getQuantityDeals()
+    quantityDeals: getQuantityDeals(),
+    variants: getInvVariants()
   };
   try {
     const url = editingId ? API+'/inventory/'+editingId : API+'/inventory';
@@ -989,7 +1001,8 @@ async function syncToShop(item) {
       hasUnlimitedStock: !!item.isUnlimited,
       stock: item.isUnlimited ? 9999 : (item.quantity || 0),
       description: item.notes || '',
-      unit: item.unit || ''
+      unit: item.unit || '',
+      variants: item.variants || []
     };
     if (productId) {
       const r = await fetch('/api/shop/products/' + productId, { method: 'PUT', headers, body: JSON.stringify(prodBody) });
@@ -1316,23 +1329,95 @@ async function applyBulkSupplier() {
   showToast('✅ ' + ids.length + ' מוצרים שויכו ל' + supplierName, '#15803d');
 }
 
-// ========== EXPORT ACTIVE ITEMS TO PDF (printable price list) ==========
+// ========== VARIANTS (אפשרויות בחירה) ==========
+function addInvVariantRow(name, imageUrl, priceModifier) {
+  const container = document.getElementById('fVariantsContainer');
+  if (!container) return;
+  const row = document.createElement('div');
+  row.className = 'inv-variant-row';
+  row.style.cssText = 'display:flex;gap:8px;align-items:center;background:white;border:1.5px solid #e9d5ff;border-radius:10px;padding:8px;margin-bottom:8px';
+  const imgHtml = imageUrl
+    ? '<img src="' + String(imageUrl).replace(/"/g,'&quot;') + '" style="width:42px;height:42px;object-fit:cover;border-radius:8px;border:1px solid #e5e7eb">'
+    : '<div style="width:42px;height:42px;border-radius:8px;border:2px dashed #c4b5fd;display:flex;align-items:center;justify-content:center;font-size:1.1rem;color:#a78bfa">📷</div>';
+  row.innerHTML =
+    '<div class="iv-img-wrap" style="cursor:pointer;flex-shrink:0" onclick="this.parentElement.querySelector(\'.iv-file\').click()" title="לחץ להעלאת תמונה">' + imgHtml + '</div>' +
+    '<input type="file" class="iv-file" accept="image/*" style="display:none" onchange="uploadInvVariantImage(this)">' +
+    '<input type="hidden" class="iv-img" value="' + String(imageUrl||'').replace(/"/g,'&quot;') + '">' +
+    '<input type="text" class="iv-name" placeholder="שם האפשרות (למשל: חסה)" value="' + String(name||'').replace(/"/g,'&quot;') + '" style="flex:2;min-width:0;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-family:inherit;font-size:.88rem">' +
+    '<input type="number" class="iv-mod" placeholder="תוספת ₪" step="0.01" value="' + (priceModifier || 0) + '" title="תוספת מחיר ביחס למחיר הבסיס (אופציונלי)" style="width:90px;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-family:inherit;font-size:.88rem">' +
+    '<button type="button" onclick="this.closest(\'.inv-variant-row\').remove()" style="padding:7px 11px;background:#fee2e2;color:#991b1b;border:none;border-radius:8px;cursor:pointer;font-weight:800;font-size:.85rem">✕</button>';
+  container.appendChild(row);
+}
+
+function getInvVariants() {
+  const rows = document.querySelectorAll('#fVariantsContainer .inv-variant-row');
+  const out = [];
+  rows.forEach(function(r) {
+    const name = (r.querySelector('.iv-name').value || '').trim();
+    if (!name) return;
+    const img = (r.querySelector('.iv-img').value || '').trim();
+    const mod = parseFloat(r.querySelector('.iv-mod').value) || 0;
+    const v = { name: name, price_modifier: mod };
+    if (img) v.imageUrl = img;
+    out.push(v);
+  });
+  return out;
+}
+
+async function uploadInvVariantImage(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const row = input.closest('.inv-variant-row');
+  const wrap = row.querySelector('.iv-img-wrap');
+  const hidden = row.querySelector('.iv-img');
+  wrap.innerHTML = '<div style="width:42px;height:42px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.7rem;color:#6b21a8;background:#f5f3ff">⏳</div>';
+  try {
+    const formData = new FormData();
+    formData.append('image', file);
+    const res = await fetch(API + '/upload-image', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (data.ok && data.imageUrl) {
+      hidden.value = data.imageUrl;
+      wrap.innerHTML = '<img src="' + data.imageUrl.replace(/"/g,'&quot;') + '" style="width:42px;height:42px;object-fit:cover;border-radius:8px;border:1px solid #e5e7eb">';
+    } else {
+      alert('שגיאה בהעלאת תמונה');
+      wrap.innerHTML = '<div style="width:42px;height:42px;border-radius:8px;border:2px dashed #c4b5fd;display:flex;align-items:center;justify-content:center;font-size:1.1rem;color:#a78bfa">📷</div>';
+    }
+  } catch(e) {
+    alert('שגיאה בהעלאת תמונה: ' + e.message);
+  }
+}
+
+async function populateInvVariants(item) {
+  const container = document.getElementById('fVariantsContainer');
+  if (!container) return;
+  container.innerHTML = '';
+  let variants = (item && item.variants) || [];
+  // If no local variants but a shop product exists, fetch from shop and migrate
+  if ((!variants || !variants.length) && item && item.shopProductId) {
+    try {
+      const all = await fetch('/api/shop/products', { headers: { 'x-admin-password': 'yedidya2024' } }).then(r => r.json());
+      const sp = (all || []).find(function(p) { return p._id === item.shopProductId; });
+      if (sp && sp.variants && sp.variants.length) variants = sp.variants;
+    } catch(e) { console.warn('fetch shop product variants failed', e); }
+  }
+  variants.forEach(function(v) { addInvVariantRow(v.name, v.imageUrl, v.price_modifier); });
+}
+
+// ========== EXPORT ACTIVE ITEMS TO PDF (one product per page, name only) ==========
 function exportActiveItemsPDF() {
   const items = (window._allItems || allItems || []).filter(function(i) {
     return i.isActive !== false && i.isActive !== null;
   });
   if (!items.length) { alert('אין פריטים פעילים לייצוא'); return; }
 
-  // Group by category, sort categories + items in Hebrew
-  const grouped = {};
-  items.forEach(function(it) {
-    const cat = it.category || 'כללי';
-    if (!grouped[cat]) grouped[cat] = [];
-    grouped[cat].push(it);
-  });
-  const cats = Object.keys(grouped).sort(function(a, b) { return a.localeCompare(b, 'he'); });
-  cats.forEach(function(c) {
-    grouped[c].sort(function(a, b) { return (a.name || '').localeCompare(b.name || '', 'he'); });
+  // Sort: category Hebrew, then name Hebrew (so printed pages stack in a logical order)
+  const sorted = items.slice().sort(function(a, b) {
+    const ca = (a.category || 'כללי');
+    const cb = (b.category || 'כללי');
+    const cc = ca.localeCompare(cb, 'he');
+    if (cc !== 0) return cc;
+    return (a.name || '').localeCompare(b.name || '', 'he');
   });
 
   function esc(s) {
@@ -1340,68 +1425,36 @@ function exportActiveItemsPDF() {
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
-  function fmtPrice(p) {
-    const n = Number(p);
-    if (!isFinite(n) || n <= 0) return '—';
-    return (n % 1 === 0) ? String(n) : n.toFixed(2).replace(/\.?0+$/, '');
-  }
 
-  const today = new Date().toLocaleDateString('he-IL');
-  const totalCount = items.length;
-
+  // Build one full A4 page per product, name only, big and centered
   let body = '';
-  cats.forEach(function(cat) {
-    body += '<section class="cat">';
-    body += '<h2 class="cat-title">' + esc(cat) + ' <span class="cat-count">(' + grouped[cat].length + ')</span></h2>';
-    body += '<div class="grid">';
-    grouped[cat].forEach(function(it) {
-      const price = fmtPrice(it.sellPrice);
-      const unit = esc(it.unit || 'יח׳');
-      const img = it.image ? '<div class="img"><img src="' + esc(it.image) + '" onerror="this.style.display=\'none\'"></div>' : '<div class="img placeholder">📦</div>';
-      body += '<div class="card">' +
-        img +
-        '<div class="info">' +
-          '<div class="name">' + esc(it.name || '—') + '</div>' +
-          '<div class="meta">' + unit + '</div>' +
-        '</div>' +
-        '<div class="price">' + price + '<span class="cur">₪</span></div>' +
-      '</div>';
-    });
-    body += '</div></section>';
+  sorted.forEach(function(it, idx) {
+    const isLast = (idx === sorted.length - 1);
+    body += '<section class="page' + (isLast ? ' last' : '') + '">' +
+      '<div class="name-box"><div class="name">' + esc(it.name || '—') + '</div></div>' +
+    '</section>';
   });
 
   const html =
 '<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="UTF-8">' +
 '<title>רשימת מוצרים פעילים</title>' +
 '<style>' +
-'@page { size: A4; margin: 12mm 10mm; }' +
+'@page { size: A4; margin: 0; }' +
 '* { box-sizing: border-box; }' +
-'body { font-family: "Heebo", "Arial Hebrew", Arial, sans-serif; margin: 0; padding: 16px; color: #111827; background: #fff; direction: rtl; }' +
-'.toolbar { position: sticky; top: 0; background: #14532d; color: white; padding: 12px 18px; border-radius: 12px; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center; gap: 12px; box-shadow: 0 2px 12px rgba(20,83,45,.2); }' +
+'html, body { margin: 0; padding: 0; }' +
+'body { font-family: "Heebo", "Arial Hebrew", Arial, sans-serif; color: #111827; background: #f3f4f6; direction: rtl; }' +
+'.toolbar { position: sticky; top: 0; background: #14532d; color: white; padding: 12px 18px; display: flex; justify-content: space-between; align-items: center; gap: 12px; box-shadow: 0 2px 12px rgba(20,83,45,.2); z-index: 10; }' +
 '.toolbar h1 { margin: 0; font-size: 1.05rem; font-weight: 800; }' +
 '.toolbar button { padding: 9px 18px; background: #fef3c7; color: #92400e; border: none; border-radius: 8px; font-weight: 800; cursor: pointer; font-family: inherit; font-size: .9rem; }' +
-'.title { text-align: center; font-size: 2rem; font-weight: 900; color: #14532d; margin: 8px 0 4px; }' +
-'.subtitle { text-align: center; font-size: .95rem; color: #6b7280; margin-bottom: 22px; }' +
-'.cat { margin-bottom: 22px; page-break-inside: avoid; }' +
-'.cat-title { font-size: 1.25rem; font-weight: 800; color: #14532d; margin: 0 0 10px; padding: 8px 14px; background: linear-gradient(90deg, #dcfce7, #f0fdf4); border-right: 5px solid #15803d; border-radius: 8px; }' +
-'.cat-count { font-size: .85rem; font-weight: 600; color: #6b7280; }' +
-'.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }' +
-'.card { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1.5px solid #e5e7eb; border-radius: 10px; background: #fff; page-break-inside: avoid; }' +
-'.img { width: 44px; height: 44px; flex-shrink: 0; border-radius: 8px; overflow: hidden; background: #f3f4f6; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; }' +
-'.img.placeholder { color: #9ca3af; }' +
-'.img img { width: 100%; height: 100%; object-fit: cover; }' +
-'.info { flex: 1; min-width: 0; }' +
-'.name { font-size: .92rem; font-weight: 700; color: #111827; line-height: 1.2; word-wrap: break-word; }' +
-'.meta { font-size: .72rem; color: #6b7280; margin-top: 2px; }' +
-'.price { font-size: 1.15rem; font-weight: 900; color: #14532d; white-space: nowrap; }' +
-'.price .cur { font-size: .85rem; font-weight: 700; margin-right: 2px; color: #15803d; }' +
-'@media print { .toolbar { display: none; } body { padding: 0; } }' +
+'.page { width: 210mm; height: 297mm; background: #fff; margin: 16px auto; display: flex; align-items: center; justify-content: center; padding: 30mm 20mm; page-break-after: always; box-shadow: 0 1px 6px rgba(0,0,0,.08); }' +
+'.page.last { page-break-after: auto; }' +
+'.name-box { width: 100%; text-align: center; }' +
+'.name { font-size: 110pt; font-weight: 900; line-height: 1.15; color: #111827; word-wrap: break-word; word-break: break-word; }' +
+'@media print { body { background: #fff; } .toolbar { display: none; } .page { margin: 0; box-shadow: none; } }' +
 '</style></head><body>' +
-'<div class="toolbar"><h1>📦 רשימת מוצרים פעילים</h1><button onclick="window.print()">🖨️ שמור / הדפס</button></div>' +
-'<h1 class="title">📦 רשימת מוצרים פעילים</h1>' +
-'<div class="subtitle">' + totalCount + ' פריטים · הופק ' + today + '</div>' +
+'<div class="toolbar"><h1>📦 רשימת מוצרים פעילים — ' + sorted.length + ' פריטים</h1><button onclick="window.print()">🖨️ שמור / הדפס</button></div>' +
 body +
-'<script>setTimeout(function(){window.print();},600);<\/script>' +
+'<script>setTimeout(function(){window.print();},400);<\/script>' +
 '</body></html>';
 
   const w = window.open('', '_blank');
