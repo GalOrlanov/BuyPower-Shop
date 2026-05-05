@@ -1100,6 +1100,173 @@ router.get('/admin/sales-analytics', verifyShopToken, async (req, res) => {
   } catch (e) { console.error('sales-analytics error:', e); res.status(500).json({ error: e.message }); }
 });
 
+// ============================================================================
+// GROW RECONCILIATION — per-order detail with VAT breakdown
+//   GET /admin/grow-orders?from=&to=&weeks=&pickupPoint=
+// Returns one row per paid order with:
+//   - Grow asmachta (from grow_payments matched by orderId)
+//   - per-line vatType actually sent (always 1 today — bug to fix)
+//   - per-line vatType that *should* be sent (per inventory / heuristic)
+//   - per-line and per-order overcharge that flowed to the tax authority
+// Read-only — no DB writes.
+// ============================================================================
+router.get('/admin/grow-orders', verifyShopToken, async (req, res) => {
+  try {
+    const db = await getDb();
+    const { ObjectId } = require('mongodb');
+    const COUNTED_STATUSES = ['paid', 'collected', 'handled', 'confirmed', 'ready'];
+    const VAT_RATE = 18;
+    const VAT_FACTOR = VAT_RATE / (100 + VAT_RATE);
+
+    function toSunday(d) { const x = new Date(d); x.setHours(0,0,0,0); x.setDate(x.getDate() - x.getDay()); return x; }
+    function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+
+    // Resolve range (same shape as sales-analytics)
+    let from, to;
+    if (req.query.from && req.query.to) {
+      from = toSunday(new Date(req.query.from));
+      to = new Date(req.query.to + 'T23:59:59');
+    } else {
+      const weeks = Math.max(1, Math.min(52, parseInt(req.query.weeks) || 4));
+      const today = new Date();
+      const thisSun = toSunday(today);
+      from = addDays(thisSun, -(weeks - 1) * 7);
+      to = addDays(thisSun, 7); to.setMilliseconds(-1);
+    }
+
+    // VAT classification helpers (same heuristic as sales-analytics)
+    function isExemptInv(inv) {
+      if (!inv) return false;
+      if (inv.vatType === 'exempt') return true;
+      const cat = String(inv.category || '');
+      if (cat.includes('פירות') || cat.includes('ירקות')) return true;
+      return false;
+    }
+    const FRUIT_VEG_KEYWORDS = [
+      'חסה','מלפפון','עגבניה','עגבני','גזר','בצל','פלפל','קישוא','חציל','כרובית','כרוב','תות',
+      'מלון','אבטיח','אננס','ארטישוק','פומלה','תפוז','לימון','אפרסק','נקטרינה','שסק','תירס',
+      'בטטה','דלעת','שום','פטרוזיליה','כוסברה','כרפס','נענע','שמיר','סלק','מנגו','אבוקדו',
+      'בננה','ענבים','אגס','אפרסמון','רימון','גויאבה','תפוח אדמה','תפוח עץ','תפוח',
+      'ירקות','פירות','שרי','לובלו','שזיף','דובדבן','חבוש','ליצ׳י','ליצ\'י','מנדרינה'
+    ];
+    function looksLikeFruitVeg(name) {
+      if (!name) return false;
+      const n = String(name).trim();
+      return FRUIT_VEG_KEYWORDS.some(k => n.indexOf(k) >= 0);
+    }
+
+    // Pull data
+    const filter = { createdAt: { $gte: from, $lte: to }, status: { $in: COUNTED_STATUSES } };
+    if (req.query.pickupPoint) filter.pickupLocation = req.query.pickupPoint;
+
+    const [orders, inventory] = await Promise.all([
+      db.collection('shop_orders').find(filter).sort({ createdAt: -1 }).toArray(),
+      db.collection('shop_inventory').find({}, { projection: { name: 1, shopProductId: 1, vatType: 1, category: 1 } }).toArray()
+    ]);
+
+    // Inventory lookup
+    const invByShopId = {};
+    const invByName = {};
+    inventory.forEach(inv => {
+      if (inv.shopProductId) invByShopId[String(inv.shopProductId)] = inv;
+      if (inv.name) invByName[String(inv.name).trim()] = inv;
+    });
+
+    // Match orders to grow_payments
+    const orderIds = orders.map(o => String(o._id));
+    const payments = await db.collection('grow_payments').find({
+      orderId: { $in: orderIds }
+    }).toArray();
+    const paymentByOrder = {};
+    payments.forEach(p => { if (p.orderId) paymentByOrder[String(p.orderId)] = p; });
+
+    // Build per-order rows
+    const rows = orders.map(o => {
+      const oid = String(o._id);
+      const gp = paymentByOrder[oid] || null;
+
+      const items = (o.items || []).map(it => {
+        const qty = Number(it.qty) || 0;
+        const price = Number(it.price) || 0;
+        const gross = qty * price;
+        // Resolve vatType
+        const pid = it.productId || it.id;
+        let inv = null;
+        if (pid && invByShopId[String(pid)]) inv = invByShopId[String(pid)];
+        if (!inv && it.name && invByName[String(it.name).trim()]) inv = invByName[String(it.name).trim()];
+        const exempt = inv ? isExemptInv(inv) : looksLikeFruitVeg(it.name);
+
+        // What we ACTUALLY sent to Grow (hardcoded vatType: 1 in shop.routes.js — see line 2369)
+        const vatTypeSent = 1;
+        const vatTypeCorrect = exempt ? 0 : 1;
+
+        // VAT amounts (Grow extracts gross × 18/118 when vatType:1)
+        const vatSentToGrow = gross * VAT_FACTOR;          // What Grow recorded as VAT
+        const vatCorrect    = exempt ? 0 : gross * VAT_FACTOR; // What it should have been
+        const vatOvercharge = vatSentToGrow - vatCorrect;     // = the over-reporting
+
+        return {
+          name: it.name,
+          qty,
+          price,
+          gross,
+          vatExempt: exempt,
+          vatTypeSent,
+          vatTypeCorrect,
+          vatSentToGrow,
+          vatCorrect,
+          vatOvercharge,
+          mismatch: vatTypeSent !== vatTypeCorrect
+        };
+      });
+
+      const sums = items.reduce((acc, x) => {
+        acc.totalGross += x.gross;
+        acc.totalVatSentToGrow += x.vatSentToGrow;
+        acc.totalVatCorrect += x.vatCorrect;
+        acc.totalVatOvercharge += x.vatOvercharge;
+        if (x.mismatch) acc.mismatchCount++;
+        return acc;
+      }, { totalGross: 0, totalVatSentToGrow: 0, totalVatCorrect: 0, totalVatOvercharge: 0, mismatchCount: 0 });
+
+      return {
+        orderId: oid,
+        createdAt: o.createdAt,
+        paidAt: o.paidAt || null,
+        customerName: o.customerName || '',
+        customerPhone: o.phone || o.customerPhone || '',
+        pickupLocation: o.pickupLocation || '',
+        asmachta: gp ? (gp.asmachta || gp.growRef || null) : (o.growRef || null),
+        cardSuffix: gp ? gp.cardSuffix : (o.cardSuffix || ''),
+        cardBrand: gp ? gp.cardBrand : (o.cardBrand || ''),
+        totalAmount: Number(o.totalAmount) || 0,
+        items,
+        ...sums
+      };
+    });
+
+    // Range summary
+    const summary = rows.reduce((acc, r) => {
+      acc.orderCount++;
+      acc.totalGross += r.totalGross;
+      acc.totalVatSentToGrow += r.totalVatSentToGrow;
+      acc.totalVatCorrect += r.totalVatCorrect;
+      acc.totalVatOvercharge += r.totalVatOvercharge;
+      acc.mismatchOrders += r.mismatchCount > 0 ? 1 : 0;
+      acc.mismatchLines += r.mismatchCount;
+      if (!r.asmachta) acc.missingAsmachta++;
+      return acc;
+    }, { orderCount: 0, totalGross: 0, totalVatSentToGrow: 0, totalVatCorrect: 0, totalVatOvercharge: 0, mismatchOrders: 0, mismatchLines: 0, missingAsmachta: 0 });
+
+    res.json({
+      range: { from: from.toISOString(), to: to.toISOString() },
+      vatRate: VAT_RATE,
+      orders: rows,
+      summary
+    });
+  } catch (e) { console.error('grow-orders error:', e); res.status(500).json({ error: e.message }); }
+});
+
 // Report — list every order with credits, optionally filtered by date / pickup
 router.get('/admin/credits-report', verifyShopToken, async (req, res) => {
   try {

@@ -1124,6 +1124,7 @@ input:checked + .slider::before { transform: translateX(20px); }
               <button onclick="saSetView('weekly')"   id="saViewWeekly"   class="sa-rg-btn sa-rg-active">📅 דוח שבועי</button>
               <button onclick="saSetView('detailed')" id="saViewDetailed" class="sa-rg-btn">📋 טבלה מפורטת</button>
               <button onclick="saSetView('pivot')"    id="saViewPivot"    class="sa-rg-btn">🔢 טבלת Pivot</button>
+              <button onclick="saSetView('grow')"     id="saViewGrow"     class="sa-rg-btn">🧾 פירוט לגרו</button>
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap">
               <button onclick="saOpenProductFilter()" style="padding:8px 14px;background:#fef3c7;color:#92400e;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit;font-size:.84rem">🎯 בחר מוצרים</button>
@@ -6798,6 +6799,8 @@ function saUseCustomRange() {
 }
 
 async function loadSalesAnalytics() {
+  // New range/filters → invalidate the lazy-loaded grow data so we re-fetch when needed
+  window._saGrowData = null;
   const body = document.getElementById('saBody');
   body.innerHTML = '<div class="sa-empty">⏳ טוען נתונים...</div>';
   try {
@@ -6823,9 +6826,15 @@ function saSetView(v) {
   document.getElementById('saViewWeekly').classList.toggle('sa-rg-active', v === 'weekly');
   document.getElementById('saViewDetailed').classList.toggle('sa-rg-active', v === 'detailed');
   document.getElementById('saViewPivot').classList.toggle('sa-rg-active', v === 'pivot');
+  const gv = document.getElementById('saViewGrow'); if (gv) gv.classList.toggle('sa-rg-active', v === 'grow');
   // Reset detailed-table sort/filter state when switching
   if (v === 'detailed' && !window._saDetailed) {
     window._saDetailed = { sortKey: 'weekIdx', sortDir: 1, search: '', vatFilter: 'all' };
+  }
+  // Lazy-load grow data on first switch
+  if (v === 'grow' && !window._saGrowData) {
+    saLoadGrowOrders();
+    return;
   }
   saRender();
 }
@@ -7082,7 +7091,172 @@ function saRender() {
   // Body
   if (window._saState.view === 'weekly') saRenderWeekly();
   else if (window._saState.view === 'detailed') saRenderDetailed();
+  else if (window._saState.view === 'grow') saRenderGrow();
   else saRenderPivot();
+}
+
+// ===== Grow per-order detail view =====
+async function saLoadGrowOrders() {
+  const body = document.getElementById('saBody');
+  body.innerHTML = '<div class="sa-empty">⏳ טוען נתוני סליקה מגרו...</div>';
+  try {
+    let url = API + '/admin/grow-orders?';
+    if (window._saState.customRange) {
+      url += 'from=' + window._saState.customRange.from + '&to=' + window._saState.customRange.to;
+    } else {
+      url += 'weeks=' + window._saState.weeks;
+    }
+    const headers = (typeof authHeaders === 'function') ? authHeaders() : { 'Content-Type': 'application/json' };
+    const res = await fetch(url, { headers: headers });
+    if (!res.ok) { body.innerHTML = '<div class="sa-empty" style="color:#dc2626">שגיאה: ' + res.status + '</div>'; return; }
+    window._saGrowData = await res.json();
+    saRender();
+  } catch(e) {
+    body.innerHTML = '<div class="sa-empty" style="color:#dc2626">שגיאה: ' + e.message + '</div>';
+  }
+}
+
+function saRenderGrow() {
+  const data = window._saGrowData;
+  const body = document.getElementById('saBody');
+  if (!data) { saLoadGrowOrders(); return; }
+  if (!data.orders || !data.orders.length) {
+    body.innerHTML = '<div class="sa-empty">אין הזמנות בטווח הזה</div>';
+    return;
+  }
+  const s = data.summary;
+  let html =
+    '<div style="background:linear-gradient(135deg,#fef2f2,#fee2e2);border:2px solid #f87171;border-radius:12px;padding:14px;margin-bottom:14px">' +
+      '<div style="font-size:.88rem;font-weight:800;color:#991b1b;margin-bottom:4px">⚠️ סך הכל מע"מ עודף שדווח לרשויות דרך גרו</div>' +
+      '<div style="font-size:1.8rem;font-weight:900;color:#991b1b">' + _saFmt(s.totalVatOvercharge) + '₪</div>' +
+      '<div style="font-size:.78rem;color:#7f1d1d;margin-top:4px">' + s.mismatchOrders + ' הזמנות עם פערים · ' + s.mismatchLines + ' שורות מסומנות בטעות · ' + s.orderCount + ' סה"כ הזמנות</div>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px">' +
+      '<div class="sa-summary-card"><div class="v">' + s.orderCount + '</div><div class="l">סה"כ הזמנות</div></div>' +
+      '<div class="sa-summary-card"><div class="v">' + _saFmt(s.totalGross) + '₪</div><div class="l">סה"כ הכנסות</div></div>' +
+      '<div class="sa-summary-card" style="background:#fef3c7"><div class="v" style="color:#92400e">' + _saFmt(s.totalVatSentToGrow) + '₪</div><div class="l">מע"מ שדווח לגרו</div></div>' +
+      '<div class="sa-summary-card" style="background:#dcfce7"><div class="v" style="color:#15803d">' + _saFmt(s.totalVatCorrect) + '₪</div><div class="l">מע"מ נכון</div></div>' +
+      (s.missingAsmachta ? '<div class="sa-summary-card" style="background:#fef2f2"><div class="v" style="color:#dc2626">' + s.missingAsmachta + '</div><div class="l">⚠️ ללא אסמכתא</div></div>' : '') +
+    '</div>' +
+    '<div style="display:flex;gap:8px;margin-bottom:10px">' +
+      '<button onclick="saExportGrowExcel()" style="padding:8px 14px;background:#15803d;color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit;font-size:.84rem">📥 ייצוא Excel (לרואה חשבון)</button>' +
+    '</div>' +
+    '<div style="overflow-x:auto;max-height:75vh;overflow-y:auto"><table class="sa-tbl">' +
+      '<thead style="position:sticky;top:0;z-index:2"><tr>' +
+        '<th>תאריך</th>' +
+        '<th>אסמכתא</th>' +
+        '<th>שם לקוח</th>' +
+        '<th>נקודה</th>' +
+        '<th>פריטים</th>' +
+        '<th>סכום</th>' +
+        '<th style="color:#92400e">מע"מ שדווח</th>' +
+        '<th style="color:#15803d">מע"מ נכון</th>' +
+        '<th style="color:#991b1b">⚠️ עודף</th>' +
+        '<th></th>' +
+      '</tr></thead><tbody>';
+  data.orders.forEach(function(o, idx) {
+    const dt = new Date(o.createdAt).toLocaleDateString('he-IL');
+    const asmachta = o.asmachta || '—';
+    const overClass = o.totalVatOvercharge > 0 ? ' style="background:#fff7ed"' : '';
+    html += '<tr' + overClass + '>' +
+      '<td style="font-size:.82rem">' + dt + '</td>' +
+      '<td style="font-family:monospace;font-size:.82rem">' + _saEsc(asmachta) + '</td>' +
+      '<td>' + _saEsc(o.customerName) + '<div style="font-size:.72rem;color:#9ca3af">' + _saEsc(o.customerPhone) + '</div></td>' +
+      '<td style="font-size:.78rem;color:#6b7280">' + _saEsc((o.pickupLocation || '').split(' ')[0]) + '</td>' +
+      '<td class="num">' + (o.items || []).length + '</td>' +
+      '<td class="num">' + _saFmt(o.totalAmount) + '₪</td>' +
+      '<td class="num" style="color:#92400e">' + _saFmt(o.totalVatSentToGrow) + '₪</td>' +
+      '<td class="num" style="color:#15803d">' + _saFmt(o.totalVatCorrect) + '₪</td>' +
+      '<td class="num" style="color:#991b1b;font-weight:800">' + (o.totalVatOvercharge > 0 ? _saFmt(o.totalVatOvercharge) + '₪' : '—') + '</td>' +
+      '<td><button onclick="saToggleGrowItems(' + idx + ')" id="saGrowToggle_' + idx + '" style="padding:4px 10px;background:#eff6ff;color:#1d4ed8;border:none;border-radius:6px;font-size:.78rem;cursor:pointer;font-weight:700">פירוט</button></td>' +
+    '</tr>' +
+    '<tr id="saGrowItems_' + idx + '" style="display:none"><td colspan="10" style="background:#fafafa;padding:12px"><table style="width:100%;border-collapse:collapse;font-size:.82rem">' +
+      '<thead><tr style="background:#f3f4f6"><th style="padding:5px;text-align:right">מוצר</th><th style="padding:5px">כמות</th><th style="padding:5px">מחיר</th><th style="padding:5px">ברוטו</th><th style="padding:5px">מה נשלח</th><th style="padding:5px">היה צריך</th><th style="padding:5px;color:#991b1b">עודף מע"מ</th></tr></thead><tbody>' +
+      (o.items || []).map(function(it) {
+        const sent = it.vatTypeSent === 0 ? 'פטור' : 'חייב 18%';
+        const correct = it.vatTypeCorrect === 0 ? 'פטור' : 'חייב 18%';
+        const mismatchClass = it.mismatch ? ' style="background:#fef2f2"' : '';
+        return '<tr' + mismatchClass + '>' +
+          '<td style="padding:4px">' + _saEsc(it.name) + '</td>' +
+          '<td style="padding:4px;text-align:left">' + it.qty + '</td>' +
+          '<td style="padding:4px;text-align:left">' + _saFmt(it.price) + '₪</td>' +
+          '<td style="padding:4px;text-align:left">' + _saFmt(it.gross) + '₪</td>' +
+          '<td style="padding:4px;text-align:left;color:' + (it.mismatch ? '#dc2626' : '#374151') + '">' + sent + '</td>' +
+          '<td style="padding:4px;text-align:left;color:#15803d">' + correct + '</td>' +
+          '<td style="padding:4px;text-align:left;color:#991b1b;font-weight:800">' + (it.vatOvercharge > 0 ? _saFmt(it.vatOvercharge) + '₪' : '—') + '</td>' +
+        '</tr>';
+      }).join('') +
+    '</tbody></table></td></tr>';
+  });
+  html += '</tbody></table></div>';
+  body.innerHTML = html;
+}
+
+function saToggleGrowItems(idx) {
+  const row = document.getElementById('saGrowItems_' + idx);
+  const btn = document.getElementById('saGrowToggle_' + idx);
+  if (!row) return;
+  if (row.style.display === 'none') { row.style.display = 'table-row'; btn.textContent = 'הסתר'; }
+  else { row.style.display = 'none'; btn.textContent = 'פירוט'; }
+}
+
+function saExportGrowExcel() {
+  const data = window._saGrowData;
+  if (!data || typeof XLSX === 'undefined') { alert('אין נתונים'); return; }
+  const wb = XLSX.utils.book_new();
+  function _r(n) { return Math.round(Number(n) * 100) / 100; }
+
+  // Summary sheet
+  const s = data.summary;
+  const sumRows = [
+    ['דוח התאמה לגרו'],
+    ['טווח:', new Date(data.range.from).toLocaleDateString('he-IL') + ' – ' + new Date(data.range.to).toLocaleDateString('he-IL')],
+    ['מע"מ:', data.vatRate + '%'],
+    [],
+    ['⚠️ מע"מ עודף שדווח דרך גרו (החזר זכאי):', _r(s.totalVatOvercharge) + ' ₪'],
+    [],
+    ['סה"כ הזמנות:', s.orderCount],
+    ['הזמנות עם פערים:', s.mismatchOrders],
+    ['שורות בטעות:', s.mismatchLines],
+    ['ללא אסמכתא:', s.missingAsmachta],
+    [],
+    ['סה"כ הכנסות (ברוטו):', _r(s.totalGross)],
+    ['מע"מ שדווח לגרו (לפי הקוד הקיים):', _r(s.totalVatSentToGrow)],
+    ['מע"מ נכון לפי החוק:', _r(s.totalVatCorrect)]
+  ];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sumRows), 'סיכום');
+
+  // Orders sheet
+  const ordRows = [['תאריך', 'אסמכתא גרו', 'שם לקוח', 'טלפון', 'נקודה', 'מס\' פריטים', 'סכום ברוטו', 'מע"מ שדווח', 'מע"מ נכון', 'עודף']];
+  data.orders.forEach(function(o) {
+    ordRows.push([
+      new Date(o.createdAt).toLocaleDateString('he-IL'),
+      o.asmachta || '',
+      o.customerName, o.customerPhone, o.pickupLocation, (o.items || []).length,
+      _r(o.totalAmount),
+      _r(o.totalVatSentToGrow), _r(o.totalVatCorrect), _r(o.totalVatOvercharge)
+    ]);
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(ordRows), 'הזמנות');
+
+  // Lines sheet (every item from every order)
+  const lineRows = [['תאריך', 'אסמכתא', 'שם לקוח', 'מוצר', 'כמות', 'מחיר ליח׳', 'ברוטו', 'מה נשלח', 'היה צריך', 'מע"מ שדווח', 'מע"מ נכון', 'עודף']];
+  data.orders.forEach(function(o) {
+    (o.items || []).forEach(function(it) {
+      lineRows.push([
+        new Date(o.createdAt).toLocaleDateString('he-IL'),
+        o.asmachta || '',
+        o.customerName,
+        it.name, it.qty, _r(it.price), _r(it.gross),
+        it.vatTypeSent === 0 ? 'פטור' : 'חייב 18%',
+        it.vatTypeCorrect === 0 ? 'פטור' : 'חייב 18%',
+        _r(it.vatSentToGrow), _r(it.vatCorrect), _r(it.vatOvercharge)
+      ]);
+    });
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(lineRows), 'פירוט שורות');
+
+  XLSX.writeFile(wb, 'דוח-גרו-' + new Date().toLocaleDateString('he-IL').replace(/\//g, '-') + '.xlsx');
 }
 
 // ===== Detailed flat table — one row per (product × week with sales) =====
