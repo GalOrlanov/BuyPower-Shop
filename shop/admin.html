@@ -313,6 +313,7 @@ input:checked + .slider::before { transform: translateX(20px); }
       <button class="tab-btn" onclick="showTab('users'); loadUsers(); try{loadCrm()}catch(e){}">👥 משתמשים</button>
       <button class="tab-btn" onclick="showTab('payment');setPayDateRange('month')">💳 תשלום Grow</button>
       <button class="tab-btn" onclick="showTab('finance');initFinanceTab()">💰 פיננסים</button>
+      <button class="tab-btn" onclick="showTab('salesAnalytics');initSalesAnalytics()">📊 פירוט רכישת מוצרים</button>
       <button class="tab-btn" onclick="window.location.href='supplier.html'">🏭 ספקים</button>
     </div>
   </div>
@@ -1063,6 +1064,99 @@ input:checked + .slider::before { transform: translateX(20px); }
     </div>
     <!-- CRM merged into Users tab. Empty placeholder kept for any legacy code paths. -->
     <div id="tab-crm" class="tab-panel"></div>
+
+    <!-- SALES ANALYTICS TAB (פירוט רכישת מוצרים) -->
+    <div id="tab-salesAnalytics" class="tab-panel">
+      <div class="card" style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:14px">
+          <div class="card-title" style="margin:0">📊 פירוט רכישת מוצרים — דוח מע"מ</div>
+          <div style="font-size:.82rem;color:#6b7280">מע"מ 18% · שבוע = ראשון–שבת · רק הזמנות שולמו/נאספו</div>
+        </div>
+
+        <!-- Range picker -->
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
+          <button onclick="saSetRange(1)"  class="sa-rg-btn" id="saRgWk1">השבוע</button>
+          <button onclick="saSetRange(2)"  class="sa-rg-btn" id="saRgWk2">שבועיים</button>
+          <button onclick="saSetRange(4)"  class="sa-rg-btn sa-rg-active" id="saRgWk4">4 שבועות</button>
+          <button onclick="saSetRange(8)"  class="sa-rg-btn" id="saRgWk8">חודשיים</button>
+          <button onclick="saSetRange(12)" class="sa-rg-btn" id="saRgWk12">3 חודשים</button>
+          <span style="margin-right:8px;color:#6b7280">או טווח מותאם:</span>
+          <input type="date" id="saFrom" onchange="saUseCustomRange()" style="padding:7px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.85rem">
+          <span>—</span>
+          <input type="date" id="saTo" onchange="saUseCustomRange()" style="padding:7px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.85rem">
+          <button onclick="loadSalesAnalytics()" style="padding:9px 16px;background:#15803d;color:white;border:none;border-radius:8px;font-weight:800;cursor:pointer;font-family:inherit">🔍 הצג</button>
+        </div>
+
+        <style>
+          .sa-rg-btn { padding:8px 16px;border:1.5px solid #d1d5db;background:white;border-radius:20px;font-weight:700;cursor:pointer;font-family:inherit;font-size:.85rem;color:#374151 }
+          .sa-rg-btn.sa-rg-active { background:#15803d;color:white;border-color:#15803d }
+          .sa-summary-card { background:white;border:1.5px solid #e5e7eb;border-radius:12px;padding:14px 18px;text-align:center }
+          .sa-summary-card .v { font-size:1.5rem;font-weight:900;color:#111827 }
+          .sa-summary-card .l { font-size:.8rem;color:#6b7280;margin-top:4px }
+          .sa-week-card { background:white;border:1.5px solid #e5e7eb;border-radius:14px;padding:18px;margin-bottom:18px }
+          .sa-week-header { display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding-bottom:10px;margin-bottom:10px;border-bottom:2px solid #f3f4f6 }
+          .sa-week-title { font-size:1.05rem;font-weight:800;color:#14532d }
+          .sa-week-stats { display:flex;gap:14px;font-size:.82rem;color:#374151;flex-wrap:wrap }
+          .sa-week-stats b { color:#111827 }
+          .sa-tbl { width:100%;border-collapse:collapse;font-size:.86rem }
+          .sa-tbl th { background:#f9fafb;text-align:right;padding:7px 10px;font-weight:800;font-size:.78rem;color:#374151;border-bottom:2px solid #e5e7eb }
+          .sa-tbl td { padding:6px 10px;border-bottom:1px solid #f3f4f6;text-align:right }
+          .sa-tbl tr.exempt { background:#f0fdf4 }
+          .sa-tbl tr.taxable { background:#eff6ff }
+          .sa-tbl .num { font-weight:700;font-variant-numeric:tabular-nums }
+          .sa-pill { display:inline-block;padding:2px 9px;border-radius:12px;font-size:.72rem;font-weight:700 }
+          .sa-pill.exempt { background:#dcfce7;color:#15803d }
+          .sa-pill.taxable { background:#dbeafe;color:#1e40af }
+          .sa-empty { text-align:center;color:#9ca3af;padding:30px;font-size:.92rem }
+          .sa-prod-cb { width:18px;height:18px;accent-color:#15803d;cursor:pointer }
+        </style>
+
+        <!-- Summary cards (range total) -->
+        <div id="saRangeSummary" style="display:none;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:18px"></div>
+
+        <!-- Insights -->
+        <div id="saInsights" style="margin-bottom:14px"></div>
+
+        <!-- View toggle + filter + export -->
+        <div id="saControls" style="display:none;background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:12px;padding:12px;margin-bottom:14px">
+          <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between">
+            <div style="display:flex;gap:6px">
+              <button onclick="saSetView('weekly')" id="saViewWeekly" class="sa-rg-btn sa-rg-active">📅 דוח שבועי</button>
+              <button onclick="saSetView('pivot')"  id="saViewPivot"  class="sa-rg-btn">🔢 טבלת Pivot</button>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button onclick="saOpenProductFilter()" style="padding:8px 14px;background:#fef3c7;color:#92400e;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit;font-size:.84rem">🎯 בחר מוצרים</button>
+              <button onclick="saExportExcel()" style="padding:8px 14px;background:#15803d;color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit;font-size:.84rem">📥 Excel</button>
+              <button onclick="saExportPDF()" style="padding:8px 14px;background:#7c3aed;color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit;font-size:.84rem">📄 PDF</button>
+            </div>
+          </div>
+          <div id="saFilterStatus" style="font-size:.78rem;color:#6b7280;margin-top:8px"></div>
+        </div>
+
+        <!-- Body (one of: empty / weekly / pivot) -->
+        <div id="saBody"><div class="sa-empty">בחר טווח ולחץ "הצג" להצגת הדוח</div></div>
+      </div>
+    </div>
+
+    <!-- Product filter modal (multi-select for sales analytics) -->
+    <div id="saProductModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center">
+      <div style="background:white;border-radius:16px;padding:20px;max-width:560px;width:92%;max-height:85vh;overflow-y:auto;display:flex;flex-direction:column">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div style="font-weight:800;font-size:1.05rem">🎯 בחר מוצרים להצגה בדוח</div>
+          <button onclick="document.getElementById('saProductModal').style.display='none'" style="border:none;background:none;font-size:1.5rem;cursor:pointer;color:#6b7280">✕</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <input type="text" id="saProdSearch" oninput="saRenderProductFilter()" placeholder="🔍 חיפוש..." style="flex:1;padding:8px 12px;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.88rem">
+          <button onclick="saSelectAllProducts(true)" style="padding:8px 12px;background:#dcfce7;color:#14532d;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:.82rem">סמן הכל</button>
+          <button onclick="saSelectAllProducts(false)" style="padding:8px 12px;background:#fee2e2;color:#991b1b;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:.82rem">נקה</button>
+        </div>
+        <div id="saProductFilterList" style="flex:1;overflow-y:auto;border:1.5px solid #e5e7eb;border-radius:8px;padding:8px"></div>
+        <div style="display:flex;gap:8px;margin-top:14px">
+          <button onclick="saApplyProductFilter()" style="flex:1;padding:11px;background:#15803d;color:white;border:none;border-radius:10px;font-weight:800;cursor:pointer;font-family:inherit">החל ✓</button>
+          <button onclick="document.getElementById('saProductModal').style.display='none'" style="padding:11px 18px;background:#f3f4f6;border:none;border-radius:10px;font-weight:700;cursor:pointer;font-family:inherit">ביטול</button>
+        </div>
+      </div>
+    </div>
 
     <!-- PICKUP TRACKING TAB -->
     <div id="tab-pickupTracking" class="tab-panel">
@@ -6661,6 +6755,498 @@ function switchFinanceTab(tab) {
 
 function initFinanceTab() {
   switchFinanceTab('profit');
+}
+
+// ============================================================================
+// SALES ANALYTICS TAB (פירוט רכישת מוצרים — דוח מע"מ)
+// ============================================================================
+window._saState = {
+  weeks: 4,
+  customRange: null, // {from, to}
+  data: null,
+  view: 'weekly',
+  selectedProductIds: null // null = all
+};
+
+function initSalesAnalytics() {
+  if (!window._saState.data) loadSalesAnalytics();
+}
+
+function saSetRange(weeks) {
+  window._saState.weeks = weeks;
+  window._saState.customRange = null;
+  // Highlight active button
+  ['saRgWk1','saRgWk2','saRgWk4','saRgWk8','saRgWk12'].forEach(function(id) {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('sa-rg-active');
+  });
+  const activeId = 'saRgWk' + weeks;
+  const activeEl = document.getElementById(activeId);
+  if (activeEl) activeEl.classList.add('sa-rg-active');
+  document.getElementById('saFrom').value = '';
+  document.getElementById('saTo').value = '';
+  loadSalesAnalytics();
+}
+
+function saUseCustomRange() {
+  const f = document.getElementById('saFrom').value;
+  const t = document.getElementById('saTo').value;
+  if (!f || !t) return;
+  window._saState.customRange = { from: f, to: t };
+  ['saRgWk1','saRgWk2','saRgWk4','saRgWk8','saRgWk12'].forEach(function(id) {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('sa-rg-active');
+  });
+}
+
+async function loadSalesAnalytics() {
+  const body = document.getElementById('saBody');
+  body.innerHTML = '<div class="sa-empty">⏳ טוען נתונים...</div>';
+  try {
+    let url = API + '/admin/sales-analytics?';
+    if (window._saState.customRange) {
+      url += 'from=' + window._saState.customRange.from + '&to=' + window._saState.customRange.to;
+    } else {
+      url += 'weeks=' + window._saState.weeks;
+    }
+    const headers = (typeof authHeaders === 'function') ? authHeaders() : { 'Content-Type': 'application/json' };
+    const res = await fetch(url, { headers: headers });
+    if (!res.ok) { body.innerHTML = '<div class="sa-empty" style="color:#dc2626">שגיאה בטעינה: ' + res.status + '</div>'; return; }
+    const data = await res.json();
+    window._saState.data = data;
+    saRender();
+  } catch(e) {
+    body.innerHTML = '<div class="sa-empty" style="color:#dc2626">שגיאה: ' + e.message + '</div>';
+  }
+}
+
+function saSetView(v) {
+  window._saState.view = v;
+  document.getElementById('saViewWeekly').classList.toggle('sa-rg-active', v === 'weekly');
+  document.getElementById('saViewPivot').classList.toggle('sa-rg-active', v === 'pivot');
+  saRender();
+}
+
+function _saFmt(n) {
+  const v = Math.round(Number(n) * 100) / 100;
+  if (v % 1 === 0) return v.toLocaleString('he-IL');
+  return v.toFixed(2);
+}
+function _saWk(d) {
+  const x = new Date(d);
+  return x.getDate() + '/' + (x.getMonth() + 1);
+}
+function _saEsc(s) {
+  return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function _saFilteredProducts() {
+  const data = window._saState.data;
+  if (!data) return [];
+  const sel = window._saState.selectedProductIds;
+  if (!sel) return data.products;
+  const set = new Set(sel);
+  return data.products.filter(function(p) { return set.has(p.inventoryId); });
+}
+
+function saRender() {
+  const data = window._saState.data;
+  if (!data) return;
+
+  // Range summary cards (always reflect *filtered* selection)
+  const products = _saFilteredProducts();
+  const summary = products.reduce(function(acc, p) {
+    acc.totalQty += p.totalQty;
+    acc.totalGross += p.totalGross;
+    acc.totalNet += p.totalNet;
+    acc.totalVat += p.totalVat;
+    acc.totalVatErr += p.totalVatErr || 0;
+    acc.totalCost += p.totalCost;
+    acc.totalProfit += p.totalProfit;
+    if (p.vatExempt) acc.exemptGross += p.totalGross;
+    else acc.taxableGross += p.totalGross;
+    return acc;
+  }, { totalQty:0, totalGross:0, totalNet:0, totalVat:0, totalVatErr:0, totalCost:0, totalProfit:0, exemptGross:0, taxableGross:0 });
+
+  // Big highlight banner for refundable VAT (the whole point of the report)
+  const refundEl = document.getElementById('saRangeSummary');
+  refundEl.style.display = 'grid';
+  refundEl.innerHTML =
+    '<div class="sa-summary-card" style="grid-column:1/-1;background:linear-gradient(135deg,#fef2f2,#fee2e2);border:2px solid #f87171;padding:18px">' +
+      '<div style="font-size:.88rem;font-weight:800;color:#991b1b;margin-bottom:4px">⚠️ מע"מ שנגבה בטעות על פירות וירקות (החזר זכאי)</div>' +
+      '<div style="font-size:2.2rem;font-weight:900;color:#991b1b">' + _saFmt(summary.totalVatErr) + '₪</div>' +
+      '<div style="font-size:.78rem;color:#7f1d1d;margin-top:4px">חושב כברוטו פטור × 18/118 — סכום שאמור היה להיות 0₪ לפי החוק</div>' +
+    '</div>' +
+    '<div class="sa-summary-card"><div class="v">' + _saFmt(summary.totalGross) + '₪</div><div class="l">סה"כ הכנסות (ברוטו)</div></div>' +
+    '<div class="sa-summary-card" style="background:#f0fdf4"><div class="v" style="color:#15803d">' + _saFmt(summary.exemptGross) + '₪</div><div class="l">פטור ממע"מ</div></div>' +
+    '<div class="sa-summary-card" style="background:#eff6ff"><div class="v" style="color:#1e40af">' + _saFmt(summary.taxableGross) + '₪</div><div class="l">חייב מע"מ (ברוטו)</div></div>' +
+    '<div class="sa-summary-card" style="background:#fef3c7"><div class="v" style="color:#92400e">' + _saFmt(summary.totalVat) + '₪</div><div class="l">מע"מ תקין (חייבים)</div></div>' +
+    '<div class="sa-summary-card"><div class="v">' + _saFmt(summary.totalCost) + '₪</div><div class="l">עלות קנייה</div></div>' +
+    '<div class="sa-summary-card" style="background:#fef2f2"><div class="v" style="color:#15803d">' + _saFmt(summary.totalProfit) + '₪</div><div class="l">רווח (ברוטו - עלות)</div></div>';
+
+  // Insights
+  const insEl = document.getElementById('saInsights');
+  if (data.insights && data.insights.length) {
+    insEl.innerHTML = '<div style="background:#fffbeb;border:1.5px solid #fde68a;border-radius:12px;padding:12px 16px"><div style="font-weight:800;color:#92400e;margin-bottom:6px">💡 תובנות</div>' +
+      data.insights.map(function(i) { return '<div style="font-size:.88rem;margin:3px 0">' + i.icon + ' <b>' + _saEsc(i.label) + ':</b> ' + _saEsc(i.text) + '</div>'; }).join('') +
+      '</div>';
+  } else { insEl.innerHTML = ''; }
+
+  // Filter status
+  document.getElementById('saControls').style.display = 'block';
+  const sel = window._saState.selectedProductIds;
+  const total = data.products.length;
+  document.getElementById('saFilterStatus').textContent =
+    sel ? ('מציג ' + sel.length + ' מתוך ' + total + ' מוצרים. ' + (data.unmatched.length ? data.unmatched.length + ' פריטים לא מזוהים. ' : '')) :
+          ('מציג ' + total + ' מוצרים. ' + (data.unmatched.length ? data.unmatched.length + ' פריטים לא מזוהים. ' : ''));
+
+  // Body
+  if (window._saState.view === 'weekly') saRenderWeekly();
+  else saRenderPivot();
+}
+
+function saRenderWeekly() {
+  const data = window._saState.data;
+  const products = _saFilteredProducts();
+  const body = document.getElementById('saBody');
+  if (!products.length) { body.innerHTML = '<div class="sa-empty">אין נתוני מכירות בטווח שנבחר</div>'; return; }
+
+  let html = '';
+  data.weeks.forEach(function(w, idx) {
+    // Build weekly product list (only products with sales in this week)
+    const weekItems = products.map(function(p) {
+      const wd = p.weekly[idx];
+      return { p: p, wd: wd };
+    }).filter(function(x) { return x.wd.qty > 0; });
+    if (!weekItems.length) return;
+
+    // Sort: exempt first, then taxable, alphabetical within each
+    weekItems.sort(function(a, b) {
+      if (a.p.vatExempt !== b.p.vatExempt) return a.p.vatExempt ? -1 : 1;
+      return (a.p.name || '').localeCompare(b.p.name || '', 'he');
+    });
+
+    const wkSum = weekItems.reduce(function(acc, x) {
+      acc.gross += x.wd.gross; acc.net += x.wd.net; acc.vat += x.wd.vat;
+      acc.vatErr += x.wd.vatErr || 0;
+      acc.qty += x.wd.qty;
+      if (x.p.vatExempt) acc.exemptGross += x.wd.gross;
+      else acc.taxableGross += x.wd.gross;
+      return acc;
+    }, { qty:0, gross:0, net:0, vat:0, vatErr:0, exemptGross:0, taxableGross:0 });
+
+    html += '<div class="sa-week-card">' +
+      '<div class="sa-week-header">' +
+        '<div class="sa-week-title">📅 שבוע ' + _saWk(w.weekStart) + ' – ' + _saWk(w.weekEnd) + '</div>' +
+        '<div class="sa-week-stats">' +
+          '<div>📦 <b>' + wkSum.qty + '</b> יח׳</div>' +
+          '<div>💰 ברוטו: <b>' + _saFmt(wkSum.gross) + '₪</b></div>' +
+          '<div style="color:#15803d">💚 פטור: <b>' + _saFmt(wkSum.exemptGross) + '₪</b></div>' +
+          '<div style="color:#1e40af">💙 חייב: <b>' + _saFmt(wkSum.taxableGross) + '₪</b></div>' +
+          '<div style="color:#92400e">📊 מע"מ תקין: <b>' + _saFmt(wkSum.vat) + '₪</b></div>' +
+          (wkSum.vatErr > 0 ? '<div style="color:#991b1b">⚠️ נגבה בטעות: <b>' + _saFmt(wkSum.vatErr) + '₪</b></div>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div style="overflow-x:auto"><table class="sa-tbl">' +
+        '<thead><tr>' +
+          '<th>מוצר</th>' +
+          '<th>קטגוריה</th>' +
+          '<th>סוג מע"מ</th>' +
+          '<th>כמות</th>' +
+          '<th>מחיר ליח׳</th>' +
+          '<th>סה"כ ברוטו</th>' +
+          '<th>נטו</th>' +
+          '<th>מע"מ תקין</th>' +
+          '<th style="color:#991b1b">⚠️ נגבה בטעות</th>' +
+        '</tr></thead><tbody>' +
+        weekItems.map(function(x) {
+          const p = x.p, wd = x.wd;
+          const unitPrice = wd.qty > 0 ? wd.gross / wd.qty : 0;
+          const cls = p.vatExempt ? 'exempt' : 'taxable';
+          const pill = p.vatExempt ? '<span class="sa-pill exempt">פטור</span>' : '<span class="sa-pill taxable">חייב 18%</span>';
+          const inactiveTag = (p.isInactive || p.isSynthetic) ? '<span style="font-size:.7rem;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:8px;margin-right:4px" title="המוצר אינו פעיל היום במלאי">🗂️ ארכיון</span>' : '';
+          return '<tr class="' + cls + '">' +
+            '<td>' + _saEsc(p.name) + inactiveTag + '</td>' +
+            '<td style="color:#6b7280">' + _saEsc(p.category) + '</td>' +
+            '<td>' + pill + '</td>' +
+            '<td class="num">' + wd.qty + '</td>' +
+            '<td class="num">' + _saFmt(unitPrice) + '₪</td>' +
+            '<td class="num">' + _saFmt(wd.gross) + '₪</td>' +
+            '<td class="num">' + _saFmt(wd.net) + '₪</td>' +
+            '<td class="num" style="color:#92400e">' + _saFmt(wd.vat) + '₪</td>' +
+            '<td class="num" style="color:#991b1b;font-weight:800">' + ((wd.vatErr || 0) > 0 ? _saFmt(wd.vatErr) + '₪' : '—') + '</td>' +
+          '</tr>';
+        }).join('') +
+      '</tbody></table></div>' +
+    '</div>';
+  });
+  if (!html) html = '<div class="sa-empty">אין נתוני מכירות בטווח שנבחר</div>';
+  body.innerHTML = html;
+}
+
+function saRenderPivot() {
+  const data = window._saState.data;
+  const products = _saFilteredProducts();
+  const body = document.getElementById('saBody');
+  if (!products.length) { body.innerHTML = '<div class="sa-empty">אין נתוני מכירות בטווח שנבחר</div>'; return; }
+
+  // Heatmap helper — qty cell colored by intensity vs row max
+  function heatColor(qty, max) {
+    if (!qty || !max) return '';
+    const intensity = Math.min(1, qty / max);
+    const lightness = 95 - intensity * 35; // 95..60
+    return 'background:hsl(140,55%,' + lightness + '%);font-weight:800';
+  }
+
+  let html = '<div style="overflow-x:auto"><table class="sa-tbl"><thead><tr>' +
+    '<th>מוצר</th>' +
+    '<th>מע"מ</th>' +
+    '<th>עלות</th>' +
+    '<th>מכירה</th>' +
+    data.weeks.map(function(w) { return '<th>' + _saWk(w.weekStart) + '–' + _saWk(w.weekEnd) + '</th>'; }).join('') +
+    '<th>סה"כ יח׳</th>' +
+    '<th>הכנסה</th>' +
+    '<th>מע"מ תקין</th>' +
+    '<th style="color:#991b1b">⚠️ נגבה בטעות</th>' +
+    '<th>רווח</th>' +
+    '</tr></thead><tbody>';
+
+  products.forEach(function(p) {
+    const max = Math.max.apply(null, p.weekly.map(function(w) { return w.qty; }));
+    const pill = p.vatExempt ? '<span class="sa-pill exempt">פטור</span>' : '<span class="sa-pill taxable">18%</span>';
+    const inactiveTag = (p.isInactive || p.isSynthetic) ? '<span style="font-size:.65rem;background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:6px;margin-right:4px" title="לא פעיל במלאי כיום">🗂️</span>' : '';
+    html += '<tr>' +
+      '<td><b>' + _saEsc(p.name) + '</b>' + inactiveTag + '<div style="font-size:.7rem;color:#9ca3af">' + _saEsc(p.category) + '</div></td>' +
+      '<td>' + pill + '</td>' +
+      '<td class="num">' + _saFmt(p.purchasePrice) + '₪</td>' +
+      '<td class="num">' + _saFmt(p.sellingPrice) + '₪</td>' +
+      p.weekly.map(function(w) { return '<td class="num" style="' + heatColor(w.qty, max) + '">' + (w.qty || '') + '</td>'; }).join('') +
+      '<td class="num"><b>' + p.totalQty + '</b></td>' +
+      '<td class="num">' + _saFmt(p.totalGross) + '₪</td>' +
+      '<td class="num" style="color:#92400e">' + _saFmt(p.totalVat) + '₪</td>' +
+      '<td class="num" style="color:#991b1b;font-weight:800">' + ((p.totalVatErr || 0) > 0 ? _saFmt(p.totalVatErr) + '₪' : '—') + '</td>' +
+      '<td class="num" style="color:#15803d"><b>' + _saFmt(p.totalProfit) + '₪</b></td>' +
+    '</tr>';
+  });
+  html += '</tbody></table></div>';
+  body.innerHTML = html;
+}
+
+// ===== Product filter modal =====
+function saOpenProductFilter() {
+  const data = window._saState.data;
+  if (!data) return;
+  document.getElementById('saProdSearch').value = '';
+  saRenderProductFilter();
+  document.getElementById('saProductModal').style.display = 'flex';
+}
+function saRenderProductFilter() {
+  const data = window._saState.data;
+  if (!data) return;
+  const q = (document.getElementById('saProdSearch').value || '').toLowerCase();
+  const sel = window._saState.selectedProductIds;
+  const list = document.getElementById('saProductFilterList');
+  // Group by category for readability
+  const byCat = {};
+  data.products.forEach(function(p) {
+    if (q && !(p.name || '').toLowerCase().includes(q) && !(p.category || '').toLowerCase().includes(q)) return;
+    const c = p.category || 'כללי';
+    if (!byCat[c]) byCat[c] = [];
+    byCat[c].push(p);
+  });
+  let html = '';
+  Object.keys(byCat).sort(function(a,b){ return a.localeCompare(b,'he'); }).forEach(function(cat) {
+    html += '<div style="font-weight:800;color:#15803d;background:#f0fdf4;padding:6px 10px;border-radius:6px;margin:8px 0 4px">' + _saEsc(cat) + '</div>';
+    byCat[cat].sort(function(a,b){ return (a.name||'').localeCompare(b.name||'','he'); }).forEach(function(p) {
+      const checked = !sel || sel.indexOf(p.inventoryId) >= 0;
+      html += '<label style="display:flex;align-items:center;gap:8px;padding:6px 10px;cursor:pointer;border-bottom:1px solid #f3f4f6">' +
+        '<input type="checkbox" class="sa-prod-cb" data-id="' + p.inventoryId + '"' + (checked ? ' checked' : '') + '>' +
+        '<span style="flex:1;font-size:.88rem">' + _saEsc(p.name) + '</span>' +
+        '<span style="font-size:.74rem;color:#6b7280">' + p.totalQty + ' יח׳ · ' + _saFmt(p.totalGross) + '₪</span>' +
+      '</label>';
+    });
+  });
+  list.innerHTML = html || '<div class="sa-empty">לא נמצאו מוצרים</div>';
+}
+function saSelectAllProducts(state) {
+  const cbs = document.querySelectorAll('#saProductFilterList .sa-prod-cb');
+  cbs.forEach(function(c) { c.checked = state; });
+}
+function saApplyProductFilter() {
+  const cbs = document.querySelectorAll('#saProductFilterList .sa-prod-cb');
+  const allCount = window._saState.data ? window._saState.data.products.length : 0;
+  const selected = Array.from(cbs).filter(function(c) { return c.checked; }).map(function(c) { return c.dataset.id; });
+  if (selected.length === allCount) window._saState.selectedProductIds = null; // "all" sentinel
+  else window._saState.selectedProductIds = selected;
+  document.getElementById('saProductModal').style.display = 'none';
+  saRender();
+}
+
+// ===== Excel export — multi-sheet =====
+function saExportExcel() {
+  const data = window._saState.data;
+  if (!data) return alert('אין נתונים');
+  if (typeof XLSX === 'undefined') return alert('ספריית Excel לא נטענה');
+  const products = _saFilteredProducts();
+  const wb = XLSX.utils.book_new();
+
+  function _round(n) { return Math.round(Number(n) * 100) / 100; }
+
+  // Sheet 1: סיכום (range-level + per-week)
+  const ts = data.weeklySummaries.reduce(function(a, w) {
+    a.qty += w.totalQty; a.gross += w.totalGross; a.exempt += w.exemptGross;
+    a.taxG += w.taxableGross; a.taxN += w.taxableNet; a.vat += w.taxableVat;
+    a.vatErr += w.totalVatErr || 0;
+    a.cost += w.totalCost; a.profit += w.totalProfit;
+    return a;
+  }, { qty:0,gross:0,exempt:0,taxG:0,taxN:0,vat:0,vatErr:0,cost:0,profit:0 });
+
+  const summaryRows = [
+    ['דוח מע"מ — סיכום כללי'],
+    ['טווח:', new Date(data.range.from).toLocaleDateString('he-IL') + ' – ' + new Date(data.range.to).toLocaleDateString('he-IL')],
+    ['מע"מ:', data.vatRate + '%'],
+    [],
+    ['⚠️ מע"מ שנגבה בטעות על פטורים (החזר זכאי):', _round(ts.vatErr) + ' ₪'],
+    [],
+    ['שבוע', 'יח׳', 'ברוטו', 'פטור ממע"מ', 'חייב ברוטו', 'חייב נטו', 'מע"מ תקין', 'נגבה בטעות', 'עלות', 'רווח']
+  ];
+  data.weeks.forEach(function(w, i) {
+    const ws = data.weeklySummaries[i];
+    summaryRows.push([
+      _saWk(w.weekStart) + '–' + _saWk(w.weekEnd),
+      ws.totalQty, _round(ws.totalGross), _round(ws.exemptGross),
+      _round(ws.taxableGross), _round(ws.taxableNet), _round(ws.taxableVat), _round(ws.totalVatErr || 0),
+      _round(ws.totalCost), _round(ws.totalProfit)
+    ]);
+  });
+  summaryRows.push([]);
+  summaryRows.push(['סה"כ', ts.qty, _round(ts.gross), _round(ts.exempt), _round(ts.taxG), _round(ts.taxN), _round(ts.vat), _round(ts.vatErr), _round(ts.cost), _round(ts.profit)]);
+  const ws1 = XLSX.utils.aoa_to_sheet(summaryRows);
+  XLSX.utils.book_append_sheet(wb, ws1, 'סיכום');
+
+  // Sheets 2..N: one per week
+  data.weeks.forEach(function(w, idx) {
+    const rows = [
+      ['שבוע ' + _saWk(w.weekStart) + '–' + _saWk(w.weekEnd)],
+      [],
+      ['מוצר', 'קטגוריה', 'סוג מע"מ', 'סטטוס', 'כמות', 'מחיר ליח׳', 'סה"כ ברוטו', 'נטו', 'מע"מ תקין', '⚠️ נגבה בטעות', 'עלות יח׳', 'עלות כוללת', 'רווח']
+    ];
+    const inWeek = products.map(function(p) { return { p: p, wd: p.weekly[idx] }; }).filter(function(x){ return x.wd.qty > 0; });
+    inWeek.sort(function(a,b){ if (a.p.vatExempt !== b.p.vatExempt) return a.p.vatExempt ? -1 : 1; return (a.p.name||'').localeCompare(b.p.name||'','he'); });
+    inWeek.forEach(function(x) {
+      const p = x.p, wd = x.wd;
+      const unitPrice = wd.qty > 0 ? wd.gross / wd.qty : 0;
+      const status = p.isSynthetic ? 'לא במלאי' : (p.isInactive ? 'לא פעיל' : 'פעיל');
+      rows.push([
+        p.name, p.category, (p.vatExempt ? 'פטור' : 'חייב 18%'), status,
+        wd.qty, _round(unitPrice), _round(wd.gross), _round(wd.net), _round(wd.vat), _round(wd.vatErr || 0),
+        _round(p.purchasePrice), _round(wd.cost), _round(wd.profit)
+      ]);
+    });
+    if (!inWeek.length) rows.push(['—', 'אין מכירות בשבוע זה']);
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, _saWk(w.weekStart) + '-' + _saWk(w.weekEnd));
+  });
+
+  // Sheet last: Pivot
+  const pivotHeaders = ['מוצר', 'קטגוריה', 'סוג מע"מ', 'סטטוס', 'עלות יח׳', 'מכירה יח׳']
+    .concat(data.weeks.map(function(w) { return _saWk(w.weekStart) + '–' + _saWk(w.weekEnd); }))
+    .concat(['סה"כ יח׳', 'ברוטו', 'נטו', 'מע"מ תקין', '⚠️ נגבה בטעות', 'עלות', 'רווח', 'מרווח %']);
+  const pivotRows = [pivotHeaders];
+  products.forEach(function(p) {
+    const status = p.isSynthetic ? 'לא במלאי' : (p.isInactive ? 'לא פעיל' : 'פעיל');
+    const row = [p.name, p.category, p.vatExempt ? 'פטור' : 'חייב 18%', status, _round(p.purchasePrice), _round(p.sellingPrice)];
+    p.weekly.forEach(function(w) { row.push(w.qty || 0); });
+    row.push(p.totalQty, _round(p.totalGross), _round(p.totalNet), _round(p.totalVat), _round(p.totalVatErr || 0), _round(p.totalCost), _round(p.totalProfit), p.marginPct);
+    pivotRows.push(row);
+  });
+  const wsP = XLSX.utils.aoa_to_sheet(pivotRows);
+  XLSX.utils.book_append_sheet(wb, wsP, 'Pivot');
+
+  XLSX.writeFile(wb, 'דוח-מעמ-' + new Date().toLocaleDateString('he-IL').replace(/\//g,'-') + '.xlsx');
+}
+
+// ===== PDF export =====
+function saExportPDF() {
+  const data = window._saState.data;
+  if (!data) return alert('אין נתונים');
+  const products = _saFilteredProducts();
+  const today = new Date().toLocaleDateString('he-IL');
+  const fromStr = new Date(data.range.from).toLocaleDateString('he-IL');
+  const toStr = new Date(data.range.to).toLocaleDateString('he-IL');
+
+  const summary = products.reduce(function(acc, p) {
+    acc.gross += p.totalGross; acc.vat += p.totalVat;
+    acc.vatErr += p.totalVatErr || 0;
+    acc.cost += p.totalCost; acc.profit += p.totalProfit;
+    if (p.vatExempt) acc.exempt += p.totalGross; else acc.tax += p.totalGross;
+    return acc;
+  }, { gross:0, vat:0, vatErr:0, cost:0, profit:0, exempt:0, tax:0 });
+
+  let body = '';
+  data.weeks.forEach(function(w, idx) {
+    const inWeek = products.map(function(p) { return { p: p, wd: p.weekly[idx] }; }).filter(function(x){ return x.wd.qty > 0; });
+    if (!inWeek.length) return;
+    inWeek.sort(function(a,b){ if (a.p.vatExempt !== b.p.vatExempt) return a.p.vatExempt ? -1 : 1; return (a.p.name||'').localeCompare(b.p.name||'','he'); });
+    const ws = inWeek.reduce(function(a,x){ a.gross += x.wd.gross; a.vat += x.wd.vat; a.vatErr += x.wd.vatErr || 0; a.qty += x.wd.qty; if (x.p.vatExempt) a.ex += x.wd.gross; else a.tx += x.wd.gross; return a; }, { qty:0,gross:0,vat:0,vatErr:0,ex:0,tx:0 });
+    body += '<section class="wk">' +
+      '<h2>📅 שבוע ' + _saWk(w.weekStart) + '–' + _saWk(w.weekEnd) + ' · ' + ws.qty + ' יח׳ · ברוטו ' + _saFmt(ws.gross) + '₪' + (ws.vatErr > 0 ? ' · ⚠️ נגבה בטעות ' + _saFmt(ws.vatErr) + '₪' : '') + '</h2>' +
+      '<table><thead><tr><th>מוצר</th><th>קטגוריה</th><th>סוג מע"מ</th><th>כמות</th><th>מחיר ליח׳</th><th>ברוטו</th><th>נטו</th><th>מע"מ תקין</th><th>נגבה בטעות</th></tr></thead><tbody>' +
+      inWeek.map(function(x) {
+        const p = x.p, wd = x.wd;
+        const unitPrice = wd.qty > 0 ? wd.gross / wd.qty : 0;
+        const archive = (p.isSynthetic || p.isInactive) ? ' 🗂️' : '';
+        return '<tr class="' + (p.vatExempt ? 'exempt' : 'taxable') + '"><td>' + _saEsc(p.name) + archive + '</td><td>' + _saEsc(p.category) + '</td><td>' + (p.vatExempt ? 'פטור' : 'חייב 18%') + '</td><td>' + wd.qty + '</td><td>' + _saFmt(unitPrice) + '₪</td><td>' + _saFmt(wd.gross) + '₪</td><td>' + _saFmt(wd.net) + '₪</td><td>' + _saFmt(wd.vat) + '₪</td><td style="color:#991b1b;font-weight:700">' + ((wd.vatErr || 0) > 0 ? _saFmt(wd.vatErr) + '₪' : '—') + '</td></tr>';
+      }).join('') +
+      '</tbody></table></section>';
+  });
+
+  const html =
+'<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="UTF-8"><title>דוח מע"מ ' + fromStr + ' – ' + toStr + '</title>' +
+'<style>' +
+'@page { size: A4; margin: 12mm 10mm; }' +
+'body { font-family: "Heebo","Arial Hebrew",Arial,sans-serif; color:#111827; direction:rtl; padding:8px }' +
+'.title { text-align:center; font-size:1.6rem; font-weight:900; color:#14532d; margin:6px 0 }' +
+'.subtitle { text-align:center; color:#6b7280; margin-bottom:14px; font-size:.92rem }' +
+'.summary { background:#f0fdf4; border:1.5px solid #86efac; border-radius:10px; padding:10px 14px; margin-bottom:18px; font-size:.92rem }' +
+'.summary .row { display:flex; justify-content:space-between; padding:3px 0 }' +
+'.summary b { color:#14532d }' +
+'.claim { background:linear-gradient(135deg,#fef2f2,#fee2e2); border:2px solid #f87171; border-radius:10px; padding:14px 16px; margin-bottom:14px; text-align:center }' +
+'.wk { margin-bottom:16px; page-break-inside: avoid }' +
+'.wk h2 { font-size:1rem; color:#14532d; background:#dcfce7; padding:7px 12px; border-radius:8px; margin:0 0 6px }' +
+'table { width:100%; border-collapse:collapse; font-size:.78rem }' +
+'th { background:#f3f4f6; text-align:right; padding:5px 7px; border:1px solid #d1d5db; font-weight:700 }' +
+'td { padding:4px 7px; border:1px solid #e5e7eb; text-align:right }' +
+'tr.exempt { background:#f0fdf4 }' +
+'tr.taxable { background:#eff6ff }' +
+'.toolbar { position:sticky; top:0; background:#14532d; color:white; padding:10px 14px; border-radius:10px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center }' +
+'.toolbar button { padding:7px 14px; background:#fef3c7; color:#92400e; border:none; border-radius:7px; font-weight:800; cursor:pointer; font-family:inherit }' +
+'@media print { .toolbar { display:none } body { padding:0 } }' +
+'</style></head><body>' +
+'<div class="toolbar"><span style="font-weight:800">📊 דוח מע"מ</span><button onclick="window.print()">🖨️ שמור / הדפס</button></div>' +
+'<h1 class="title">📊 דוח מע"מ — פירוט רכישת מוצרים</h1>' +
+'<div class="subtitle">' + fromStr + ' – ' + toStr + ' · הופק ' + today + ' · מע"מ ' + data.vatRate + '%</div>' +
+'<div class="claim">' +
+  '<div style="font-weight:800;color:#991b1b;margin-bottom:4px">⚠️ מע"מ שנגבה בטעות על פירות וירקות (החזר זכאי)</div>' +
+  '<div style="font-size:1.8rem;font-weight:900;color:#991b1b">' + _saFmt(summary.vatErr) + '₪</div>' +
+  '<div style="font-size:.78rem;color:#7f1d1d;margin-top:2px">חושב כברוטו פטור × 18/118</div>' +
+'</div>' +
+'<div class="summary">' +
+  '<div class="row"><span>סה"כ הכנסות (ברוטו):</span><b>' + _saFmt(summary.gross) + '₪</b></div>' +
+  '<div class="row" style="color:#15803d"><span>פטור ממע"מ:</span><b>' + _saFmt(summary.exempt) + '₪</b></div>' +
+  '<div class="row" style="color:#1e40af"><span>חייב מע"מ (ברוטו):</span><b>' + _saFmt(summary.tax) + '₪</b></div>' +
+  '<div class="row" style="color:#92400e"><span>מע"מ תקין (חייבים בלבד):</span><b>' + _saFmt(summary.vat) + '₪</b></div>' +
+  '<div class="row"><span>עלות קנייה:</span><b>' + _saFmt(summary.cost) + '₪</b></div>' +
+  '<div class="row" style="color:#15803d"><span>רווח:</span><b>' + _saFmt(summary.profit) + '₪</b></div>' +
+'</div>' +
+body +
+'<script>setTimeout(function(){window.print();},500);<\/script>' +
+'</body></html>';
+
+  const w = window.open('', '_blank');
+  if (!w) { alert('חסום ע"י דפדפן — אפשר חלונות קופצים'); return; }
+  w.document.write(html);
+  w.document.close();
 }
 </script>
 

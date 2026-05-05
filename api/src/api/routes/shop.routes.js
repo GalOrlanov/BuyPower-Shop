@@ -806,6 +806,300 @@ router.get('/admin/contacts', verifyShopToken, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ============================================================================
+// SALES ANALYTICS — per-product weekly sales + cost + profit
+// Week = Sunday 00:00 → Saturday 23:59 (Israel)
+// Includes only paid/collected/handled/confirmed/ready orders.
+// Uses purchasePriceAtOrder (snapshot) when present, falls back to current
+// inventory cost.
+// ============================================================================
+router.get('/admin/sales-analytics', verifyShopToken, async (req, res) => {
+  try {
+    const db = await getDb();
+    const COUNTED_STATUSES = ['paid', 'collected', 'handled', 'confirmed', 'ready'];
+
+    // VAT settings: prices on the site are gross (VAT-included). Israel rate = 18%.
+    const VAT_RATE = 18;
+    const VAT_FACTOR = VAT_RATE / (100 + VAT_RATE); // 18/118 — extracts VAT from gross
+    function isExempt(inv) {
+      if (!inv) return false;
+      if (inv.vatType === 'exempt') return true;
+      const cat = String(inv.category || '');
+      if (cat.includes('פירות') || cat.includes('ירקות')) return true;
+      return false;
+    }
+    // Heuristic for products NOT in current inventory (deleted/renamed).
+    // Used to classify unmatched order lines so כרובית/ארטישוק still show up exempt.
+    const FRUIT_VEG_KEYWORDS = [
+      'חסה','מלפפון','עגבניה','עגבני','גזר','בצל','פלפל','קישוא','חציל','כרובית','כרוב','תות',
+      'מלון','אבטיח','אננס','ארטישוק','פומלה','תפוז','לימון','אפרסק','נקטרינה','שסק','תירס',
+      'בטטה','דלעת','שום','פטרוזיליה','כוסברה','כרפס','נענע','שמיר','סלק','מנגו','אבוקדו',
+      'בננה','ענבים','אגס','אפרסמון','רימון','גויאבה','תפוח אדמה','תפוח עץ','תפוח','אגוז',
+      'ירקות','פירות','שרי','לובלו','שזיף','דובדבן','חבוש','ליצ׳י','ליצ\'י','מנדרינה',
+      'תות שדה','בצל סגול','פלפל אדום'
+    ];
+    function looksLikeFruitVeg(name) {
+      if (!name) return false;
+      const n = String(name).trim();
+      return FRUIT_VEG_KEYWORDS.some(function(k) { return n.indexOf(k) >= 0; });
+    }
+
+    // ---------- Resolve date range ----------
+    function toSunday(d) { // back to Sunday 00:00 of the week containing d
+      const x = new Date(d);
+      x.setHours(0, 0, 0, 0);
+      x.setDate(x.getDate() - x.getDay()); // getDay: 0=Sun
+      return x;
+    }
+    function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+
+    let from, to;
+    if (req.query.from && req.query.to) {
+      from = toSunday(new Date(req.query.from));
+      to = new Date(req.query.to + 'T23:59:59');
+    } else {
+      const weeks = Math.max(1, Math.min(52, parseInt(req.query.weeks) || 4));
+      const today = new Date();
+      const thisSun = toSunday(today);
+      from = addDays(thisSun, -(weeks - 1) * 7);
+      to = addDays(thisSun, 7); to.setMilliseconds(-1); // end of this Saturday
+    }
+
+    // Build week buckets
+    const weeks = [];
+    {
+      let cur = new Date(from);
+      while (cur <= to) {
+        const ws = new Date(cur);
+        const we = addDays(ws, 7); we.setMilliseconds(-1);
+        weeks.push({ weekStart: ws, weekEnd: we });
+        cur = addDays(cur, 7);
+      }
+    }
+    const weekIndex = (date) => {
+      const t = new Date(date).getTime();
+      for (let i = 0; i < weeks.length; i++) {
+        if (t >= weeks[i].weekStart.getTime() && t <= weeks[i].weekEnd.getTime()) return i;
+      }
+      return -1;
+    };
+
+    // ---------- Pull data ----------
+    const filter = { createdAt: { $gte: from, $lte: to }, status: { $in: COUNTED_STATUSES } };
+    if (req.query.pickupPoint) filter.pickupLocation = req.query.pickupPoint;
+
+    const [orders, inventory, shopProducts] = await Promise.all([
+      db.collection('shop_orders').find(filter).toArray(),
+      db.collection('shop_inventory').find({}).toArray(),
+      db.collection('shop_products').find({}, { projection: { name: 1 } }).toArray()
+    ]);
+
+    // Build lookup maps
+    // Inventory by shopProductId (preferred) and by name (fallback)
+    const invByShopId = {};
+    const invByName = {};
+    inventory.forEach(inv => {
+      if (inv.shopProductId) invByShopId[String(inv.shopProductId)] = inv;
+      if (inv.name) invByName[inv.name.trim()] = inv;
+    });
+    const shopProdById = {};
+    shopProducts.forEach(p => { shopProdById[String(p._id)] = p; });
+
+    // ---------- Aggregate ----------
+    // Each product (matched OR synthetic for unmatched names) gets one row with
+    // weekly breakdown and totals. We track:
+    //  - gross/net/vat/cost/profit (regular accounting)
+    //  - vatChargedInError = the VAT amount Grow extracted from EXEMPT items.
+    //    For exempt items: 0 in `vat` but non-zero in `vatChargedInError`.
+    //    This is the refund the user is claiming back.
+    const productStats = {};
+
+    orders.forEach(order => {
+      const wIdx = weekIndex(order.createdAt);
+      if (wIdx < 0) return;
+      (order.items || []).forEach(it => {
+        const qty = Number(it.qty) || 0;
+        if (qty <= 0) return;
+        const sellPrice = Number(it.price) || 0;
+
+        // Resolve to inventory item (active or inactive)
+        let inv = null;
+        const pid = it.productId || it.id;
+        if (pid && invByShopId[String(pid)]) inv = invByShopId[String(pid)];
+        if (!inv && it.name) {
+          const trimmed = String(it.name).trim();
+          if (invByName[trimmed]) inv = invByName[trimmed];
+        }
+
+        // Build / fetch product key
+        let key, row;
+        if (inv) {
+          key = String(inv._id);
+          if (!productStats[key]) {
+            productStats[key] = {
+              inventoryId: key,
+              shopProductId: inv.shopProductId || null,
+              name: inv.name,
+              category: inv.category || 'כללי',
+              unit: inv.unit || 'יח׳',
+              vatExempt: isExempt(inv),
+              isSynthetic: false,
+              isInactive: (inv.isActive === false || inv.isActive === null),
+              purchasePrice: Number(inv.purchasePrice) || 0,
+              sellingPrice: Number(inv.sellingPrice) || 0,
+              imageUrl: inv.imageUrl || '',
+              weekly: weeks.map(() => ({ qty: 0, gross: 0, net: 0, vat: 0, vatErr: 0, cost: 0, profit: 0 })),
+              totalQty: 0, totalGross: 0, totalNet: 0, totalVat: 0, totalVatErr: 0, totalCost: 0, totalProfit: 0
+            };
+          }
+          row = productStats[key];
+        } else {
+          // Synthetic product: no inventory record. Classify by name.
+          const cleanName = String(it.name || '(ללא שם)').trim();
+          key = '__syn__' + cleanName;
+          if (!productStats[key]) {
+            productStats[key] = {
+              inventoryId: key,
+              shopProductId: null,
+              name: cleanName,
+              category: 'לא במלאי',
+              unit: 'יח׳',
+              vatExempt: looksLikeFruitVeg(cleanName), // best-effort guess
+              isSynthetic: true, // flag so the UI can mark these
+              isInactive: false,
+              purchasePrice: 0,
+              sellingPrice: sellPrice, // best guess from order
+              imageUrl: '',
+              weekly: weeks.map(() => ({ qty: 0, gross: 0, net: 0, vat: 0, vatErr: 0, cost: 0, profit: 0 })),
+              totalQty: 0, totalGross: 0, totalNet: 0, totalVat: 0, totalVatErr: 0, totalCost: 0, totalProfit: 0
+            };
+          }
+          row = productStats[key];
+        }
+
+        // Cost = snapshot if available, else current inventory cost (0 for synthetics)
+        const unitCost = (it.purchasePriceAtOrder != null)
+          ? Number(it.purchasePriceAtOrder)
+          : (inv ? Number(inv.purchasePrice) || 0 : 0);
+
+        const lineGross = qty * sellPrice;
+        const exempt = row.vatExempt;
+        // Real-world VAT: exempt = 0, taxable = gross × 18/118
+        const lineVat = exempt ? 0 : lineGross * VAT_FACTOR;
+        // What Grow ACTUALLY charged as VAT regardless of exemption — for refund claim
+        const lineVatErr = exempt ? lineGross * VAT_FACTOR : 0;
+        const lineNet = lineGross - lineVat;
+        const lineCost = qty * unitCost;
+        const lineProfit = lineGross - lineCost;
+
+        const w = row.weekly[wIdx];
+        w.qty += qty;
+        w.gross += lineGross;
+        w.net += lineNet;
+        w.vat += lineVat;
+        w.vatErr += lineVatErr;
+        w.cost += lineCost;
+        w.profit += lineProfit;
+        row.totalQty += qty;
+        row.totalGross += lineGross;
+        row.totalNet += lineNet;
+        row.totalVat += lineVat;
+        row.totalVatErr += lineVatErr;
+        row.totalCost += lineCost;
+        row.totalProfit += lineProfit;
+      });
+    });
+
+    const products = Object.values(productStats).map(p => {
+      p.marginPct = p.totalGross > 0 ? Math.round((p.totalProfit / p.totalGross) * 1000) / 10 : 0;
+      return p;
+    }).sort((a, b) => b.totalQty - a.totalQty);
+
+    const summary = products.reduce((acc, p) => {
+      acc.totalQty += p.totalQty;
+      acc.totalGross += p.totalGross;
+      acc.totalNet += p.totalNet;
+      acc.totalVat += p.totalVat;
+      acc.totalVatErr += p.totalVatErr;
+      acc.totalCost += p.totalCost;
+      acc.totalProfit += p.totalProfit;
+      if (p.vatExempt) acc.exemptGross += p.totalGross;
+      else { acc.taxableGross += p.totalGross; acc.taxableNet += p.totalNet; acc.taxableVat += p.totalVat; }
+      return acc;
+    }, {
+      totalProducts: products.length,
+      totalQty: 0, totalGross: 0, totalNet: 0, totalVat: 0, totalVatErr: 0,
+      totalCost: 0, totalProfit: 0,
+      exemptGross: 0,
+      taxableGross: 0, taxableNet: 0, taxableVat: 0
+    });
+    summary.marginPct = summary.totalGross > 0 ? Math.round((summary.totalProfit / summary.totalGross) * 1000) / 10 : 0;
+
+    // Per-week summary (for the week-by-week VAT report)
+    const weeklySummaries = weeks.map((w, idx) => {
+      const sum = { weekStart: w.weekStart, weekEnd: w.weekEnd,
+        totalQty: 0, totalGross: 0, totalNet: 0, totalVat: 0, totalVatErr: 0,
+        totalCost: 0, totalProfit: 0,
+        exemptGross: 0, taxableGross: 0, taxableNet: 0, taxableVat: 0 };
+      products.forEach(p => {
+        const wd = p.weekly[idx];
+        sum.totalQty += wd.qty;
+        sum.totalGross += wd.gross;
+        sum.totalNet += wd.net;
+        sum.totalVat += wd.vat;
+        sum.totalVatErr += wd.vatErr;
+        sum.totalCost += wd.cost;
+        sum.totalProfit += wd.profit;
+        if (p.vatExempt) sum.exemptGross += wd.gross;
+        else { sum.taxableGross += wd.gross; sum.taxableNet += wd.net; sum.taxableVat += wd.vat; }
+      });
+      return sum;
+    });
+
+    // ---------- Insights ----------
+    const insights = [];
+    if (products.length >= 1 && weeks.length >= 2) {
+      const lastIdx = weeks.length - 1;
+      const prevIdx = lastIdx - 1;
+      const movers = products.map(p => {
+        const cur = p.weekly[lastIdx].qty;
+        const prv = p.weekly[prevIdx].qty;
+        return { name: p.name, cur, prv, diff: cur - prv, pct: prv > 0 ? Math.round(((cur - prv) / prv) * 100) : (cur > 0 ? 999 : 0) };
+      }).filter(m => m.cur > 0 || m.prv > 0);
+
+      const hottest = movers.filter(m => m.diff > 0).sort((a, b) => b.diff - a.diff)[0];
+      if (hottest) insights.push({ icon: '🔥', label: 'הכי חמים', text: hottest.name + ' — נמכרו ' + hottest.cur + ' השבוע' + (hottest.prv > 0 ? ' (' + (hottest.pct >= 0 ? '+' : '') + hottest.pct + '% משבוע שעבר)' : ' (חדש או חזרה)') });
+
+      const dropping = movers.filter(m => m.diff < 0 && m.prv >= 5).sort((a, b) => a.diff - b.diff)[0];
+      if (dropping) insights.push({ icon: '📉', label: 'ירידה משמעותית', text: dropping.name + ' — ירד מ-' + dropping.prv + ' ל-' + dropping.cur + ' (' + dropping.pct + '%)' });
+
+      const bestProfit = products.slice().sort((a, b) => b.totalProfit - a.totalProfit)[0];
+      if (bestProfit && bestProfit.totalProfit > 0) insights.push({ icon: '💰', label: 'הכי רווחי', text: bestProfit.name + ' — רווח ' + Math.round(bestProfit.totalProfit) + '₪' });
+    }
+
+    // ---------- Stale products (active, no sales in range) ----------
+    const soldKeys = new Set(products.map(p => p.inventoryId));
+    const staleProducts = inventory
+      .filter(i => i.isActive !== false && i.isActive !== null)
+      .filter(i => !soldKeys.has(String(i._id)))
+      .map(i => ({ name: i.name, category: i.category || 'כללי', vatExempt: isExempt(i), purchasePrice: Number(i.purchasePrice) || 0, sellingPrice: Number(i.sellingPrice) || 0 }));
+    if (staleProducts.length) {
+      insights.push({ icon: '⚠️', label: 'לא נמכר בטווח', text: staleProducts.length + ' מוצרים פעילים ללא מכירה' });
+    }
+
+    res.json({
+      range: { from: from.toISOString(), to: to.toISOString() },
+      vatRate: VAT_RATE,
+      weeks: weeks.map(w => ({ weekStart: w.weekStart.toISOString(), weekEnd: w.weekEnd.toISOString() })),
+      weeklySummaries: weeklySummaries.map(w => Object.assign({}, w, { weekStart: w.weekStart.toISOString(), weekEnd: w.weekEnd.toISOString() })),
+      products,
+      summary,
+      insights,
+      stale: staleProducts
+    });
+  } catch (e) { console.error('sales-analytics error:', e); res.status(500).json({ error: e.message }); }
+});
+
 // Report — list every order with credits, optionally filtered by date / pickup
 router.get('/admin/credits-report', verifyShopToken, async (req, res) => {
   try {
@@ -2161,6 +2455,26 @@ router.post('/payment/create', async (req, res) => {
       // payload where names get suffixed with " xN" and quantity is forced to 1.
       let orderItems;
       let orderTotal;
+
+      // Pre-load inventory once so we can stamp purchasePriceAtOrder on every line.
+      // This is the "cost snapshot" — without it, retroactive profit reports break
+      // whenever a supplier price changes.
+      let _invForSnapshot = null;
+      try {
+        _invForSnapshot = await db.collection('shop_inventory').find({}, { projection: { name: 1, shopProductId: 1, purchasePrice: 1 } }).toArray();
+      } catch(e) { _invForSnapshot = []; }
+      const _invByPid = {};
+      const _invByName = {};
+      _invForSnapshot.forEach(inv => {
+        if (inv.shopProductId) _invByPid[String(inv.shopProductId)] = inv;
+        if (inv.name) _invByName[String(inv.name).trim()] = inv;
+      });
+      function lookupCost(name, productId) {
+        if (productId && _invByPid[String(productId)]) return Number(_invByPid[String(productId)].purchasePrice) || 0;
+        if (name && _invByName[String(name).trim()]) return Number(_invByName[String(name).trim()].purchasePrice) || 0;
+        return 0;
+      }
+
       if (Array.isArray(cartItems) && cartItems.length) {
         orderItems = cartItems.map(i => {
           const pid = i._id || i.id || i.productId || null;
@@ -2168,6 +2482,7 @@ router.post('/payment/create', async (req, res) => {
             name: i.name,
             price: Number(i.price) || 0,
             qty: Number(i.qty) || 1,
+            purchasePriceAtOrder: lookupCost(i.name, pid),
           };
           if (pid) { item.id = pid; item.productId = pid; }
           if (i.variant) item.variant = i.variant;
@@ -2180,7 +2495,12 @@ router.post('/payment/create', async (req, res) => {
           : orderItems.reduce((s, i) => s + i.price * i.qty, 0);
       } else {
         // Last-resort fallback (legacy admin payment-link flow): use products as-is.
-        orderItems = products.map(p => ({ name: p.name, price: Number(p.price), qty: Number(p.quantity) || 1 }));
+        orderItems = products.map(p => ({
+          name: p.name,
+          price: Number(p.price),
+          qty: Number(p.quantity) || 1,
+          purchasePriceAtOrder: lookupCost(p.name, p.productId || p.id),
+        }));
         orderTotal = products.reduce((s, p) => s + Number(p.price) * (Number(p.quantity) || 1), 0);
       }
       const orderDoc = {
