@@ -1001,9 +1001,14 @@ async function syncToShop(item) {
       hasUnlimitedStock: !!item.isUnlimited,
       stock: item.isUnlimited ? 9999 : (item.quantity || 0),
       description: item.notes || '',
-      unit: item.unit || '',
-      variants: item.variants || []
+      unit: item.unit || ''
     };
+    // CRITICAL: only sync `variants` when explicitly provided. Sending `[]`
+    // by default would wipe existing variants on the shop product whenever
+    // syncToShop is called from a non-variant-aware caller (toggle pickup,
+    // bulk pickup, "sync all to shop", etc.). The variant editor sends an
+    // explicit array on save — preserve everything else.
+    if (Array.isArray(item.variants)) prodBody.variants = item.variants;
     if (productId) {
       const r = await fetch('/api/shop/products/' + productId, { method: 'PUT', headers, body: JSON.stringify(prodBody) });
       if (r.ok) { showToast('✅ מוצר עודכן בחנות', '#15803d'); return; }
