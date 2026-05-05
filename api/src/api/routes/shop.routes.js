@@ -63,12 +63,31 @@ const YEDIDYA_PAGE_CODE = process.env.YEDIDYA_MESHULAM_PAGE_CODE || '';
 const BASE_URL = process.env.BASE_URL || 'http://64.23.156.254:8082';
 
 let cachedClient = null;
+let _indexesEnsured = false;
 async function getDb() {
   if (!cachedClient || !cachedClient.topology || !cachedClient.topology.isConnected()) {
     cachedClient = new MongoClient(MONGODB_URI);
     await cachedClient.connect();
   }
-  return cachedClient.db(process.env.SHOP_DB_NAME || 'shop_prod');
+  const db = cachedClient.db(process.env.SHOP_DB_NAME || 'shop_prod');
+  // Lazy one-time index creation. createIndex is idempotent — if an index with
+  // the same key already exists it's a no-op. Without these, /orders does a
+  // full collection scan and times out at 60s on the production data set.
+  if (!_indexesEnsured) {
+    _indexesEnsured = true; // set early so a slow ensure doesn't block parallel requests
+    Promise.all([
+      db.collection('shop_orders').createIndex({ createdAt: -1 }).catch(() => {}),
+      db.collection('shop_orders').createIndex({ paidAt: -1 }).catch(() => {}),
+      db.collection('shop_orders').createIndex({ status: 1, createdAt: -1 }).catch(() => {}),
+      db.collection('shop_orders').createIndex({ phone: 1 }).catch(() => {}),
+      db.collection('shop_orders').createIndex({ pickupLocation: 1, createdAt: -1 }).catch(() => {}),
+      db.collection('grow_payments').createIndex({ orderId: 1 }).catch(() => {}),
+      db.collection('shop_inventory').createIndex({ name: 1 }).catch(() => {}),
+      db.collection('shop_inventory').createIndex({ shopProductId: 1 }).catch(() => {}),
+      db.collection('shop_users').createIndex({ phone: 1 }).catch(() => {})
+    ]).catch(() => {});
+  }
+  return db;
 }
 
 // ─── Pickup-point validation helpers ─────────────────────────────────────────
