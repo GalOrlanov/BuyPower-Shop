@@ -7078,10 +7078,28 @@ function saRenderWeekly() {
     }).filter(function(x) { return x.wd.qty > 0; });
     if (!weekItems.length) return;
 
-    // Sort: exempt first, then taxable, alphabetical within each
-    weekItems.sort(function(a, b) {
-      if (a.p.vatExempt !== b.p.vatExempt) return a.p.vatExempt ? -1 : 1;
-      return (a.p.name || '').localeCompare(b.p.name || '', 'he');
+    // Group by category. Order:
+    //   1. "פירות וירקות" first (always)
+    //   2. Other categories alphabetically (Hebrew)
+    //   3. Within each category: name alphabetical
+    function _saCatRank(name) {
+      const c = String(name || '').trim();
+      if (c.includes('פירות') || c.includes('ירקות')) return 0;
+      return 1;
+    }
+    const byCat = {};
+    weekItems.forEach(function(x) {
+      const c = x.p.category || 'כללי';
+      if (!byCat[c]) byCat[c] = [];
+      byCat[c].push(x);
+    });
+    const cats = Object.keys(byCat).sort(function(a, b) {
+      const ra = _saCatRank(a), rb = _saCatRank(b);
+      if (ra !== rb) return ra - rb;
+      return a.localeCompare(b, 'he');
+    });
+    cats.forEach(function(c) {
+      byCat[c].sort(function(a, b) { return (a.p.name || '').localeCompare(b.p.name || '', 'he'); });
     });
 
     const wkSum = weekItems.reduce(function(acc, x) {
@@ -7092,6 +7110,52 @@ function saRenderWeekly() {
       else acc.taxableGross += x.wd.gross;
       return acc;
     }, { qty:0, gross:0, net:0, vat:0, vatErr:0, exemptGross:0, taxableGross:0 });
+
+    function rowHtml(x) {
+      const p = x.p, wd = x.wd;
+      const unitPrice = wd.qty > 0 ? wd.gross / wd.qty : 0;
+      const cls = p.vatExempt ? 'exempt' : 'taxable';
+      const pill = p.vatExempt ? '<span class="sa-pill exempt">פטור</span>' : '<span class="sa-pill taxable">חייב 18%</span>';
+      const inactiveTag = (p.isInactive || p.isSynthetic) ? '<span style="font-size:.7rem;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:8px;margin-right:4px" title="המוצר אינו פעיל היום במלאי">🗂️ ארכיון</span>' : '';
+      return '<tr class="' + cls + '">' +
+        '<td>' + _saEsc(p.name) + inactiveTag + '</td>' +
+        '<td>' + pill + '</td>' +
+        '<td class="num">' + wd.qty + '</td>' +
+        '<td class="num">' + _saFmt(unitPrice) + '₪</td>' +
+        '<td class="num">' + _saFmt(wd.gross) + '₪</td>' +
+        '<td class="num">' + _saFmt(wd.net) + '₪</td>' +
+        '<td class="num" style="color:#92400e">' + _saFmt(wd.vat) + '₪</td>' +
+        '<td class="num" style="color:#991b1b;font-weight:800">' + ((wd.vatErr || 0) > 0 ? _saFmt(wd.vatErr) + '₪' : '—') + '</td>' +
+      '</tr>';
+    }
+
+    function catBlockHtml(catName, items) {
+      const cs = items.reduce(function(acc, x) {
+        acc.qty += x.wd.qty; acc.gross += x.wd.gross; acc.net += x.wd.net;
+        acc.vat += x.wd.vat; acc.vatErr += x.wd.vatErr || 0;
+        return acc;
+      }, { qty:0, gross:0, net:0, vat:0, vatErr:0 });
+      const isFruitVeg = _saCatRank(catName) === 0;
+      const headerBg = isFruitVeg ? 'linear-gradient(90deg,#dcfce7,#f0fdf4)' : 'linear-gradient(90deg,#f3f4f6,#fafafa)';
+      const headerColor = isFruitVeg ? '#14532d' : '#374151';
+      return '<div style="margin-top:10px"><div style="background:' + headerBg + ';color:' + headerColor + ';padding:7px 12px;border-radius:8px;font-weight:800;font-size:.92rem;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;border-right:5px solid ' + (isFruitVeg ? '#15803d' : '#9ca3af') + '">' +
+        '<span>' + (isFruitVeg ? '🥦 ' : '📦 ') + _saEsc(catName) + ' <span style="font-size:.78rem;color:#6b7280;font-weight:600">(' + items.length + ' פריטים)</span></span>' +
+        '<span style="font-size:.82rem;font-weight:700">' + cs.qty + ' יח׳ · ' + _saFmt(cs.gross) + '₪' + (cs.vatErr > 0 ? ' · ⚠️ ' + _saFmt(cs.vatErr) + '₪' : '') + '</span>' +
+      '</div>' +
+      '<div style="overflow-x:auto"><table class="sa-tbl">' +
+        '<thead><tr>' +
+          '<th>מוצר</th>' +
+          '<th>סוג מע"מ</th>' +
+          '<th>כמות</th>' +
+          '<th>מחיר ליח׳</th>' +
+          '<th>סה"כ ברוטו</th>' +
+          '<th>נטו</th>' +
+          '<th>מע"מ תקין</th>' +
+          '<th style="color:#991b1b">⚠️ נגבה בטעות</th>' +
+        '</tr></thead><tbody>' +
+        items.map(rowHtml).join('') +
+      '</tbody></table></div></div>';
+    }
 
     html += '<div class="sa-week-card">' +
       '<div class="sa-week-header">' +
@@ -7105,37 +7169,7 @@ function saRenderWeekly() {
           (wkSum.vatErr > 0 ? '<div style="color:#991b1b">⚠️ נגבה בטעות: <b>' + _saFmt(wkSum.vatErr) + '₪</b></div>' : '') +
         '</div>' +
       '</div>' +
-      '<div style="overflow-x:auto"><table class="sa-tbl">' +
-        '<thead><tr>' +
-          '<th>מוצר</th>' +
-          '<th>קטגוריה</th>' +
-          '<th>סוג מע"מ</th>' +
-          '<th>כמות</th>' +
-          '<th>מחיר ליח׳</th>' +
-          '<th>סה"כ ברוטו</th>' +
-          '<th>נטו</th>' +
-          '<th>מע"מ תקין</th>' +
-          '<th style="color:#991b1b">⚠️ נגבה בטעות</th>' +
-        '</tr></thead><tbody>' +
-        weekItems.map(function(x) {
-          const p = x.p, wd = x.wd;
-          const unitPrice = wd.qty > 0 ? wd.gross / wd.qty : 0;
-          const cls = p.vatExempt ? 'exempt' : 'taxable';
-          const pill = p.vatExempt ? '<span class="sa-pill exempt">פטור</span>' : '<span class="sa-pill taxable">חייב 18%</span>';
-          const inactiveTag = (p.isInactive || p.isSynthetic) ? '<span style="font-size:.7rem;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:8px;margin-right:4px" title="המוצר אינו פעיל היום במלאי">🗂️ ארכיון</span>' : '';
-          return '<tr class="' + cls + '">' +
-            '<td>' + _saEsc(p.name) + inactiveTag + '</td>' +
-            '<td style="color:#6b7280">' + _saEsc(p.category) + '</td>' +
-            '<td>' + pill + '</td>' +
-            '<td class="num">' + wd.qty + '</td>' +
-            '<td class="num">' + _saFmt(unitPrice) + '₪</td>' +
-            '<td class="num">' + _saFmt(wd.gross) + '₪</td>' +
-            '<td class="num">' + _saFmt(wd.net) + '₪</td>' +
-            '<td class="num" style="color:#92400e">' + _saFmt(wd.vat) + '₪</td>' +
-            '<td class="num" style="color:#991b1b;font-weight:800">' + ((wd.vatErr || 0) > 0 ? _saFmt(wd.vatErr) + '₪' : '—') + '</td>' +
-          '</tr>';
-        }).join('') +
-      '</tbody></table></div>' +
+      cats.map(function(c) { return catBlockHtml(c, byCat[c]); }).join('') +
     '</div>';
   });
   if (!html) html = '<div class="sa-empty">אין נתוני מכירות בטווח שנבחר</div>';
