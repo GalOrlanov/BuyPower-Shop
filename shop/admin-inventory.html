@@ -1506,29 +1506,69 @@ async function applyBulkPickupPoints() {
   const modeEl = document.querySelector('input[name=bulkPickupMode]:checked');
   const mode = modeEl ? modeEl.value : 'replace';
 
-  showToast('משייך ' + ids.length + ' מוצרים ל-' + pts.length + ' נקודות...', '#2563eb');
+  showToast('משייך ' + ids.length + ' מוצרים... (מעדכן גם בחנות)', '#2563eb');
 
-  await Promise.all(ids.map(function(id) {
+  // Fetch fresh inventory once — needed to know each item's shopProductId
+  // (without it, the public-facing shop_products docs don't get updated and
+  //  the bulk action looks like nothing happened on the live site)
+  let fresh = [];
+  try {
+    fresh = await fetch(API + '/inventory', { cache: 'no-store' }).then(function(r){ return r.json(); });
+  } catch(e) {
+    fresh = window._allItems || allItems || [];
+  }
+  const byId = {};
+  fresh.forEach(function(it) { byId[it._id] = it; });
+
+  const headersShop = { 'Content-Type': 'application/json', 'x-admin-password': 'yedidya2024' };
+  let okCount = 0, failCount = 0;
+
+  // Sequentially to avoid hammering the API and to keep error reporting useful
+  for (let i = 0; i < ids.length; i++) {
+    const id = ids[i];
+    const item = byId[id] || (allItems || []).find(function(it){ return it._id === id; });
     let finalPts = pts;
     if (mode === 'add') {
-      const item = (window._allItems || []).find(function(it) { return it._id === id; });
       const existing = (item && item.pickupPoints) || [];
       const set = {};
       existing.forEach(function(n) { set[n] = true; });
       pts.forEach(function(n) { set[n] = true; });
       finalPts = Object.keys(set);
     }
-    return fetch(API + '/inventory/' + id, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pickupPoints: finalPts })
-    });
-  }));
+    try {
+      // 1) update shop_inventory
+      const r1 = await fetch(API + '/inventory/' + id, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pickupPoints: finalPts })
+      });
+      if (!r1.ok) throw new Error('inventory update failed');
+
+      // 2) update or create the shop_products doc so the customer-facing site
+      //    actually sees the change
+      if (item && item.shopProductId) {
+        await fetch('/api/shop/products/' + item.shopProductId, {
+          method: 'PUT', headers: headersShop,
+          body: JSON.stringify({ pickupPoints: finalPts })
+        });
+      } else if (item) {
+        // No shopProductId yet — full sync (creates if missing, sets the id)
+        await syncToShop(Object.assign({}, item, { pickupPoints: finalPts }));
+      }
+      okCount++;
+    } catch(e) {
+      console.warn('bulk pickup failed for', id, e.message);
+      failCount++;
+    }
+  }
 
   closeBulkPickupSheet();
   clearSelection();
   await loadInventory();
-  showToast('✅ ' + ids.length + ' מוצרים שויכו ל-' + pts.length + ' נקודות', '#15803d');
+  if (failCount) {
+    showToast('⚠️ ' + okCount + ' עודכנו · ' + failCount + ' נכשלו', '#f59e0b');
+  } else {
+    showToast('✅ ' + okCount + ' מוצרים שויכו ל-' + pts.length + ' נקודות (כולל סנכרון לחנות)', '#15803d');
+  }
 }
 
 </script>
