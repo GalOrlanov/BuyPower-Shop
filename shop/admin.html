@@ -6915,6 +6915,94 @@ function saToggleCategory(cat) {
   saRender();
 }
 
+// ----- Inline product filter (search box + chips) -----
+function _saRenderInlineProductFilter() {
+  const data = window._saState.data;
+  if (!data) return '';
+  const sel = window._saState.selectedProductIds || [];
+  let html = '<div style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:12px;padding:10px 12px;margin-bottom:14px">' +
+    '<div style="font-size:.78rem;color:#9a3412;font-weight:700;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">' +
+      '<span>🎯 סינון לפי מוצר ספציפי' + (sel.length ? ' — <span style="color:#dc2626">' + sel.length + ' נבחרו</span>' : '') + '</span>' +
+      (sel.length ? '<button onclick="saClearProductFilter()" style="background:none;border:none;color:#dc2626;font-size:.78rem;font-weight:700;cursor:pointer;text-decoration:underline">נקה הכל</button>' : '') +
+    '</div>';
+  // Selected product chips
+  if (sel.length) {
+    html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">';
+    sel.forEach(function(id) {
+      const p = data.products.find(function(x) { return x.inventoryId === id; });
+      if (!p) return;
+      html += '<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 4px 4px 10px;background:#fb923c;color:white;border-radius:14px;font-size:.82rem;font-weight:700">' +
+        _saEsc(p.name) +
+        '<button onclick="saRemoveProductFilter(' + JSON.stringify(p.inventoryId).replace(/"/g, '&quot;') + ')" style="border:none;background:#9a3412;color:white;width:18px;height:18px;border-radius:50%;cursor:pointer;font-size:.85rem;line-height:1;display:inline-flex;align-items:center;justify-content:center;font-family:inherit">×</button>' +
+      '</span>';
+    });
+    html += '</div>';
+  }
+  // Search input + suggestions
+  html += '<div style="position:relative">' +
+    '<input type="text" id="saInlineProdSearch" placeholder="🔍 הקלד שם מוצר להוספה לסינון..." ' +
+      'oninput="saInlineProdSuggest(this.value)" onfocus="saInlineProdSuggest(this.value)" onblur="setTimeout(saInlineProdHideSuggest,200)" ' +
+      'style="width:100%;padding:9px 12px;border:1.5px solid #fed7aa;border-radius:8px;font-family:inherit;font-size:.88rem;outline:none">' +
+    '<div id="saInlineProdSuggest" style="display:none;position:absolute;top:100%;right:0;left:0;z-index:50;background:white;border:1.5px solid #fed7aa;border-top:none;border-radius:0 0 10px 10px;max-height:280px;overflow-y:auto;box-shadow:0 6px 16px rgba(0,0,0,.08)"></div>' +
+  '</div>' +
+  '</div>';
+  return html;
+}
+
+function saInlineProdSuggest(query) {
+  const data = window._saState.data;
+  const box = document.getElementById('saInlineProdSuggest');
+  if (!data || !box) return;
+  const sel = new Set(window._saState.selectedProductIds || []);
+  const q = (query || '').trim().toLowerCase();
+  // Show top 30 matches NOT already selected
+  let matches = data.products.filter(function(p) { return !sel.has(p.inventoryId); });
+  if (q) {
+    matches = matches.filter(function(p) {
+      return (p.name || '').toLowerCase().includes(q) || (p.category || '').toLowerCase().includes(q);
+    });
+  }
+  matches = matches.slice(0, 30);
+  if (!matches.length) {
+    box.innerHTML = '<div style="padding:10px;color:#9ca3af;text-align:center;font-size:.85rem">' + (q ? 'לא נמצא' : 'אין מוצרים נוספים להוספה') + '</div>';
+  } else {
+    box.innerHTML = matches.map(function(p) {
+      return '<button onclick="saAddProductFilter(' + JSON.stringify(p.inventoryId).replace(/"/g, '&quot;') + ')" ' +
+        'style="display:flex;justify-content:space-between;align-items:center;width:100%;padding:8px 12px;border:none;background:white;cursor:pointer;border-bottom:1px solid #f3f4f6;font-family:inherit;text-align:right">' +
+        '<span style="font-weight:600;font-size:.86rem">' + _saEsc(p.name) + '</span>' +
+        '<span style="font-size:.74rem;color:#6b7280">' + _saEsc(p.category) + ' · ' + p.totalQty + ' יח׳</span>' +
+      '</button>';
+    }).join('');
+  }
+  box.style.display = 'block';
+}
+function saInlineProdHideSuggest() {
+  const box = document.getElementById('saInlineProdSuggest');
+  if (box) box.style.display = 'none';
+}
+function saAddProductFilter(id) {
+  const st = window._saState;
+  const cur = st.selectedProductIds ? st.selectedProductIds.slice() : [];
+  if (cur.indexOf(id) < 0) cur.push(id);
+  st.selectedProductIds = cur;
+  saRender();
+  // Re-focus search after rerender so the user can keep typing
+  setTimeout(function() {
+    const inp = document.getElementById('saInlineProdSearch');
+    if (inp) { inp.value = ''; inp.focus(); saInlineProdSuggest(''); }
+  }, 50);
+}
+function saRemoveProductFilter(id) {
+  const st = window._saState;
+  const cur = (st.selectedProductIds || []).filter(function(x) { return x !== id; });
+  st.selectedProductIds = cur.length ? cur : null;
+  saRender();
+}
+function saClearProductFilter() {
+  window._saState.selectedProductIds = null;
+  saRender();
+}
+
 function saRender() {
   const data = window._saState.data;
   if (!data) return;
@@ -6971,6 +7059,15 @@ function saRender() {
     insEl.parentNode.insertBefore(catEl, insEl.nextSibling);
   }
   catEl.innerHTML = _saRenderCategoryChips();
+
+  // Inline product filter (search + chips of selected products)
+  let prodEl = document.getElementById('saProductFilterInline');
+  if (!prodEl) {
+    prodEl = document.createElement('div');
+    prodEl.id = 'saProductFilterInline';
+    catEl.parentNode.insertBefore(prodEl, catEl.nextSibling);
+  }
+  prodEl.innerHTML = _saRenderInlineProductFilter();
 
   // Filter status
   document.getElementById('saControls').style.display = 'block';
