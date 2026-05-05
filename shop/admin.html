@@ -5899,10 +5899,6 @@ async function togglePickup(orderId, currentStatus) {
   }
 }
 
-async // sendPickupSMSToAll - see updated version below
-
-async // sendPickupSMSToAll - see updated version below
-
 async function sendPickupSMSToAll() {
   const weekStart = document.getElementById('pickupWeekStart').value || getThisMonday();
   const weekEnd = document.getElementById('pickupWeekEnd').value || '';
@@ -6858,6 +6854,11 @@ function _saFilteredProducts() {
 function saRender() {
   const data = window._saState.data;
   if (!data) return;
+  // Defensive — older API responses might not include all fields
+  if (!Array.isArray(data.products)) data.products = [];
+  if (!Array.isArray(data.weeks)) data.weeks = [];
+  if (!Array.isArray(data.weeklySummaries)) data.weeklySummaries = [];
+  if (!Array.isArray(data.insights)) data.insights = [];
 
   // Range summary cards (always reflect *filtered* selection)
   const products = _saFilteredProducts();
