@@ -6762,7 +6762,8 @@ window._saState = {
   customRange: null, // {from, to}
   data: null,
   view: 'weekly',
-  selectedProductIds: null // null = all
+  selectedProductIds: null, // null = all
+  selectedCategories: null  // null = all
 };
 
 function initSalesAnalytics() {
@@ -6845,10 +6846,73 @@ function _saEsc(s) {
 function _saFilteredProducts() {
   const data = window._saState.data;
   if (!data) return [];
-  const sel = window._saState.selectedProductIds;
-  if (!sel) return data.products;
-  const set = new Set(sel);
-  return data.products.filter(function(p) { return set.has(p.inventoryId); });
+  const selProd = window._saState.selectedProductIds;
+  const selCat = window._saState.selectedCategories;
+  let products = data.products;
+  if (selCat && selCat.length) {
+    const catSet = new Set(selCat);
+    products = products.filter(function(p) { return catSet.has(p.category || 'כללי'); });
+  }
+  if (selProd) {
+    const idSet = new Set(selProd);
+    products = products.filter(function(p) { return idSet.has(p.inventoryId); });
+  }
+  return products;
+}
+
+// Build the category-filter chip row (called from saRender)
+function _saRenderCategoryChips() {
+  const data = window._saState.data;
+  if (!data) return '';
+  // Distinct categories with counts
+  const counts = {};
+  data.products.forEach(function(p) {
+    const c = p.category || 'כללי';
+    counts[c] = (counts[c] || 0) + 1;
+  });
+  // Order: fruits-and-veg first, others alphabetical
+  function rank(c) {
+    const s = String(c || '');
+    if (s.includes('פירות') || s.includes('ירקות')) return 0;
+    return 1;
+  }
+  const cats = Object.keys(counts).sort(function(a, b) {
+    const ra = rank(a), rb = rank(b);
+    if (ra !== rb) return ra - rb;
+    return a.localeCompare(b, 'he');
+  });
+  const sel = window._saState.selectedCategories;
+  const selSet = sel ? new Set(sel) : null;
+  let html = '<div style="background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:12px;padding:10px 12px;margin-bottom:14px"><div style="font-size:.78rem;color:#6b7280;font-weight:700;margin-bottom:6px">📂 סינון לפי קטגוריה</div><div style="display:flex;flex-wrap:wrap;gap:6px">';
+  // "All" reset chip
+  const allActive = !selSet;
+  html += '<button onclick="saToggleCategory(null)" class="sa-cat-chip" style="padding:6px 14px;border-radius:18px;border:1.5px solid ' + (allActive ? '#15803d' : '#d1d5db') + ';background:' + (allActive ? '#15803d' : 'white') + ';color:' + (allActive ? 'white' : '#374151') + ';font-weight:700;cursor:pointer;font-family:inherit;font-size:.82rem">הכל (' + data.products.length + ')</button>';
+  cats.forEach(function(c) {
+    const active = selSet && selSet.has(c);
+    const isFruitVeg = rank(c) === 0;
+    const baseColor = isFruitVeg ? '#15803d' : '#1e40af';
+    const bg = active ? baseColor : 'white';
+    const fg = active ? 'white' : '#374151';
+    const border = active ? baseColor : '#d1d5db';
+    html += '<button onclick="saToggleCategory(' + JSON.stringify(c).replace(/"/g, '&quot;') + ')" class="sa-cat-chip" style="padding:6px 14px;border-radius:18px;border:1.5px solid ' + border + ';background:' + bg + ';color:' + fg + ';font-weight:700;cursor:pointer;font-family:inherit;font-size:.82rem">' +
+      (isFruitVeg ? '🥦 ' : '') + _saEsc(c) + ' (' + counts[c] + ')</button>';
+  });
+  html += '</div></div>';
+  return html;
+}
+
+function saToggleCategory(cat) {
+  const st = window._saState;
+  if (cat === null || cat === undefined) {
+    // "All" — reset to no filter
+    st.selectedCategories = null;
+  } else {
+    let cur = st.selectedCategories || [];
+    if (cur.indexOf(cat) >= 0) cur = cur.filter(function(x) { return x !== cat; });
+    else cur = cur.concat([cat]);
+    st.selectedCategories = cur.length ? cur : null;
+  }
+  saRender();
 }
 
 function saRender() {
@@ -6898,6 +6962,15 @@ function saRender() {
       data.insights.map(function(i) { return '<div style="font-size:.88rem;margin:3px 0">' + i.icon + ' <b>' + _saEsc(i.label) + ':</b> ' + _saEsc(i.text) + '</div>'; }).join('') +
       '</div>';
   } else { insEl.innerHTML = ''; }
+
+  // Category filter chips (below insights, above view toggles)
+  let catEl = document.getElementById('saCategoryFilter');
+  if (!catEl) {
+    catEl = document.createElement('div');
+    catEl.id = 'saCategoryFilter';
+    insEl.parentNode.insertBefore(catEl, insEl.nextSibling);
+  }
+  catEl.innerHTML = _saRenderCategoryChips();
 
   // Filter status
   document.getElementById('saControls').style.display = 'block';
