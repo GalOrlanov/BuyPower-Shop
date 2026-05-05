@@ -6896,9 +6896,11 @@ function saRender() {
   document.getElementById('saControls').style.display = 'block';
   const sel = window._saState.selectedProductIds;
   const total = data.products.length;
+  const synthCount = data.products.filter(function(p) { return p.isSynthetic; }).length;
+  const archiveNote = synthCount ? ' · מתוכם ' + synthCount + ' פריטי ארכיון 🗂️' : '';
   document.getElementById('saFilterStatus').textContent =
-    sel ? ('מציג ' + sel.length + ' מתוך ' + total + ' מוצרים. ' + (data.unmatched.length ? data.unmatched.length + ' פריטים לא מזוהים. ' : '')) :
-          ('מציג ' + total + ' מוצרים. ' + (data.unmatched.length ? data.unmatched.length + ' פריטים לא מזוהים. ' : ''));
+    sel ? ('מציג ' + sel.length + ' מתוך ' + total + ' מוצרים' + archiveNote) :
+          ('מציג ' + total + ' מוצרים' + archiveNote);
 
   // Body
   if (window._saState.view === 'weekly') saRenderWeekly();
