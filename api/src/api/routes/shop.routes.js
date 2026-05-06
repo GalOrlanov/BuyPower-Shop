@@ -3844,12 +3844,19 @@ router.post('/payment/webhook', async (req, res) => {
     };
 
     // Try by orderId first
+    // CRITICAL: also exclude `cancelled` etc. — without this, a late Grow
+    // webhook will resurrect an order the admin has explicitly cancelled.
+    const NON_PAYABLE = ['paid', 'cancelled', 'cancelled_duplicate', 'merged_into_paid', 'collected', 'handled', 'confirmed'];
     if (id) {
       try {
-        order = await db.collection('shop_orders').findOne({ _id: new ObjectId(id), status: { $ne: 'paid' } });
+        order = await db.collection('shop_orders').findOne({ _id: new ObjectId(id), status: { $nin: NON_PAYABLE } });
         if (order) {
           await db.collection('shop_orders').updateOne({ _id: order._id }, { $set: updateData });
           console.log('[GROW WEBHOOK] updated by id:', id);
+        } else {
+          // Log so we can see when a webhook was rejected because order was cancelled/etc.
+          const existing = await db.collection('shop_orders').findOne({ _id: new ObjectId(id) }, { projection: { status: 1 } });
+          if (existing) console.log('[GROW WEBHOOK] ignored — order', id, 'is in non-payable status:', existing.status);
         }
       } catch(e) {
         console.log('[GROW WEBHOOK] invalid orderId:', id);
@@ -3861,7 +3868,7 @@ router.post('/payment/webhook', async (req, res) => {
     if (!order && paymentLinkProcessId) {
       order = await db.collection('shop_orders').findOne({
         paymentLinkProcessId: Number(paymentLinkProcessId),
-        status: { $ne: 'paid' }
+        status: { $nin: NON_PAYABLE }
       });
       if (order) {
         await db.collection('shop_orders').updateOne({ _id: order._id }, { $set: updateData });
