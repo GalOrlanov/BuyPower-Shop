@@ -3552,16 +3552,29 @@ async function openManualOrderModal() {
             </select>
           </div>
 
-          <!-- Catalog (all products inline with +/- qty) -->
+          <!-- Catalog (all products inline) + My-order tab (selected items) -->
           <div style="border:2px solid #fdba74;border-radius:10px;padding:10px;background:#fff7ed">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
-              <span style="font-weight:800;color:#9a3412;font-size:.92rem">🛒 בחר פריטים להזמנה</span>
-              <span id="moCartSummary" style="font-size:.78rem;color:#9a3412;font-weight:700">0 פריטים נבחרו</span>
+              <span id="moCartSummary" style="font-size:.82rem;color:#9a3412;font-weight:800">0 פריטים נבחרו</span>
             </div>
-            <input type="text" id="moCatSearch" oninput="moRenderCatalog()" placeholder="🔍 חפש מוצר... (מוצרים שכבר נבחרו עולים למעלה)" autocomplete="off" style="width:100%;padding:9px 10px;border:1.5px solid #fed7aa;border-radius:8px;font-family:inherit;font-size:.9rem;margin-bottom:8px">
-            <div id="moCatChips" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px"></div>
-            <div id="moCatalog" style="max-height:50vh;overflow-y:auto;background:white;border:1px solid #fed7aa;border-radius:8px;padding:6px">
-              <div style="text-align:center;color:#9ca3af;padding:20px">טוען מוצרים...</div>
+            <!-- Tab switcher -->
+            <div style="display:flex;gap:5px;margin-bottom:8px">
+              <button id="moTabCatalog" onclick="moSetTab('catalog')" style="flex:1;padding:8px;background:#15803d;color:white;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700;font-size:.86rem">🛒 קטלוג</button>
+              <button id="moTabOrder" onclick="moSetTab('order')" style="flex:1;padding:8px;background:white;color:#9a3412;border:1.5px solid #fdba74;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700;font-size:.86rem">🛍️ ההזמנה שלי <span id="moOrderTabCount">(0)</span></button>
+            </div>
+            <!-- Catalog pane -->
+            <div id="moPaneCatalog">
+              <input type="text" id="moCatSearch" oninput="moRenderCatalog()" placeholder="🔍 חפש מוצר..." autocomplete="off" style="width:100%;padding:9px 10px;border:1.5px solid #fed7aa;border-radius:8px;font-family:inherit;font-size:.9rem;margin-bottom:8px">
+              <div id="moCatChips" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px"></div>
+              <div id="moCatalog" style="max-height:50vh;overflow-y:auto;background:white;border:1px solid #fed7aa;border-radius:8px;padding:6px">
+                <div style="text-align:center;color:#9ca3af;padding:20px">טוען מוצרים...</div>
+              </div>
+            </div>
+            <!-- My order pane -->
+            <div id="moPaneOrder" style="display:none">
+              <div id="moOrderList" style="max-height:50vh;overflow-y:auto;background:white;border:1px solid #fed7aa;border-radius:8px;padding:6px">
+                <div style="text-align:center;color:#9ca3af;padding:30px">לא נבחרו עדיין מוצרים</div>
+              </div>
             </div>
           </div>
 
@@ -3620,7 +3633,8 @@ async function openManualOrderModal() {
   } catch(e) { window._moAllProducts = []; }
   if (document.getElementById('moCatSearch')) document.getElementById('moCatSearch').value = '';
   window._moActiveCategory = null; // reset category filter every time the modal opens
-  moRenderCatalog();
+  window._moActiveTab = 'catalog';
+  moSetTab('catalog');
   moUpdateTotal();
   // Load pickup points
   try {
@@ -3820,8 +3834,94 @@ function moUpdateTotal() {
   if (sumEl) {
     const distinct = items.length;
     const totalUnits = items.reduce((s, i) => s + (Number(i.qty) || 0), 0);
-    sumEl.textContent = distinct ? (distinct + ' פריטים · ' + totalUnits + ' יח׳ · ₪' + total.toFixed(2).replace(/\.00$/, '')) : '0 פריטים נבחרו';
+    sumEl.textContent = distinct ? ('🛍️ ' + distinct + ' פריטים · ' + totalUnits + ' יח׳ · ₪' + total.toFixed(2).replace(/\.00$/, '')) : '🛍️ עדיין לא נבחרו פריטים';
   }
+  const tabCount = document.getElementById('moOrderTabCount');
+  if (tabCount) tabCount.textContent = '(' + items.length + ')';
+  // If the order pane is open, refresh it too so qty edits there are visible immediately.
+  if (window._moActiveTab === 'order') moRenderMyOrder();
+}
+
+function moSetTab(tab) {
+  window._moActiveTab = tab;
+  const cat = document.getElementById('moPaneCatalog');
+  const ord = document.getElementById('moPaneOrder');
+  const btnCat = document.getElementById('moTabCatalog');
+  const btnOrd = document.getElementById('moTabOrder');
+  if (tab === 'order') {
+    cat.style.display = 'none';
+    ord.style.display = 'block';
+    btnCat.style.cssText = 'flex:1;padding:8px;background:white;color:#9a3412;border:1.5px solid #fdba74;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700;font-size:.86rem';
+    btnOrd.style.cssText = 'flex:1;padding:8px;background:#15803d;color:white;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700;font-size:.86rem';
+    moRenderMyOrder();
+  } else {
+    cat.style.display = 'block';
+    ord.style.display = 'none';
+    btnCat.style.cssText = 'flex:1;padding:8px;background:#15803d;color:white;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700;font-size:.86rem';
+    btnOrd.style.cssText = 'flex:1;padding:8px;background:white;color:#9a3412;border:1.5px solid #fdba74;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700;font-size:.86rem';
+    moRenderCatalog();
+  }
+}
+
+function moRenderMyOrder() {
+  const el = document.getElementById('moOrderList');
+  if (!el) return;
+  const items = window._moItems || [];
+  if (!items.length) {
+    el.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:30px">לא נבחרו עדיין מוצרים. עבור ל-"קטלוג" כדי לבחור.</div>';
+    return;
+  }
+  // Group selected items by category for readability
+  const products = window._moAllProducts || [];
+  const allRows = _moExpandProductRows(products);
+  const enriched = items.map(it => {
+    const match = allRows.find(r => r.productId === it.productId && (r.variant || '') === (it.variant || ''));
+    return {
+      productId: it.productId,
+      name: it.name || '',
+      variant: it.variant || '',
+      displayName: (it.name || '') + (it.variant ? ' — ' + it.variant : ''),
+      category: match ? match.category : 'אחר',
+      qty: it.qty,
+      price: it.price,
+      lineTotal: (it.qty || 0) * (it.price || 0)
+    };
+  });
+  // Sort by category, then by name
+  const byCat = {};
+  enriched.forEach(r => { (byCat[r.category] = byCat[r.category] || []).push(r); });
+  const cats = Object.keys(byCat).sort((a, b) => {
+    // Same shop order: produce, disposable, cleaning, drinks, general, then others
+    const order = _MO_ORDERED_CATS.map(c => c.value);
+    const ai = order.indexOf(a), bi = order.indexOf(b);
+    if (ai >= 0 && bi >= 0) return ai - bi;
+    if (ai >= 0) return -1;
+    if (bi >= 0) return 1;
+    return a.localeCompare(b, 'he');
+  });
+  Object.keys(byCat).forEach(c => byCat[c].sort((a, b) => (a.displayName || '').localeCompare(b.displayName || '', 'he')));
+
+  function row(it) {
+    const safeName = String(it.displayName).replace(/'/g, "\\'");
+    const safeVariant = String(it.variant || '').replace(/'/g, "\\'");
+    return '<div style="display:flex;align-items:center;gap:6px;padding:8px 10px;border-radius:8px;margin-bottom:4px;background:#dcfce7;border:1px solid #86efac">' +
+      '<span style="flex:1;font-weight:800;font-size:.9rem;color:#111827">' + it.displayName + '</span>' +
+      '<button onclick="moAdjustQty(\'' + it.productId + '\',\'' + safeVariant + '\',-1,' + it.price + ',\'' + safeName + '\')" style="width:28px;height:28px;border:1px solid #15803d;background:white;color:#15803d;border-radius:50%;cursor:pointer;font-weight:800">−</button>' +
+      '<input type="number" min="0" max="99" value="' + it.qty + '" onchange="moSetQtyDirect(\'' + it.productId + '\',\'' + safeVariant + '\',this.value,' + it.price + ',\'' + safeName + '\');moRenderMyOrder()" style="width:50px;padding:4px;border:1px solid #d1d5db;border-radius:4px;text-align:center;font-size:.9rem;font-weight:800">' +
+      '<button onclick="moAdjustQty(\'' + it.productId + '\',\'' + safeVariant + '\',1,' + it.price + ',\'' + safeName + '\')" style="width:28px;height:28px;border:1px solid #15803d;background:#15803d;color:white;border-radius:50%;cursor:pointer;font-weight:800">+</button>' +
+      '<input type="number" value="' + it.price + '" step="0.5" onchange="moSetPrice(\'' + it.productId + '\',\'' + safeVariant + '\',this.value);moRenderMyOrder()" style="width:60px;padding:4px;border:1px solid #d1d5db;border-radius:4px;text-align:center;font-size:.85rem">' +
+      '<span style="font-size:.75rem;color:#6b7280">₪</span>' +
+      '<span style="min-width:60px;text-align:left;font-weight:900;color:#15803d">₪' + it.lineTotal.toFixed(2).replace(/\.00$/, '') + '</span>' +
+      '<button onclick="moSetQtyDirect(\'' + it.productId + '\',\'' + safeVariant + '\',0,' + it.price + ',\'' + safeName + '\');moRenderMyOrder()" style="width:24px;height:24px;background:#fee2e2;color:#dc2626;border:none;border-radius:5px;cursor:pointer;font-weight:800;font-size:.8rem">✕</button>' +
+    '</div>';
+  }
+
+  let html = '';
+  cats.forEach(c => {
+    html += '<div style="background:#fff7ed;color:#9a3412;padding:5px 10px;border-radius:6px;font-weight:700;font-size:.8rem;margin:6px 0 4px">' + (_moCatEmoji(c) + ' ') + c + '</div>';
+    html += byCat[c].map(row).join('');
+  });
+  el.innerHTML = html;
 }
 
 // Active category filter for the manual-order catalog. null = all.
@@ -3869,29 +3969,53 @@ function moRenderCatalog() {
   _moRenderCategoryChips(allRows);
   const q = (document.getElementById('moCatSearch') ? document.getElementById('moCatSearch').value : '').toLowerCase().trim();
   const activeCat = window._moActiveCategory;
+
+  // Selected items ALWAYS show at the top — never affected by category/search filter.
+  // Otherwise picking a category would hide items the admin already chose from a
+  // different category, which is the bug the user just reported.
+  const selected = [];
+  (window._moItems || []).forEach(it => {
+    const match = allRows.find(r => r.productId === it.productId && (r.variant || '') === (it.variant || ''));
+    if (match) {
+      selected.push(Object.assign({}, match, { qty: it.qty, priceCurrent: it.price }));
+    } else {
+      // Item references a product that's no longer in the catalog (e.g. inactive).
+      // Surface it so the admin can still see / remove it.
+      selected.push({
+        key: _moRowKey(it.productId, it.variant),
+        productId: it.productId,
+        name: it.name || '',
+        variant: it.variant || '',
+        displayName: (it.name || '') + (it.variant ? ' — ' + it.variant : ''),
+        category: 'אחר',
+        price: Number(it.price) || 0,
+        qty: it.qty,
+        priceCurrent: it.price
+      });
+    }
+  });
+  selected.sort((a, b) => (a.displayName || '').localeCompare(b.displayName || '', 'he'));
+  const selectedKeys = new Set(selected.map(r => r.key));
+
+  // Catalog list — filter by search + active category, then exclude items already in selected.
   let filtered = q ? allRows.filter(r => r.displayName.toLowerCase().includes(q) || (r.category || '').toLowerCase().includes(q)) : allRows;
   if (activeCat) filtered = filtered.filter(r => r.category === activeCat);
-  if (!filtered.length) {
+  filtered = filtered.filter(r => !selectedKeys.has(r.key));
+
+  const byCat = {};
+  filtered.forEach(r => {
+    r.qty = 0;
+    r.priceCurrent = r.price;
+    (byCat[r.category] = byCat[r.category] || []).push(r);
+  });
+  Object.keys(byCat).forEach(c => byCat[c].sort((a, b) => (a.displayName || '').localeCompare(b.displayName || '', 'he')));
+  const cats = Object.keys(byCat).sort((a, b) => a.localeCompare(b, 'he'));
+
+  if (!selected.length && !filtered.length) {
     el.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:20px">אין מוצרים שתואמים לחיפוש</div>';
     moUpdateTotal();
     return;
   }
-  // Selected rows first (any qty > 0), then by category alphabetical
-  const selected = [];
-  const byCat = {};
-  filtered.forEach(r => {
-    const idx = _moFindItem(r.productId, r.variant);
-    const qty = idx >= 0 ? window._moItems[idx].qty : 0;
-    r.qty = qty;
-    r.priceCurrent = idx >= 0 ? window._moItems[idx].price : r.price;
-    if (qty > 0) selected.push(r);
-    else (byCat[r.category] = byCat[r.category] || []).push(r);
-  });
-  // Sort selected by display name
-  selected.sort((a, b) => (a.displayName || '').localeCompare(b.displayName || '', 'he'));
-  // Sort within each category alphabetical Hebrew
-  Object.keys(byCat).forEach(c => byCat[c].sort((a, b) => (a.displayName || '').localeCompare(b.displayName || '', 'he')));
-  const cats = Object.keys(byCat).sort((a, b) => a.localeCompare(b, 'he'));
 
   function rowHtml(r) {
     const has = r.qty > 0;
