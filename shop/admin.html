@@ -3695,8 +3695,34 @@ function _moRowKey(productId, variantName) {
   return variantName ? (productId + '__' + variantName) : productId;
 }
 
+// Shop's curated category order (mirror of ORDERED_CATS in shop/index.html).
+// Keeping this in sync is what the user means by "תואם למה שיש בחנות".
+const _MO_ORDERED_CATS = [
+  { value: 'פירות וירקות',          emoji: '🥦' },
+  { value: 'חד פעמי',               emoji: '🥤' },
+  { value: 'מוצרי ניקיון',          emoji: '🧹' },
+  { value: 'יינות ומשקאות מיוחדים', emoji: '🍷' },
+  { value: 'כללי',                  emoji: '📦' }
+];
+function _moCatEmoji(cat) {
+  const found = _MO_ORDERED_CATS.find(c => c.value === cat);
+  if (found) return found.emoji;
+  const c = String(cat || '');
+  if (c.includes('פרי') || c.includes('ירק')) return '🥦';
+  if (c.includes('חד פעמי')) return '🥤';
+  if (c.includes('ניקיון')) return '🧹';
+  if (c.includes('יין') || c.includes('משקא')) return '🍷';
+  if (c.includes('משרד')) return '🎨';
+  if (c.includes('שמן')) return '🫒';
+  if (c.includes('תבלין')) return '🌿';
+  if (c.includes('יסוד')) return '🥚';
+  return '📦';
+}
+
 function _moExpandProductRows(products) {
   const rows = [];
+  // Only active products — same filter the customer-facing shop applies (index.html).
+  products = (products || []).filter(p => p && p.isActive !== false && p.isActive !== null);
   products.forEach(p => {
     if (Array.isArray(p.variants) && p.variants.length) {
       p.variants.forEach(v => {
@@ -3809,20 +3835,28 @@ function moSetCategory(cat) {
 function _moRenderCategoryChips(allRows) {
   const el = document.getElementById('moCatChips');
   if (!el) return;
-  const counts = {};
-  allRows.forEach(r => { counts[r.category] = (counts[r.category] || 0) + 1; });
-  const cats = Object.keys(counts).sort((a, b) => a.localeCompare(b, 'he'));
+  // Only categories that actually have at least one active product on screen
+  const present = {};
+  allRows.forEach(r => { if (r.category) present[r.category] = true; });
+  // Order: shop's curated list first (only those that have items), then any
+  // unknown categories alphabetically at the end. Mirrors buildCatBar() in
+  // shop/index.html so the admin sees the same order the customer does.
+  const cats = [];
+  _MO_ORDERED_CATS.forEach(c => { if (present[c.value]) cats.push(c.value); });
+  Object.keys(present).sort((a, b) => a.localeCompare(b, 'he')).forEach(c => {
+    if (cats.indexOf(c) < 0) cats.push(c);
+  });
   const active = window._moActiveCategory;
-  function chip(label, value, count, isActive) {
+  function chip(label, emoji, value, isActive) {
     const bg = isActive ? '#15803d' : 'white';
     const fg = isActive ? 'white' : '#9a3412';
     const border = isActive ? '#15803d' : '#fdba74';
     const v = value === null ? 'null' : "'" + String(value).replace(/'/g, "\\'") + "'";
     return '<button onclick="moSetCategory(' + v + ')" style="padding:4px 12px;border-radius:14px;border:1.5px solid ' + border + ';background:' + bg + ';color:' + fg + ';cursor:pointer;font-family:inherit;font-size:.78rem;font-weight:700">' +
-      label + ' <span style="opacity:.65;font-weight:500">(' + count + ')</span></button>';
+      (emoji ? emoji + ' ' : '') + label + '</button>';
   }
-  let html = chip('הכל', null, allRows.length, active === null);
-  cats.forEach(c => { html += chip(c, c, counts[c], active === c); });
+  let html = chip('הכל', '🛒', null, active === null);
+  cats.forEach(c => { html += chip(c, _moCatEmoji(c), c, active === c); });
   el.innerHTML = html;
 }
 
