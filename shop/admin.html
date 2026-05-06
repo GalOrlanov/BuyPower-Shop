@@ -1129,7 +1129,7 @@ input:checked + .slider::before { transform: translateX(20px); }
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap">
               <button onclick="saOpenProductFilter()" style="padding:8px 14px;background:#fef3c7;color:#92400e;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit;font-size:.84rem">🎯 בחר מוצרים</button>
-              <button onclick="saExportExcel()" style="padding:8px 14px;background:#15803d;color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit;font-size:.84rem">📥 Excel</button>
+              <button onclick="saOpenExcelExportPicker()" style="padding:8px 14px;background:#15803d;color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit;font-size:.84rem">📥 Excel</button>
               <button onclick="saExportPDF()" style="padding:8px 14px;background:#7c3aed;color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit;font-size:.84rem">📄 PDF</button>
             </div>
           </div>
@@ -1157,6 +1157,29 @@ input:checked + .slider::before { transform: translateX(20px); }
         <div style="display:flex;gap:8px;margin-top:14px">
           <button onclick="saApplyProductFilter()" style="flex:1;padding:11px;background:#15803d;color:white;border:none;border-radius:10px;font-weight:800;cursor:pointer;font-family:inherit">החל ✓</button>
           <button onclick="document.getElementById('saProductModal').style.display='none'" style="padding:11px 18px;background:#f3f4f6;border:none;border-radius:10px;font-weight:700;cursor:pointer;font-family:inherit">ביטול</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Excel column picker modal -->
+    <div id="saExcelColModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10000;align-items:center;justify-content:center">
+      <div style="background:white;border-radius:16px;padding:0;width:min(560px,96vw);max-height:88vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+        <div style="background:#15803d;color:white;padding:14px 18px;display:flex;justify-content:space-between;align-items:center">
+          <span style="font-weight:800;font-size:1.05rem">📥 ייצוא Excel — בחר עמודות</span>
+          <button onclick="document.getElementById('saExcelColModal').style.display='none'" style="background:none;border:none;color:white;font-size:1.4rem;cursor:pointer">✕</button>
+        </div>
+        <div style="padding:14px 18px;flex:1;overflow-y:auto">
+          <div style="font-size:.85rem;color:#6b7280;margin-bottom:12px">הקובץ יכלול גיליון אחד שמשקף את התצוגה השבועית — שבוע אחר שבוע, מקובץ לפי קטגוריה, עם סיכומים. בחר אילו עמודות יופיעו לכל מוצר:</div>
+          <div style="display:flex;gap:6px;margin-bottom:10px">
+            <button onclick="saExcelColsAll(true)" style="padding:6px 12px;background:#dcfce7;color:#14532d;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-size:.8rem">סמן הכל</button>
+            <button onclick="saExcelColsAll(false)" style="padding:6px 12px;background:#fee2e2;color:#991b1b;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-size:.8rem">נקה</button>
+            <button onclick="saExcelColsDefaults()" style="padding:6px 12px;background:#dbeafe;color:#1e40af;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-size:.8rem">↺ ברירת מחדל (מסך)</button>
+          </div>
+          <div id="saExcelColsList" style="border:1.5px solid #e5e7eb;border-radius:10px;padding:8px"></div>
+        </div>
+        <div style="padding:12px 18px;border-top:1px solid #e5e7eb;display:flex;gap:10px">
+          <button onclick="saExcelDoExport()" style="flex:1;padding:11px;background:#15803d;color:white;border:none;border-radius:10px;font-weight:800;cursor:pointer;font-family:inherit;font-size:.95rem">📥 הורד Excel</button>
+          <button onclick="document.getElementById('saExcelColModal').style.display='none'" style="padding:11px 18px;background:#f3f4f6;border:none;border-radius:10px;font-weight:700;cursor:pointer;font-family:inherit">ביטול</button>
         </div>
       </div>
     </div>
@@ -8196,12 +8219,286 @@ function saApplyProductFilter() {
 }
 
 // ===== Excel export — multi-sheet =====
+// ============================================================================
+// Excel column picker — opens before the actual export so the admin chooses
+// what to include. State lives in window._saExcelCols (persists for session).
+// ============================================================================
+const SA_EXCEL_COLUMNS = [
+  // id, label, default-checked, group
+  { id: 'name',       label: 'מוצר',           def: true,  required: true },
+  { id: 'category',   label: 'קטגוריה (כעמודה)', def: false },
+  { id: 'status',     label: 'סטטוס (פעיל/ארכיון)', def: true },
+  { id: 'vatType',    label: 'סוג מע"מ',       def: true },
+  { id: 'qty',        label: 'כמות',           def: true },
+  { id: 'unitPrice',  label: 'מחיר ליח׳',      def: true },
+  { id: 'gross',      label: 'סה"כ ברוטו',     def: true },
+  { id: 'net',        label: 'נטו',            def: true },
+  { id: 'vat',        label: 'מע"מ תקין',      def: true },
+  { id: 'vatErr',     label: '⚠️ נגבה בטעות',  def: true },
+  { id: 'purchasePrice', label: 'עלות יח׳',    def: false },
+  { id: 'cost',       label: 'עלות כוללת',     def: false },
+  { id: 'profit',     label: 'רווח',           def: false }
+];
+window._saExcelCols = window._saExcelCols || SA_EXCEL_COLUMNS.filter(c => c.def).map(c => c.id);
+
+function saOpenExcelExportPicker() {
+  if (!window._saState || !window._saState.data) {
+    alert('אין נתונים — לחץ "הצג" קודם');
+    return;
+  }
+  saRenderExcelColsList();
+  document.getElementById('saExcelColModal').style.display = 'flex';
+}
+
+function saRenderExcelColsList() {
+  const el = document.getElementById('saExcelColsList');
+  if (!el) return;
+  const sel = new Set(window._saExcelCols);
+  el.innerHTML = SA_EXCEL_COLUMNS.map(c => {
+    const checked = sel.has(c.id);
+    const disabled = c.required ? 'disabled' : '';
+    return '<label style="display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:6px;cursor:' + (c.required ? 'default' : 'pointer') + ';' + (checked ? 'background:#f0fdf4' : '') + '">' +
+      '<input type="checkbox" ' + (checked ? 'checked' : '') + ' ' + disabled + ' onchange="saExcelColToggle(\'' + c.id + '\')" style="width:17px;height:17px;accent-color:#15803d;cursor:' + (c.required ? 'default' : 'pointer') + '">' +
+      '<span style="flex:1;font-size:.9rem;font-weight:600">' + c.label + (c.required ? ' <span style="font-size:.7rem;color:#9ca3af;font-weight:400">(חובה)</span>' : '') + '</span>' +
+    '</label>';
+  }).join('');
+}
+
+function saExcelColToggle(id) {
+  const col = SA_EXCEL_COLUMNS.find(c => c.id === id);
+  if (col && col.required) return;
+  const cur = window._saExcelCols.slice();
+  const idx = cur.indexOf(id);
+  if (idx >= 0) cur.splice(idx, 1);
+  else cur.push(id);
+  // Preserve canonical order
+  window._saExcelCols = SA_EXCEL_COLUMNS.filter(c => cur.indexOf(c.id) >= 0 || c.required).map(c => c.id);
+  saRenderExcelColsList();
+}
+
+function saExcelColsAll(state) {
+  if (state) window._saExcelCols = SA_EXCEL_COLUMNS.map(c => c.id);
+  else window._saExcelCols = SA_EXCEL_COLUMNS.filter(c => c.required).map(c => c.id);
+  saRenderExcelColsList();
+}
+
+function saExcelColsDefaults() {
+  window._saExcelCols = SA_EXCEL_COLUMNS.filter(c => c.def).map(c => c.id);
+  saRenderExcelColsList();
+}
+
+function saExcelDoExport() {
+  document.getElementById('saExcelColModal').style.display = 'none';
+  setTimeout(saExportExcel, 50);
+}
+
 function saExportExcel() {
-  try { return _saExportExcelInner(); }
+  try { return _saExportExcelStructured(); }
   catch (e) {
     console.error('saExportExcel failed:', e);
     alert('שגיאה בייצוא Excel: ' + (e && e.message ? e.message : e));
   }
+}
+
+// Structured export — single sheet, mirror of the on-screen weekly view.
+// Each week: green section header → category sub-headers → product rows →
+// category subtotals → week subtotal. Range total at the very end.
+function _saExportExcelStructured() {
+  const data = window._saState.data;
+  if (!data) return alert('אין נתונים');
+  if (typeof XLSX === 'undefined') return alert('ספריית Excel לא נטענה');
+  const products = _saFilteredProducts();
+  const cols = (window._saExcelCols && window._saExcelCols.length) ? window._saExcelCols.slice() : SA_EXCEL_COLUMNS.filter(c => c.def).map(c => c.id);
+
+  function _r(n) { return Math.round(Number(n) * 100) / 100; }
+  function fmtWk(d) { const x = new Date(d); return x.getDate() + '/' + (x.getMonth() + 1); }
+
+  // Build the headers row from the selected columns
+  const colDefs = cols.map(id => SA_EXCEL_COLUMNS.find(c => c.id === id)).filter(Boolean);
+  const headerRow = colDefs.map(c => c.label);
+  const colCount = headerRow.length;
+
+  // Helper: turn a product+week-data tuple into the row in column order
+  function productRow(p, wd) {
+    const unitPrice = wd && wd.qty > 0 ? wd.gross / wd.qty : 0;
+    const status = p.isSynthetic ? 'ארכיון' : (p.isInactive ? 'לא פעיל' : 'פעיל');
+    const vals = {
+      name: p.name + (p.isSynthetic || p.isInactive ? ' 🗂️' : ''),
+      category: p.category || '',
+      status: status,
+      vatType: p.vatExempt ? 'פטור' : 'חייב 18%',
+      qty: wd.qty,
+      unitPrice: _r(unitPrice),
+      gross: _r(wd.gross),
+      net: _r(wd.net),
+      vat: _r(wd.vat),
+      vatErr: _r(wd.vatErr || 0),
+      purchasePrice: _r(p.purchasePrice),
+      cost: _r(wd.cost),
+      profit: _r(wd.profit)
+    };
+    return colDefs.map(c => vals[c.id] != null ? vals[c.id] : '');
+  }
+
+  // Helper: subtotal row prefixed with a label and the numeric sums.
+  function subtotalRow(label, sums) {
+    return colDefs.map((c, i) => {
+      if (i === 0) return label;
+      if (c.id === 'qty') return sums.qty || 0;
+      if (c.id === 'gross') return _r(sums.gross || 0);
+      if (c.id === 'net') return _r(sums.net || 0);
+      if (c.id === 'vat') return _r(sums.vat || 0);
+      if (c.id === 'vatErr') return _r(sums.vatErr || 0);
+      if (c.id === 'cost') return _r(sums.cost || 0);
+      if (c.id === 'profit') return _r(sums.profit || 0);
+      return '';
+    });
+  }
+
+  function sumGroup(items) {
+    return items.reduce((acc, x) => {
+      const wd = x.wd;
+      acc.qty += wd.qty || 0;
+      acc.gross += wd.gross || 0;
+      acc.net += wd.net || 0;
+      acc.vat += wd.vat || 0;
+      acc.vatErr += wd.vatErr || 0;
+      acc.cost += wd.cost || 0;
+      acc.profit += wd.profit || 0;
+      return acc;
+    }, { qty:0, gross:0, net:0, vat:0, vatErr:0, cost:0, profit:0 });
+  }
+
+  // Helper: pad row with empty cells to colCount
+  function pad(row) {
+    while (row.length < colCount) row.push('');
+    return row;
+  }
+  function blank() { return new Array(colCount).fill(''); }
+
+  // Build top-level title
+  const aoa = [];
+  aoa.push(pad(['דוח מע"מ — תצוגה שבועית']));
+  aoa.push(pad(['טווח: ' + new Date(data.range.from).toLocaleDateString('he-IL') + ' – ' + new Date(data.range.to).toLocaleDateString('he-IL') + ' · מע"מ ' + data.vatRate + '%']));
+  aoa.push(blank());
+
+  // Track which row indices are "section header" / "subtotal" / "category" /
+  // "header" so we can apply background fills after building the array.
+  const styleMap = []; // entries: { row, type }
+
+  // Iterate weeks (chronological)
+  data.weeks.forEach((w, idx) => {
+    // Build per-week list of items with sales
+    const itemsThisWeek = products.map(p => ({ p, wd: p.weekly[idx] })).filter(x => x.wd && x.wd.qty > 0);
+    if (!itemsThisWeek.length) return;
+
+    // Group by category, with shop-curated category order
+    const byCat = {};
+    itemsThisWeek.forEach(x => {
+      const c = x.p.category || 'אחר';
+      (byCat[c] = byCat[c] || []).push(x);
+    });
+    const ORDER = ['פירות וירקות', 'חד פעמי', 'מוצרי ניקיון', 'יינות ומשקאות מיוחדים', 'כללי'];
+    const cats = Object.keys(byCat).sort((a, b) => {
+      const ai = ORDER.indexOf(a), bi = ORDER.indexOf(b);
+      if (ai >= 0 && bi >= 0) return ai - bi;
+      if (ai >= 0) return -1;
+      if (bi >= 0) return 1;
+      return a.localeCompare(b, 'he');
+    });
+    cats.forEach(c => byCat[c].sort((a, b) => (a.p.name || '').localeCompare(b.p.name || '', 'he')));
+
+    // Week section header
+    const weekSums = sumGroup(itemsThisWeek);
+    const weekLabel = '📅 שבוע ' + fmtWk(w.weekStart) + '–' + fmtWk(w.weekEnd) +
+      ' · ' + weekSums.qty + ' יח׳ · ברוטו ₪' + _r(weekSums.gross) +
+      (weekSums.vatErr > 0 ? ' · ⚠️ נגבה בטעות ₪' + _r(weekSums.vatErr) : '');
+    styleMap.push({ row: aoa.length, type: 'week' });
+    aoa.push(pad([weekLabel]));
+
+    cats.forEach(catName => {
+      const catItems = byCat[catName];
+      const catSums = sumGroup(catItems);
+
+      // Category header
+      styleMap.push({ row: aoa.length, type: 'cat' });
+      aoa.push(pad(['  ' + catName + ' (' + catItems.length + ' פריטים)']));
+
+      // Column header
+      styleMap.push({ row: aoa.length, type: 'cols' });
+      aoa.push(headerRow.slice());
+
+      // Products
+      catItems.forEach(({ p, wd }) => {
+        aoa.push(productRow(p, wd));
+      });
+
+      // Category subtotal
+      styleMap.push({ row: aoa.length, type: 'subtotal' });
+      aoa.push(subtotalRow('  ⮕ סה"כ ' + catName, catSums));
+      aoa.push(blank());
+    });
+
+    // Week subtotal
+    styleMap.push({ row: aoa.length, type: 'weektot' });
+    aoa.push(subtotalRow('▌סה"כ שבוע ' + fmtWk(w.weekStart) + '–' + fmtWk(w.weekEnd), weekSums));
+    aoa.push(blank());
+    aoa.push(blank());
+  });
+
+  // Range grand total (sum of all selected products across all weeks)
+  const grand = products.reduce((acc, p) => {
+    acc.qty += p.totalQty;
+    acc.gross += p.totalGross;
+    acc.net += p.totalNet;
+    acc.vat += p.totalVat;
+    acc.vatErr += (p.totalVatErr || 0);
+    acc.cost += p.totalCost;
+    acc.profit += p.totalProfit;
+    return acc;
+  }, { qty:0, gross:0, net:0, vat:0, vatErr:0, cost:0, profit:0 });
+  styleMap.push({ row: aoa.length, type: 'grand' });
+  aoa.push(subtotalRow('💰 סה"כ כללי לטווח', grand));
+
+  // Create the sheet
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+  // Column widths — auto-fit-ish based on content
+  const widths = colDefs.map((c, i) => {
+    let max = (c.label || '').length;
+    aoa.forEach(row => {
+      const v = row[i] != null ? String(row[i]) : '';
+      if (v.length > max) max = v.length;
+    });
+    return { wch: Math.min(45, Math.max(8, max + 2)) };
+  });
+  ws['!cols'] = widths;
+
+  // Apply per-row styling via cell styles. SheetJS Community supports basic
+  // styling through s.fill and s.font.
+  const STYLES = {
+    week:      { fill: { fgColor: { rgb: '14532D' } }, font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 12 } },
+    cat:       { fill: { fgColor: { rgb: 'FEF3C7' } }, font: { bold: true, color: { rgb: '92400E' } } },
+    cols:      { fill: { fgColor: { rgb: 'F3F4F6' } }, font: { bold: true } },
+    subtotal:  { fill: { fgColor: { rgb: 'F0FDF4' } }, font: { bold: true } },
+    weektot:   { fill: { fgColor: { rgb: 'DCFCE7' } }, font: { bold: true, sz: 11 } },
+    grand:     { fill: { fgColor: { rgb: 'FED7AA' } }, font: { bold: true, sz: 12 } }
+  };
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  styleMap.forEach(({ row, type }) => {
+    const style = STYLES[type];
+    if (!style) return;
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const addr = XLSX.utils.encode_cell({ r: row, c });
+      if (!ws[addr]) ws[addr] = { v: '', t: 's' };
+      ws[addr].s = style;
+    }
+  });
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'תצוגה שבועית');
+  const today = new Date().toLocaleDateString('he-IL').replace(/\//g, '-');
+  XLSX.writeFile(wb, 'דוח-מעמ-שבועי-' + today + '.xlsx');
 }
 function _saExportExcelInner() {
   const data = window._saState.data;
