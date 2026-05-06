@@ -8503,8 +8503,9 @@ async function doExportSupplierPDF(saveToSupplier) {
       '<table class="items">' +
         '<thead><tr><th class="num">#</th><th class="name">מוצר</th><th class="qty">כמות</th></tr></thead>' +
         '<tbody>' + rowsHtml + '</tbody>' +
-        '<tfoot><tr><td colspan="2" class="totlabel">📦 סה״כ נקודה</td><td class="qty"><strong>' + pointUnits + '</strong></td></tr></tfoot>' +
       '</table>' +
+      // Total lives outside the <table> so the browser does not repeat it on every printed page.
+      '<div class="pp-total"><span class="pp-total-label">📦 סה״כ נקודה</span><strong class="pp-total-value">' + pointUnits + '</strong></div>' +
     '</section>';
   }).join('');
 
@@ -8568,12 +8569,14 @@ async function doExportSupplierPDF(saveToSupplier) {
         '<th class="qty total">סה״כ</th>' +
         pointCols +
       '</tr></thead>' +
-      '<tbody>' + summaryRowsHtml + '</tbody>' +
-      '<tfoot><tr>' +
-        '<td colspan="2" class="totlabel">📦 סה״כ נקודה</td>' +
-        '<td class="qty total"><strong>' + grandUnits + '</strong></td>' +
-        pointTotalCells +
-      '</tr></tfoot>' +
+      '<tbody>' + summaryRowsHtml +
+        // Total row inside tbody (NOT tfoot) so browsers don't repeat it on every printed page.
+        '<tr class="summary-total-row">' +
+          '<td colspan="2" class="totlabel">📦 סה״כ</td>' +
+          '<td class="qty total"><strong>' + grandUnits + '</strong></td>' +
+          pointTotalCells +
+        '</tr>' +
+      '</tbody>' +
     '</table>' +
   '</section>';
 
@@ -8603,8 +8606,11 @@ async function doExportSupplierPDF(saveToSupplier) {
     'table.items tr:nth-child(even) td{background:#f9fafb}' +
     'table.items tr.group-header td{background:#dcfce7;color:#14532d;font-weight:800;font-size:10.5pt;padding:7px 10px;border-top:2px solid #15803d;border-bottom:1px solid #15803d;text-align:right}' +
     'table.items tr.group-header td .group-count{color:#6b7280;font-weight:600;font-size:9.5pt;margin-right:6px}' +
-    'table.items tfoot td{background:#f0fdf4;font-weight:900;border-top:2px solid #14532d}' +
-    'table.items td.totlabel{padding:8px 10px}' +
+    '.pp-total{display:flex;justify-content:space-between;align-items:center;background:#f0fdf4;border-top:2px solid #14532d;border-radius:0 0 6px 6px;padding:9px 14px;font-size:12pt;color:#14532d;page-break-inside:avoid;margin-top:0}' +
+    '.pp-total .pp-total-label{font-weight:800}' +
+    '.pp-total .pp-total-value{font-weight:900;font-size:13pt}' +
+    'table.items tr.summary-total-row td{background:#f0fdf4;font-weight:900;border-top:2px solid #14532d;page-break-inside:avoid}' +
+    'table.items tr.summary-total-row td.totlabel{padding:8px 10px}' +
     '.summary-section{padding:8mm 14mm 12mm;page-break-before:always}' +
     'table.items.summary{font-size:9.5pt}' +
     'table.items.summary th{padding:5px 6px;font-size:9pt}' +
