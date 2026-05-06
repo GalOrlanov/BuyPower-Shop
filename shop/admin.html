@@ -7658,7 +7658,33 @@ function _saExportExcelInner() {
   const ws1 = XLSX.utils.aoa_to_sheet(summaryRows);
   XLSX.utils.book_append_sheet(wb, ws1, 'סיכום');
 
-  // Sheets 2..N: one per week
+  // Sheet 2: full per-product detail across the whole range (one row per product × week with sales).
+  // This mirrors the "טבלה מפורטת" view on screen so the user gets every line item in a single sheet.
+  const detailRows = [
+    ['פירוט מוצרים — כל הטווח'],
+    ['טווח:', new Date(data.range.from).toLocaleDateString('he-IL') + ' – ' + new Date(data.range.to).toLocaleDateString('he-IL')],
+    [],
+    ['שבוע', 'מוצר', 'קטגוריה', 'סוג מע"מ', 'סטטוס', 'כמות', 'מחיר ליח׳', 'ברוטו', 'נטו', 'מע"מ תקין', 'נגבה בטעות', 'עלות יח׳', 'עלות כוללת', 'רווח']
+  ];
+  products.forEach(function(p) {
+    (p.weekly || []).forEach(function(wd, idx) {
+      if (!wd || wd.qty <= 0) return;
+      const w = data.weeks[idx];
+      const unitPrice = wd.qty > 0 ? wd.gross / wd.qty : 0;
+      const status = p.isSynthetic ? 'לא במלאי' : (p.isInactive ? 'לא פעיל' : 'פעיל');
+      detailRows.push([
+        _saWk(w.weekStart) + '–' + _saWk(w.weekEnd),
+        p.name, p.category, p.vatExempt ? 'פטור' : 'חייב 18%', status,
+        wd.qty, _round(unitPrice), _round(wd.gross), _round(wd.net),
+        _round(wd.vat), _round(wd.vatErr || 0),
+        _round(p.purchasePrice), _round(wd.cost), _round(wd.profit)
+      ]);
+    });
+  });
+  const wsDetail = XLSX.utils.aoa_to_sheet(detailRows);
+  XLSX.utils.book_append_sheet(wb, wsDetail, 'פירוט מוצרים');
+
+  // Sheets 3..N: one per week
   data.weeks.forEach(function(w, idx) {
     const rows = [
       ['שבוע ' + _saWk(w.weekStart) + '–' + _saWk(w.weekEnd)],
