@@ -4011,8 +4011,11 @@ function moRenderCatalog() {
   Object.keys(byCat).forEach(c => byCat[c].sort((a, b) => (a.displayName || '').localeCompare(b.displayName || '', 'he')));
   const cats = Object.keys(byCat).sort((a, b) => a.localeCompare(b, 'he'));
 
-  if (!selected.length && !filtered.length) {
-    el.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:20px">אין מוצרים שתואמים לחיפוש</div>';
+  if (!filtered.length) {
+    const emptyMsg = window._moItems && window._moItems.length
+      ? 'כל המוצרים שתואמים נבחרו כבר. עבור ל-"המוצרים שבחרתי" לראות אותם.'
+      : 'אין מוצרים שתואמים לחיפוש';
+    el.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:20px">' + emptyMsg + '</div>';
     moUpdateTotal();
     return;
   }
@@ -4036,12 +4039,9 @@ function moRenderCatalog() {
     '</div>';
   }
 
+  // Catalog now shows ONLY products that aren't already selected. Selected items
+  // live exclusively in the "המוצרים שבחרתי" tab — no duplication on screen.
   let html = '';
-  if (selected.length) {
-    html += '<div style="background:#15803d;color:white;padding:5px 10px;border-radius:6px 6px 0 0;font-weight:700;font-size:.82rem;margin-bottom:4px;position:sticky;top:0;z-index:1">✓ נבחרו (' + selected.length + ')</div>';
-    html += selected.map(rowHtml).join('');
-    html += '<div style="height:8px"></div>';
-  }
   cats.forEach(c => {
     html += '<div style="background:#fff7ed;color:#9a3412;padding:5px 10px;border-radius:6px;font-weight:700;font-size:.8rem;margin:6px 0 4px">' + c + ' <span style="opacity:.6;font-weight:400;font-size:.74rem">(' + byCat[c].length + ')</span></div>';
     html += byCat[c].map(rowHtml).join('');
