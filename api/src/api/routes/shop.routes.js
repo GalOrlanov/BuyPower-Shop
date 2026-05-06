@@ -1129,6 +1129,269 @@ router.get('/admin/sales-analytics', verifyShopToken, async (req, res) => {
 //   - per-line and per-order overcharge that flowed to the tax authority
 // Read-only — no DB writes.
 // ============================================================================
+// ============================================================================
+// EXPORT BUILDER — flexible Excel export
+//   POST /admin/export-builder
+//   Body: { dataset, filters, columns }
+//   Returns: { rows: [...], columnLabels: {...}, count: N }
+// Read-only — no DB writes. Datasets are validated by name.
+// ============================================================================
+router.post('/admin/export-builder', verifyShopToken, async (req, res) => {
+  try {
+    const db = await getDb();
+    const { ObjectId } = require('mongodb');
+    const { dataset, filters = {}, columns = [], limit } = req.body || {};
+
+    const VAT_RATE = 18;
+    const VAT_FACTOR = VAT_RATE / (100 + VAT_RATE);
+    const COUNTED = ['paid', 'collected', 'handled', 'confirmed', 'ready'];
+    function toSunday(d) { const x = new Date(d); x.setHours(0,0,0,0); x.setDate(x.getDate() - x.getDay()); return x; }
+    function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+    function isExemptInv(inv) {
+      if (!inv) return false;
+      if (inv.vatType === 'exempt') return true;
+      const cat = String(inv.category || '');
+      return cat.indexOf('פירות') >= 0 || cat.indexOf('ירקות') >= 0;
+    }
+
+    function resolveDateRange(f) {
+      if (f && f.from && f.to) return { from: new Date(f.from), to: new Date(f.to + 'T23:59:59') };
+      const weeks = Math.max(1, Math.min(52, parseInt((f && f.weeks) || 4)));
+      const today = new Date();
+      const thisSun = toSunday(today);
+      const from = addDays(thisSun, -(weeks - 1) * 7);
+      const to = addDays(thisSun, 7); to.setMilliseconds(-1);
+      return { from, to };
+    }
+
+    // Build a Mongo filter for shop_orders from request filters
+    function buildOrderFilter(f) {
+      const dr = resolveDateRange(f);
+      const out = { createdAt: { $gte: dr.from, $lte: dr.to } };
+      if (Array.isArray(f.statuses) && f.statuses.length) {
+        out.status = { $in: f.statuses };
+      } else {
+        // Default: skip junk
+        out.status = { $nin: ['pending_payment', 'cancelled_duplicate', 'merged_into_paid'] };
+      }
+      if (Array.isArray(f.pickups) && f.pickups.length) out.pickupLocation = { $in: f.pickups };
+      if (Array.isArray(f.paymentMethods) && f.paymentMethods.length) out.paymentMethod = { $in: f.paymentMethods };
+      if (f.search) {
+        const re = new RegExp(String(f.search).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+        out.$or = [
+          { customerName: re },
+          { phone: re },
+          { email: re }
+        ];
+      }
+      return { mongoFilter: out, dateRange: dr };
+    }
+
+    // ========== DATASET: orders ==========
+    if (dataset === 'orders') {
+      const { mongoFilter } = buildOrderFilter(filters);
+
+      // Fetch + match grow_payments for asmachta
+      const orders = await db.collection('shop_orders')
+        .find(mongoFilter, { projection: { 'items.imageUrl': 0 } })
+        .sort({ createdAt: -1 })
+        .toArray();
+
+      let paymentByOrder = {};
+      if (columns.includes('asmachta')) {
+        const oids = orders.map(o => String(o._id));
+        if (oids.length) {
+          const payments = await db.collection('grow_payments').find({ orderId: { $in: oids } }).toArray();
+          payments.forEach(p => { if (p.orderId) paymentByOrder[String(p.orderId)] = p; });
+        }
+      }
+
+      const STATUS_LABEL = {
+        paid: 'שולם', collected: 'נאסף', handled: 'טופל', confirmed: 'אושר', ready: 'מוכן',
+        pending_payment: 'ממתין לתשלום', cancelled: 'מבוטל'
+      };
+      const PAYMENT_LABEL = { cash: 'מזומן', credit: 'אשראי', bit: 'ביט', transfer: 'העברה' };
+
+      function fmtDate(d) { return d ? new Date(d).toLocaleString('he-IL') : ''; }
+      function fmtDateOnly(d) { return d ? new Date(d).toLocaleDateString('he-IL') : ''; }
+
+      const rows = orders.map(o => {
+        const gp = paymentByOrder[String(o._id)] || null;
+        const out = {};
+        if (columns.includes('createdAt')) out.createdAt = fmtDateOnly(o.createdAt);
+        if (columns.includes('paidAt'))    out.paidAt = fmtDateOnly(o.paidAt);
+        if (columns.includes('customerName')) out.customerName = o.customerName || '';
+        if (columns.includes('phone'))     out.phone = o.phone || '';
+        if (columns.includes('email'))     out.email = o.email || '';
+        if (columns.includes('pickupLocation')) out.pickupLocation = o.pickupLocation || '';
+        if (columns.includes('totalAmount')) out.totalAmount = Number(o.totalAmount) || 0;
+        if (columns.includes('status'))    out.status = STATUS_LABEL[o.status] || o.status || '';
+        if (columns.includes('paymentMethod')) out.paymentMethod = PAYMENT_LABEL[o.paymentMethod] || o.paymentMethod || '';
+        if (columns.includes('asmachta')) out.asmachta = gp ? (gp.asmachta || gp.growRef || '') : (o.growRef || '');
+        if (columns.includes('itemCount')) out.itemCount = (o.items || []).length;
+        if (columns.includes('itemsSummary')) out.itemsSummary = (o.items || []).map(i => i.name + ' ×' + i.qty).join(' · ');
+        if (columns.includes('notes'))    out.notes = o.notes || '';
+        if (columns.includes('source'))   out.source = o.source || '';
+        return out;
+      });
+
+      const limited = limit ? rows.slice(0, parseInt(limit)) : rows;
+      return res.json({ rows: limited, count: rows.length });
+    }
+
+    // ========== DATASET: orderItems ==========
+    if (dataset === 'orderItems') {
+      const { mongoFilter } = buildOrderFilter(filters);
+      const [orders, inventory] = await Promise.all([
+        db.collection('shop_orders').find(mongoFilter, { projection: { 'items.imageUrl': 0 } }).sort({ createdAt: -1 }).toArray(),
+        db.collection('shop_inventory').find({}, { projection: { name: 1, shopProductId: 1, vatType: 1, category: 1, supplier: 1, purchasePrice: 1 } }).toArray()
+      ]);
+      const invByShopId = {};
+      const invByName = {};
+      inventory.forEach(inv => {
+        if (inv.shopProductId) invByShopId[String(inv.shopProductId)] = inv;
+        if (inv.name) invByName[String(inv.name).trim()] = inv;
+      });
+
+      function fmtDateOnly(d) { return d ? new Date(d).toLocaleDateString('he-IL') : ''; }
+
+      const rows = [];
+      orders.forEach(o => {
+        (o.items || []).forEach(it => {
+          const qty = Number(it.qty) || 0;
+          const price = Number(it.price) || 0;
+          const gross = qty * price;
+          const pid = it.productId || it.id;
+          let inv = null;
+          if (pid && invByShopId[String(pid)]) inv = invByShopId[String(pid)];
+          if (!inv && it.name && invByName[String(it.name).trim()]) inv = invByName[String(it.name).trim()];
+          const exempt = inv ? isExemptInv(inv) : false;
+          const vat = exempt ? 0 : gross * VAT_FACTOR;
+          const net = gross - vat;
+          const cost = (it.purchasePriceAtOrder != null) ? Number(it.purchasePriceAtOrder) * qty : (inv ? Number(inv.purchasePrice) * qty : 0);
+
+          const out = {};
+          if (columns.includes('createdAt')) out.createdAt = fmtDateOnly(o.createdAt);
+          if (columns.includes('customerName')) out.customerName = o.customerName || '';
+          if (columns.includes('phone'))    out.phone = o.phone || '';
+          if (columns.includes('pickupLocation')) out.pickupLocation = o.pickupLocation || '';
+          if (columns.includes('itemName')) out.itemName = it.name || '';
+          if (columns.includes('variant'))  out.variant = it.variant || '';
+          if (columns.includes('category')) out.category = inv ? (inv.category || '') : '';
+          if (columns.includes('supplier')) out.supplier = inv ? (inv.supplier || '') : '';
+          if (columns.includes('qty'))      out.qty = qty;
+          if (columns.includes('price'))    out.price = price;
+          if (columns.includes('gross'))    out.gross = Math.round(gross * 100) / 100;
+          if (columns.includes('net'))      out.net = Math.round(net * 100) / 100;
+          if (columns.includes('vat'))      out.vat = Math.round(vat * 100) / 100;
+          if (columns.includes('vatType'))  out.vatType = exempt ? 'פטור' : 'חייב 18%';
+          if (columns.includes('cost'))     out.cost = Math.round(cost * 100) / 100;
+          if (columns.includes('profit'))   out.profit = Math.round((gross - cost) * 100) / 100;
+          rows.push(out);
+        });
+      });
+
+      const limited = limit ? rows.slice(0, parseInt(limit)) : rows;
+      return res.json({ rows: limited, count: rows.length });
+    }
+
+    // ========== DATASET: salesAnalytics (per product × week) ==========
+    if (dataset === 'salesAnalytics') {
+      const { mongoFilter, dateRange } = buildOrderFilter(filters);
+      // Build week buckets (Sun→Sat)
+      const weeks = [];
+      let cur = toSunday(dateRange.from);
+      while (cur <= dateRange.to) {
+        const ws = new Date(cur);
+        const we = addDays(ws, 7); we.setMilliseconds(-1);
+        weeks.push({ weekStart: ws, weekEnd: we });
+        cur = addDays(cur, 7);
+      }
+      const weekIndex = (d) => {
+        const t = new Date(d).getTime();
+        for (let i = 0; i < weeks.length; i++) {
+          if (t >= weeks[i].weekStart.getTime() && t <= weeks[i].weekEnd.getTime()) return i;
+        }
+        return -1;
+      };
+
+      mongoFilter.status = { $in: COUNTED };
+      const [orders, inventory] = await Promise.all([
+        db.collection('shop_orders').find(mongoFilter, { projection: { 'items.imageUrl': 0 } }).toArray(),
+        db.collection('shop_inventory').find({}).toArray()
+      ]);
+      const invByShopId = {};
+      const invByName = {};
+      inventory.forEach(inv => {
+        if (inv.shopProductId) invByShopId[String(inv.shopProductId)] = inv;
+        if (inv.name) invByName[String(inv.name).trim()] = inv;
+      });
+
+      const stats = {}; // key = name, value = aggregated
+      orders.forEach(o => {
+        const wi = weekIndex(o.createdAt);
+        if (wi < 0) return;
+        (o.items || []).forEach(it => {
+          const qty = Number(it.qty) || 0;
+          if (qty <= 0) return;
+          const price = Number(it.price) || 0;
+          const gross = qty * price;
+          const pid = it.productId || it.id;
+          let inv = null;
+          if (pid && invByShopId[String(pid)]) inv = invByShopId[String(pid)];
+          if (!inv && it.name && invByName[String(it.name).trim()]) inv = invByName[String(it.name).trim()];
+          const exempt = inv ? isExemptInv(inv) : false;
+          const vat = exempt ? 0 : gross * VAT_FACTOR;
+          const vatErr = exempt ? gross * VAT_FACTOR : 0;
+          const net = gross - vat;
+          const cost = (it.purchasePriceAtOrder != null) ? Number(it.purchasePriceAtOrder) * qty : (inv ? Number(inv.purchasePrice) * qty : 0);
+
+          const wkLabel = (weeks[wi].weekStart.getDate() + '/' + (weeks[wi].weekStart.getMonth() + 1)) + '–' + (weeks[wi].weekEnd.getDate() + '/' + (weeks[wi].weekEnd.getMonth() + 1));
+          const key = (it.name || '') + '|' + wkLabel;
+          if (!stats[key]) stats[key] = {
+            week: wkLabel,
+            name: it.name || '',
+            category: inv ? (inv.category || '') : '',
+            vatType: exempt ? 'פטור' : 'חייב 18%',
+            qty: 0, gross: 0, net: 0, vat: 0, vatErr: 0, cost: 0
+          };
+          stats[key].qty += qty;
+          stats[key].gross += gross;
+          stats[key].net += net;
+          stats[key].vat += vat;
+          stats[key].vatErr += vatErr;
+          stats[key].cost += cost;
+        });
+      });
+
+      const rows = Object.values(stats).map(s => {
+        const out = {};
+        if (columns.includes('week'))     out.week = s.week;
+        if (columns.includes('name'))     out.name = s.name;
+        if (columns.includes('category')) out.category = s.category;
+        if (columns.includes('vatType'))  out.vatType = s.vatType;
+        if (columns.includes('qty'))      out.qty = s.qty;
+        if (columns.includes('unitPrice')) out.unitPrice = s.qty > 0 ? Math.round((s.gross / s.qty) * 100) / 100 : 0;
+        if (columns.includes('gross'))    out.gross = Math.round(s.gross * 100) / 100;
+        if (columns.includes('net'))      out.net = Math.round(s.net * 100) / 100;
+        if (columns.includes('vat'))      out.vat = Math.round(s.vat * 100) / 100;
+        if (columns.includes('vatErr'))   out.vatErr = Math.round(s.vatErr * 100) / 100;
+        if (columns.includes('cost'))     out.cost = Math.round(s.cost * 100) / 100;
+        if (columns.includes('profit'))   out.profit = Math.round((s.gross - s.cost) * 100) / 100;
+        return out;
+      });
+
+      const limited = limit ? rows.slice(0, parseInt(limit)) : rows;
+      return res.json({ rows: limited, count: rows.length });
+    }
+
+    return res.status(400).json({ error: 'dataset לא ידוע: ' + dataset });
+  } catch (e) {
+    console.error('export-builder error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.get('/admin/grow-orders', verifyShopToken, async (req, res) => {
   try {
     const db = await getDb();

@@ -314,6 +314,7 @@ input:checked + .slider::before { transform: translateX(20px); }
       <button class="tab-btn" onclick="showTab('payment');setPayDateRange('month')">💳 תשלום Grow</button>
       <button class="tab-btn" onclick="showTab('finance');initFinanceTab()">💰 פיננסים</button>
       <button class="tab-btn" onclick="showTab('salesAnalytics');initSalesAnalytics()">📊 פירוט רכישת מוצרים</button>
+      <button class="tab-btn" onclick="showTab('exportBuilder');initExportBuilder()">📤 בנה ייצוא</button>
       <button class="tab-btn" onclick="window.location.href='supplier.html'">🏭 ספקים</button>
     </div>
   </div>
@@ -1156,6 +1157,129 @@ input:checked + .slider::before { transform: translateX(20px); }
         <div style="display:flex;gap:8px;margin-top:14px">
           <button onclick="saApplyProductFilter()" style="flex:1;padding:11px;background:#15803d;color:white;border:none;border-radius:10px;font-weight:800;cursor:pointer;font-family:inherit">החל ✓</button>
           <button onclick="document.getElementById('saProductModal').style.display='none'" style="padding:11px 18px;background:#f3f4f6;border:none;border-radius:10px;font-weight:700;cursor:pointer;font-family:inherit">ביטול</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- EXPORT BUILDER TAB -->
+    <div id="tab-exportBuilder" class="tab-panel">
+      <div class="card" style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:14px">
+          <div class="card-title" style="margin:0">📤 בנה ייצוא Excel — מותאם אישית</div>
+          <div style="font-size:.82rem;color:#6b7280">בחר נתונים · סנן · בחר עמודות · הורד</div>
+        </div>
+
+        <style>
+          .eb-section { background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:12px;padding:14px;margin-bottom:14px }
+          .eb-section-title { font-weight:800;color:#374151;margin-bottom:10px;font-size:.92rem }
+          .eb-radio-group { display:flex;flex-wrap:wrap;gap:8px }
+          .eb-radio-btn { padding:9px 16px;border:1.5px solid #d1d5db;background:white;border-radius:10px;cursor:pointer;font-family:inherit;font-size:.88rem;font-weight:700;color:#374151 }
+          .eb-radio-btn.active { background:#15803d;color:white;border-color:#15803d }
+          .eb-filter-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px }
+          .eb-filter-grid label { font-size:.82rem;color:#6b7280;display:block;margin-bottom:4px;font-weight:700 }
+          .eb-filter-grid select,.eb-filter-grid input { width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.88rem }
+          .eb-cols-list { display:flex;flex-direction:column;gap:4px;max-height:380px;overflow-y:auto;background:white;border:1.5px solid #e5e7eb;border-radius:8px;padding:8px }
+          .eb-col-row { display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px }
+          .eb-col-row.included { background:#f0fdf4 }
+          .eb-col-row.excluded { background:white;opacity:.55 }
+          .eb-col-row input[type=checkbox] { width:16px;height:16px;accent-color:#15803d;cursor:pointer }
+          .eb-col-row .col-label { flex:1;font-size:.88rem }
+          .eb-col-row .col-arrows button { background:#eff6ff;border:none;color:#1d4ed8;width:24px;height:24px;border-radius:5px;cursor:pointer;font-weight:800 }
+          .eb-col-row .col-arrows button:disabled { opacity:.3;cursor:default }
+          .eb-preview { background:white;border:1.5px solid #e5e7eb;border-radius:10px;overflow:auto;max-height:400px }
+          .eb-preview table { width:100%;border-collapse:collapse;font-size:.84rem }
+          .eb-preview th { background:#f3f4f6;padding:7px 10px;text-align:right;border-bottom:2px solid #e5e7eb;position:sticky;top:0;z-index:1 }
+          .eb-preview td { padding:5px 10px;border-bottom:1px solid #f3f4f6;text-align:right }
+        </style>
+
+        <!-- Step 1: Dataset -->
+        <div class="eb-section">
+          <div class="eb-section-title">1️⃣ מה לייצא?</div>
+          <div class="eb-radio-group" id="ebDatasetGroup">
+            <button class="eb-radio-btn active" onclick="ebSetDataset('orders')">📦 הזמנות</button>
+            <button class="eb-radio-btn" onclick="ebSetDataset('orderItems')">🛒 פריטי הזמנה</button>
+            <button class="eb-radio-btn" onclick="ebSetDataset('salesAnalytics')">📊 דוח מע"מ (פר מוצר × שבוע)</button>
+          </div>
+        </div>
+
+        <!-- Step 2: Filters -->
+        <div class="eb-section">
+          <div class="eb-section-title">2️⃣ סינון</div>
+          <div class="eb-filter-grid">
+            <div>
+              <label>טווח תאריכים מהיר</label>
+              <select id="ebRangeQuick" onchange="ebOnRangeQuick()">
+                <option value="1">השבוע</option>
+                <option value="2">שבועיים</option>
+                <option value="4" selected>4 שבועות</option>
+                <option value="8">חודשיים</option>
+                <option value="12">3 חודשים</option>
+                <option value="custom">מותאם</option>
+              </select>
+            </div>
+            <div>
+              <label>מתאריך</label>
+              <input type="date" id="ebFrom">
+            </div>
+            <div>
+              <label>עד תאריך</label>
+              <input type="date" id="ebTo">
+            </div>
+            <div>
+              <label>נקודות איסוף</label>
+              <select id="ebPickups" multiple style="height:80px"></select>
+              <div style="font-size:.72rem;color:#9ca3af;margin-top:2px">Ctrl/Cmd + לחיצה לבחירה מרובה. ריק = כל הנקודות</div>
+            </div>
+            <div>
+              <label>סטטוס</label>
+              <select id="ebStatuses" multiple style="height:80px">
+                <option value="paid">שולם</option>
+                <option value="collected">נאסף</option>
+                <option value="handled">טופל</option>
+                <option value="confirmed">אושר</option>
+                <option value="ready">מוכן</option>
+                <option value="cancelled">מבוטל</option>
+              </select>
+              <div style="font-size:.72rem;color:#9ca3af;margin-top:2px">ריק = הכל פרט למבוטל/כפיל</div>
+            </div>
+            <div>
+              <label>אמצעי תשלום</label>
+              <select id="ebPaymentMethods" multiple style="height:80px">
+                <option value="">ברירת מחדל (גרו / מזומן / וכו')</option>
+                <option value="cash">מזומן</option>
+                <option value="credit">אשראי</option>
+                <option value="bit">ביט</option>
+                <option value="transfer">העברה</option>
+              </select>
+            </div>
+            <div style="grid-column:1/-1">
+              <label>חיפוש חופשי (שם / טלפון / אימייל)</label>
+              <input type="text" id="ebSearch" placeholder="...">
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 3: Columns -->
+        <div class="eb-section">
+          <div class="eb-section-title">3️⃣ עמודות</div>
+          <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+            <button onclick="ebSelectAllColumns(true)" style="padding:6px 14px;background:#dcfce7;color:#14532d;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-size:.82rem">סמן הכל</button>
+            <button onclick="ebSelectAllColumns(false)" style="padding:6px 14px;background:#fee2e2;color:#991b1b;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-size:.82rem">נקה הכל</button>
+            <button onclick="ebResetColumns()" style="padding:6px 14px;background:#dbeafe;color:#1e40af;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-size:.82rem">↺ ברירת מחדל</button>
+          </div>
+          <div id="ebColsList" class="eb-cols-list"></div>
+        </div>
+
+        <!-- Step 4: Actions -->
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+          <button onclick="ebPreview()" style="flex:1;min-width:160px;padding:13px;background:#3b82f6;color:white;border:none;border-radius:10px;font-weight:800;cursor:pointer;font-family:inherit;font-size:.95rem">👁️ תצוגה מקדימה</button>
+          <button onclick="ebDownload()" style="flex:1;min-width:160px;padding:13px;background:#15803d;color:white;border:none;border-radius:10px;font-weight:800;cursor:pointer;font-family:inherit;font-size:.95rem">📥 הורד Excel</button>
+        </div>
+
+        <!-- Preview -->
+        <div id="ebPreviewWrap" style="display:none">
+          <div class="eb-section-title" id="ebPreviewTitle">תצוגה מקדימה</div>
+          <div id="ebPreviewTable" class="eb-preview"></div>
         </div>
       </div>
     </div>
@@ -7729,6 +7853,284 @@ function _saExportExcelInner() {
 }
 
 // ===== PDF export =====
+// ============================================================================
+// EXPORT BUILDER — flexible Excel export with chosen columns/filters/dataset
+// ============================================================================
+window._eb = {
+  dataset: 'orders',
+  filters: { weeks: 4, from: '', to: '', pickups: [], statuses: [], paymentMethods: [], search: '' },
+  columns: [],
+  columnsBackup: {} // remember per-dataset choices when user switches
+};
+
+const EB_DATASETS = {
+  orders: {
+    label: 'הזמנות',
+    fields: [
+      { id: 'createdAt', label: 'תאריך הזמנה', def: true },
+      { id: 'paidAt', label: 'תאריך תשלום', def: false },
+      { id: 'customerName', label: 'שם לקוח', def: true },
+      { id: 'phone', label: 'טלפון', def: true },
+      { id: 'email', label: 'אימייל', def: false },
+      { id: 'pickupLocation', label: 'נקודת איסוף', def: true },
+      { id: 'totalAmount', label: 'סכום', def: true },
+      { id: 'status', label: 'סטטוס', def: true },
+      { id: 'paymentMethod', label: 'אמצעי תשלום', def: false },
+      { id: 'asmachta', label: 'אסמכתא גרו', def: false },
+      { id: 'itemCount', label: 'מס׳ פריטים', def: false },
+      { id: 'itemsSummary', label: 'פירוט פריטים', def: false },
+      { id: 'notes', label: 'הערות', def: false },
+      { id: 'source', label: 'מקור', def: false }
+    ]
+  },
+  orderItems: {
+    label: 'פריטי הזמנה',
+    fields: [
+      { id: 'createdAt', label: 'תאריך הזמנה', def: true },
+      { id: 'customerName', label: 'שם לקוח', def: true },
+      { id: 'phone', label: 'טלפון', def: false },
+      { id: 'pickupLocation', label: 'נקודת איסוף', def: true },
+      { id: 'itemName', label: 'שם המוצר', def: true },
+      { id: 'variant', label: 'וריאנט', def: false },
+      { id: 'category', label: 'קטגוריה', def: true },
+      { id: 'supplier', label: 'ספק', def: false },
+      { id: 'qty', label: 'כמות', def: true },
+      { id: 'price', label: 'מחיר ליח׳', def: true },
+      { id: 'gross', label: 'ברוטו', def: true },
+      { id: 'net', label: 'נטו', def: false },
+      { id: 'vat', label: 'מע"מ', def: false },
+      { id: 'vatType', label: 'סוג מע"מ', def: false },
+      { id: 'cost', label: 'עלות', def: false },
+      { id: 'profit', label: 'רווח', def: false }
+    ]
+  },
+  salesAnalytics: {
+    label: 'דוח מע"מ',
+    fields: [
+      { id: 'week', label: 'שבוע', def: true },
+      { id: 'name', label: 'מוצר', def: true },
+      { id: 'category', label: 'קטגוריה', def: true },
+      { id: 'vatType', label: 'סוג מע"מ', def: true },
+      { id: 'qty', label: 'כמות', def: true },
+      { id: 'unitPrice', label: 'מחיר ליח׳', def: true },
+      { id: 'gross', label: 'ברוטו', def: true },
+      { id: 'net', label: 'נטו', def: false },
+      { id: 'vat', label: 'מע"מ תקין', def: true },
+      { id: 'vatErr', label: 'נגבה בטעות', def: true },
+      { id: 'cost', label: 'עלות', def: false },
+      { id: 'profit', label: 'רווח', def: false }
+    ]
+  }
+};
+
+function initExportBuilder() {
+  // populate pickup-points dropdown once
+  const ppSel = document.getElementById('ebPickups');
+  if (ppSel && !ppSel.options.length) {
+    fetch('/api/shop/pickup-points').then(r => r.json()).then(pts => {
+      ppSel.innerHTML = (pts || []).map(p => '<option value="' + (p.name || '').replace(/"/g, '&quot;') + '">' + (p.name || '') + '</option>').join('');
+    }).catch(() => {});
+  }
+  ebSetDataset(window._eb.dataset);
+}
+
+function ebSetDataset(ds) {
+  // backup the current column selection before switching
+  if (window._eb.columns.length) {
+    window._eb.columnsBackup[window._eb.dataset] = window._eb.columns.slice();
+  }
+  window._eb.dataset = ds;
+  // highlight active radio
+  document.querySelectorAll('#ebDatasetGroup .eb-radio-btn').forEach(function(b, i) {
+    const keys = Object.keys(EB_DATASETS);
+    b.classList.toggle('active', keys[i] === ds);
+  });
+  // restore or default
+  if (window._eb.columnsBackup[ds]) {
+    window._eb.columns = window._eb.columnsBackup[ds].slice();
+  } else {
+    ebResetColumns(true);
+  }
+  ebRenderColumns();
+  document.getElementById('ebPreviewWrap').style.display = 'none';
+}
+
+function ebResetColumns(noRender) {
+  const ds = EB_DATASETS[window._eb.dataset];
+  window._eb.columns = ds.fields.filter(f => f.def).map(f => f.id);
+  if (!noRender) ebRenderColumns();
+}
+
+function ebRenderColumns() {
+  const ds = EB_DATASETS[window._eb.dataset];
+  const list = document.getElementById('ebColsList');
+  if (!list || !ds) return;
+  // Active columns first (in chosen order), then inactive ones below.
+  const active = window._eb.columns.slice();
+  const activeSet = new Set(active);
+  const inactive = ds.fields.filter(f => !activeSet.has(f.id)).map(f => f.id);
+  const ordered = active.concat(inactive);
+
+  list.innerHTML = ordered.map(function(id, idx) {
+    const f = ds.fields.find(x => x.id === id);
+    if (!f) return '';
+    const included = activeSet.has(id);
+    const upDisabled = !included || active.indexOf(id) === 0;
+    const downDisabled = !included || active.indexOf(id) === active.length - 1;
+    return '<div class="eb-col-row ' + (included ? 'included' : 'excluded') + '">' +
+      '<input type="checkbox" ' + (included ? 'checked' : '') + ' onchange="ebToggleColumn(\'' + id + '\')">' +
+      '<span class="col-label">' + f.label + '</span>' +
+      '<span class="col-arrows" style="display:flex;gap:3px">' +
+        '<button onclick="ebMoveColumn(\'' + id + '\', -1)" ' + (upDisabled ? 'disabled' : '') + '>↑</button>' +
+        '<button onclick="ebMoveColumn(\'' + id + '\', 1)" ' + (downDisabled ? 'disabled' : '') + '>↓</button>' +
+      '</span>' +
+    '</div>';
+  }).join('');
+}
+
+function ebSelectAllColumns(state) {
+  const ds = EB_DATASETS[window._eb.dataset];
+  if (state) {
+    // Add missing fields preserving current order, append new at end
+    const cur = window._eb.columns.slice();
+    ds.fields.forEach(f => { if (cur.indexOf(f.id) < 0) cur.push(f.id); });
+    window._eb.columns = cur;
+  } else {
+    window._eb.columns = [];
+  }
+  ebRenderColumns();
+}
+
+function ebToggleColumn(id) {
+  const cur = window._eb.columns.slice();
+  const idx = cur.indexOf(id);
+  if (idx >= 0) cur.splice(idx, 1);
+  else cur.push(id);
+  window._eb.columns = cur;
+  ebRenderColumns();
+}
+
+function ebMoveColumn(id, dir) {
+  const cur = window._eb.columns.slice();
+  const idx = cur.indexOf(id);
+  if (idx < 0) return;
+  const newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= cur.length) return;
+  cur.splice(idx, 1);
+  cur.splice(newIdx, 0, id);
+  window._eb.columns = cur;
+  ebRenderColumns();
+}
+
+function ebOnRangeQuick() {
+  const v = document.getElementById('ebRangeQuick').value;
+  if (v === 'custom') return; // user will fill from/to manually
+  // Clear from/to so weeks param is used
+  document.getElementById('ebFrom').value = '';
+  document.getElementById('ebTo').value = '';
+}
+
+function _ebReadFilters() {
+  const quick = document.getElementById('ebRangeQuick').value;
+  const from = document.getElementById('ebFrom').value;
+  const to   = document.getElementById('ebTo').value;
+  const pickups = Array.from(document.getElementById('ebPickups').selectedOptions).map(o => o.value).filter(Boolean);
+  const statuses = Array.from(document.getElementById('ebStatuses').selectedOptions).map(o => o.value).filter(Boolean);
+  const paymentMethods = Array.from(document.getElementById('ebPaymentMethods').selectedOptions).map(o => o.value).filter(Boolean);
+  const search = document.getElementById('ebSearch').value.trim();
+  const f = { pickups, statuses, paymentMethods, search };
+  if (quick !== 'custom' && !from && !to) {
+    f.weeks = parseInt(quick) || 4;
+  } else {
+    if (from) f.from = from;
+    if (to) f.to = to;
+  }
+  return f;
+}
+
+async function _ebFetch(limit) {
+  if (!window._eb.columns.length) {
+    alert('יש לבחור לפחות עמודה אחת');
+    return null;
+  }
+  const headers = (typeof authHeaders === 'function') ? authHeaders() : { 'Content-Type': 'application/json' };
+  // authHeaders returns { Authorization: ... } usually, ensure Content-Type is set
+  if (!headers['Content-Type']) headers['Content-Type'] = 'application/json';
+  const body = JSON.stringify({
+    dataset: window._eb.dataset,
+    filters: _ebReadFilters(),
+    columns: window._eb.columns,
+    limit: limit || undefined
+  });
+  try {
+    const r = await fetch(API + '/admin/export-builder', { method: 'POST', headers, body });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      alert('שגיאה: ' + (err.error || r.status));
+      return null;
+    }
+    return await r.json();
+  } catch(e) {
+    alert('שגיאת רשת: ' + e.message);
+    return null;
+  }
+}
+
+async function ebPreview() {
+  const data = await _ebFetch(10);
+  if (!data) return;
+  const ds = EB_DATASETS[window._eb.dataset];
+  const wrap = document.getElementById('ebPreviewWrap');
+  const titleEl = document.getElementById('ebPreviewTitle');
+  const tblEl = document.getElementById('ebPreviewTable');
+  titleEl.textContent = '👁️ תצוגה מקדימה — ' + (data.rows.length) + ' מתוך ' + data.count + ' שורות';
+  if (!data.rows.length) {
+    tblEl.innerHTML = '<div style="padding:30px;text-align:center;color:#9ca3af">אין נתונים בסינון הזה</div>';
+    wrap.style.display = 'block';
+    return;
+  }
+  const labels = {};
+  ds.fields.forEach(f => { labels[f.id] = f.label; });
+  const cols = window._eb.columns;
+  let html = '<table><thead><tr>' + cols.map(c => '<th>' + (labels[c] || c) + '</th>').join('') + '</tr></thead><tbody>';
+  data.rows.forEach(r => {
+    html += '<tr>' + cols.map(c => '<td>' + (r[c] != null ? String(r[c]).replace(/</g,'&lt;') : '') + '</td>').join('') + '</tr>';
+  });
+  html += '</tbody></table>';
+  tblEl.innerHTML = html;
+  wrap.style.display = 'block';
+}
+
+async function ebDownload() {
+  if (typeof XLSX === 'undefined') return alert('ספריית Excel לא נטענה');
+  const data = await _ebFetch();
+  if (!data) return;
+  if (!data.rows.length) return alert('אין נתונים בסינון הזה');
+  const ds = EB_DATASETS[window._eb.dataset];
+  const labels = {};
+  ds.fields.forEach(f => { labels[f.id] = f.label; });
+  const cols = window._eb.columns;
+  const aoa = [cols.map(c => labels[c] || c)];
+  data.rows.forEach(r => {
+    aoa.push(cols.map(c => r[c] != null ? r[c] : ''));
+  });
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  // Auto column widths (rough)
+  const widths = cols.map((c, i) => {
+    let max = (labels[c] || c).length;
+    aoa.slice(1, 100).forEach(row => {
+      const v = row[i] != null ? String(row[i]) : '';
+      if (v.length > max) max = v.length;
+    });
+    return { wch: Math.min(40, Math.max(8, max + 2)) };
+  });
+  ws['!cols'] = widths;
+  XLSX.utils.book_append_sheet(wb, ws, ds.label.slice(0, 31));
+  const today = new Date().toLocaleDateString('he-IL').replace(/\//g, '-');
+  XLSX.writeFile(wb, ds.label + '-' + today + '.xlsx');
+}
+
 function saExportPDF() {
   const data = window._saState.data;
   if (!data) return alert('אין נתונים');
