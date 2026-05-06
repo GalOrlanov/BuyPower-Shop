@@ -1494,12 +1494,53 @@ if (localStorage.getItem('shopAdminAuth') === 'ok') {
   }
 }
 
-function showTab(tab) {
+function showTab(tab, ev) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('tab-' + tab).classList.add('active');
-  event.target.classList.add('active');
+  const panel = document.getElementById('tab-' + tab);
+  if (panel) panel.classList.add('active');
+  // Highlight the matching tab button. Prefer the click event's target;
+  // fall back to scanning button onclick attributes when called programmatically.
+  const e = (typeof ev !== 'undefined') ? ev : (typeof event !== 'undefined' ? event : null);
+  if (e && e.target && e.target.classList) {
+    e.target.classList.add('active');
+  } else {
+    document.querySelectorAll('.tab-btn').forEach(b => {
+      const onc = b.getAttribute('onclick') || '';
+      if (onc.indexOf("showTab('" + tab + "'") >= 0) b.classList.add('active');
+    });
+  }
+  // Persist for next page-load so refresh keeps the user where they were.
+  try { localStorage.setItem('admin.activeTab', tab); } catch(_) {}
 }
+
+// Restore the last-viewed tab on page load. Wrapped in a small delay so all
+// inline-tab handlers are wired up first.
+(function restoreLastTab() {
+  function go() {
+    let saved = '';
+    try { saved = localStorage.getItem('admin.activeTab') || ''; } catch(_) {}
+    if (!saved || saved === 'orders') return; // orders is the default
+    const panel = document.getElementById('tab-' + saved);
+    if (!panel) return;
+    // Find the tab button onclick that calls this tab and trigger it so any
+    // tab-specific init (loadOrders, initFinanceTab, etc.) runs as expected.
+    const btn = Array.from(document.querySelectorAll('.tab-btn')).find(b => {
+      const onc = b.getAttribute('onclick') || '';
+      return onc.indexOf("showTab('" + saved + "'") >= 0;
+    });
+    if (btn) {
+      try { btn.click(); } catch(_) { showTab(saved); }
+    } else {
+      showTab(saved);
+    }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => setTimeout(go, 0));
+  } else {
+    setTimeout(go, 0);
+  }
+})();
 
 function formatDate(d) {
   if (!d) return '—';
