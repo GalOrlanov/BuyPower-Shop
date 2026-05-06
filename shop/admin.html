@@ -3559,6 +3559,7 @@ async function openManualOrderModal() {
               <span id="moCartSummary" style="font-size:.78rem;color:#9a3412;font-weight:700">0 פריטים נבחרו</span>
             </div>
             <input type="text" id="moCatSearch" oninput="moRenderCatalog()" placeholder="🔍 חפש מוצר... (מוצרים שכבר נבחרו עולים למעלה)" autocomplete="off" style="width:100%;padding:9px 10px;border:1.5px solid #fed7aa;border-radius:8px;font-family:inherit;font-size:.9rem;margin-bottom:8px">
+            <div id="moCatChips" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px"></div>
             <div id="moCatalog" style="max-height:50vh;overflow-y:auto;background:white;border:1px solid #fed7aa;border-radius:8px;padding:6px">
               <div style="text-align:center;color:#9ca3af;padding:20px">טוען מוצרים...</div>
             </div>
@@ -3618,6 +3619,7 @@ async function openManualOrderModal() {
     window._moAllProducts = await fetch(API + '/products').then(r => r.json());
   } catch(e) { window._moAllProducts = []; }
   if (document.getElementById('moCatSearch')) document.getElementById('moCatSearch').value = '';
+  window._moActiveCategory = null; // reset category filter every time the modal opens
   moRenderCatalog();
   moUpdateTotal();
   // Load pickup points
@@ -3796,13 +3798,45 @@ function moUpdateTotal() {
   }
 }
 
+// Active category filter for the manual-order catalog. null = all.
+window._moActiveCategory = window._moActiveCategory || null;
+
+function moSetCategory(cat) {
+  window._moActiveCategory = cat || null;
+  moRenderCatalog();
+}
+
+function _moRenderCategoryChips(allRows) {
+  const el = document.getElementById('moCatChips');
+  if (!el) return;
+  const counts = {};
+  allRows.forEach(r => { counts[r.category] = (counts[r.category] || 0) + 1; });
+  const cats = Object.keys(counts).sort((a, b) => a.localeCompare(b, 'he'));
+  const active = window._moActiveCategory;
+  function chip(label, value, count, isActive) {
+    const bg = isActive ? '#15803d' : 'white';
+    const fg = isActive ? 'white' : '#9a3412';
+    const border = isActive ? '#15803d' : '#fdba74';
+    const v = value === null ? 'null' : "'" + String(value).replace(/'/g, "\\'") + "'";
+    return '<button onclick="moSetCategory(' + v + ')" style="padding:4px 12px;border-radius:14px;border:1.5px solid ' + border + ';background:' + bg + ';color:' + fg + ';cursor:pointer;font-family:inherit;font-size:.78rem;font-weight:700">' +
+      label + ' <span style="opacity:.65;font-weight:500">(' + count + ')</span></button>';
+  }
+  let html = chip('הכל', null, allRows.length, active === null);
+  cats.forEach(c => { html += chip(c, c, counts[c], active === c); });
+  el.innerHTML = html;
+}
+
 function moRenderCatalog() {
   const el = document.getElementById('moCatalog');
   if (!el) return;
   const products = window._moAllProducts || [];
   const allRows = _moExpandProductRows(products);
+  // Render chips first (uses unfiltered list so counts stay stable)
+  _moRenderCategoryChips(allRows);
   const q = (document.getElementById('moCatSearch') ? document.getElementById('moCatSearch').value : '').toLowerCase().trim();
-  const filtered = q ? allRows.filter(r => r.displayName.toLowerCase().includes(q) || (r.category || '').toLowerCase().includes(q)) : allRows;
+  const activeCat = window._moActiveCategory;
+  let filtered = q ? allRows.filter(r => r.displayName.toLowerCase().includes(q) || (r.category || '').toLowerCase().includes(q)) : allRows;
+  if (activeCat) filtered = filtered.filter(r => r.category === activeCat);
   if (!filtered.length) {
     el.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:20px">אין מוצרים שתואמים לחיפוש</div>';
     moUpdateTotal();
