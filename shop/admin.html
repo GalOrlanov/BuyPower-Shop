@@ -3901,18 +3901,18 @@ function moRenderMyOrder() {
   });
   Object.keys(byCat).forEach(c => byCat[c].sort((a, b) => (a.displayName || '').localeCompare(b.displayName || '', 'he')));
 
+  // Order rows: − [qty span] +. Qty is a read-only number — admin doesn't type it.
   function row(it) {
     const safeName = String(it.displayName).replace(/'/g, "\\'");
     const safeVariant = String(it.variant || '').replace(/'/g, "\\'");
-    return '<div style="display:flex;align-items:center;gap:6px;padding:8px 10px;border-radius:8px;margin-bottom:4px;background:#dcfce7;border:1px solid #86efac">' +
-      '<span style="flex:1;font-weight:800;font-size:.9rem;color:#111827">' + it.displayName + '</span>' +
-      '<button onclick="moAdjustQty(\'' + it.productId + '\',\'' + safeVariant + '\',-1,' + it.price + ',\'' + safeName + '\')" style="width:28px;height:28px;border:1px solid #15803d;background:white;color:#15803d;border-radius:50%;cursor:pointer;font-weight:800">−</button>' +
-      '<input type="number" min="0" max="99" value="' + it.qty + '" onchange="moSetQtyDirect(\'' + it.productId + '\',\'' + safeVariant + '\',this.value,' + it.price + ',\'' + safeName + '\');moRenderMyOrder()" style="width:50px;padding:4px;border:1px solid #d1d5db;border-radius:4px;text-align:center;font-size:.9rem;font-weight:800">' +
-      '<button onclick="moAdjustQty(\'' + it.productId + '\',\'' + safeVariant + '\',1,' + it.price + ',\'' + safeName + '\')" style="width:28px;height:28px;border:1px solid #15803d;background:#15803d;color:white;border-radius:50%;cursor:pointer;font-weight:800">+</button>' +
-      '<input type="number" value="' + it.price + '" step="0.5" onchange="moSetPrice(\'' + it.productId + '\',\'' + safeVariant + '\',this.value);moRenderMyOrder()" style="width:60px;padding:4px;border:1px solid #d1d5db;border-radius:4px;text-align:center;font-size:.85rem">' +
-      '<span style="font-size:.75rem;color:#6b7280">₪</span>' +
-      '<span style="min-width:60px;text-align:left;font-weight:900;color:#15803d">₪' + it.lineTotal.toFixed(2).replace(/\.00$/, '') + '</span>' +
-      '<button onclick="moSetQtyDirect(\'' + it.productId + '\',\'' + safeVariant + '\',0,' + it.price + ',\'' + safeName + '\');moRenderMyOrder()" style="width:24px;height:24px;background:#fee2e2;color:#dc2626;border:none;border-radius:5px;cursor:pointer;font-weight:800;font-size:.8rem">✕</button>' +
+    return '<div style="display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:8px;margin-bottom:4px;background:#dcfce7;border:1px solid #86efac">' +
+      '<span style="flex:1;font-weight:800;font-size:.92rem;color:#111827">' + it.displayName + '</span>' +
+      '<button onclick="moAdjustQty(\'' + it.productId + '\',\'' + safeVariant + '\',-1,' + it.price + ',\'' + safeName + '\')" style="width:32px;height:32px;border:none;background:white;color:#15803d;border:1.5px solid #15803d;border-radius:50%;cursor:pointer;font-weight:800;font-size:1.1rem;line-height:1">−</button>' +
+      '<span style="min-width:36px;text-align:center;font-weight:900;font-size:1.1rem;color:#14532d">' + it.qty + '</span>' +
+      '<button onclick="moAdjustQty(\'' + it.productId + '\',\'' + safeVariant + '\',1,' + it.price + ',\'' + safeName + '\')" style="width:32px;height:32px;border:none;background:#15803d;color:white;border-radius:50%;cursor:pointer;font-weight:800;font-size:1.1rem;line-height:1">+</button>' +
+      '<span style="font-size:.78rem;color:#6b7280;min-width:78px;text-align:left">₪' + (it.price % 1 === 0 ? it.price : it.price.toFixed(2)) + ' × ' + it.qty + '</span>' +
+      '<span style="min-width:64px;text-align:left;font-weight:900;color:#15803d;font-size:1rem">₪' + it.lineTotal.toFixed(2).replace(/\.00$/, '') + '</span>' +
+      '<button onclick="moSetQtyDirect(\'' + it.productId + '\',\'' + safeVariant + '\',0,' + it.price + ',\'' + safeName + '\');moRenderMyOrder()" title="הסר" style="width:26px;height:26px;background:#fee2e2;color:#dc2626;border:none;border-radius:6px;cursor:pointer;font-weight:800;font-size:.85rem">✕</button>' +
     '</div>';
   }
 
@@ -4020,22 +4020,16 @@ function moRenderCatalog() {
     return;
   }
 
+  // Catalog rows are always for un-selected products. Single big "+" button —
+  // one tap adds the item to "המוצרים שבחרתי" with qty=1. Quantity is then
+  // adjusted there with − / +. No typing anywhere in the catalog.
   function rowHtml(r) {
-    const has = r.qty > 0;
-    const lineTotal = (r.qty * r.priceCurrent) || 0;
     const safeName = String(r.displayName).replace(/'/g, "\\'");
-    return '<div style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;margin-bottom:3px;background:' + (has ? '#dcfce7' : 'white') + ';border:1px solid ' + (has ? '#86efac' : '#f3f4f6') + '">' +
-      '<span style="flex:1;font-weight:' + (has ? '800' : '600') + ';font-size:.86rem;color:#111827">' + r.displayName + '</span>' +
-      '<button onclick="moAdjustQty(\'' + r.productId + '\',\'' + (r.variant || '').replace(/'/g, "\\'") + '\',-1,' + r.price + ',\'' + safeName + '\')" ' +
-        (has ? '' : 'disabled style="opacity:.3"') + ' style="width:26px;height:26px;border:1px solid #d1d5db;background:white;border-radius:50%;cursor:pointer;font-weight:700">−</button>' +
-      '<input type="number" min="0" max="99" value="' + r.qty + '" onchange="moSetQtyDirect(\'' + r.productId + '\',\'' + (r.variant || '').replace(/'/g, "\\'") + '\',this.value,' + r.price + ',\'' + safeName + '\');moRenderCatalog()" style="width:46px;padding:3px;border:1px solid #d1d5db;border-radius:4px;text-align:center;font-size:.85rem;font-weight:700">' +
-      '<button onclick="moAdjustQty(\'' + r.productId + '\',\'' + (r.variant || '').replace(/'/g, "\\'") + '\',1,' + r.price + ',\'' + safeName + '\')" style="width:26px;height:26px;border:1px solid #15803d;background:#15803d;color:white;border-radius:50%;cursor:pointer;font-weight:700">+</button>' +
-      '<span style="font-size:.78rem;color:#6b7280;min-width:60px;text-align:left">' +
-        (has
-          ? '<input type="number" value="' + r.priceCurrent + '" step="0.5" onchange="moSetPrice(\'' + r.productId + '\',\'' + (r.variant || '').replace(/'/g, "\\'") + '\',this.value)" style="width:54px;padding:2px 4px;border:1px solid #d1d5db;border-radius:3px;text-align:center;font-size:.78rem">₪'
-          : '₪' + r.price)
-      + '</span>' +
-      (has ? '<span style="min-width:54px;text-align:left;font-weight:800;color:#15803d">₪' + lineTotal.toFixed(2).replace(/\.00$/, '') + '</span>' : '<span style="min-width:54px"></span>') +
+    const safeVariant = String(r.variant || '').replace(/'/g, "\\'");
+    return '<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;margin-bottom:4px;background:white;border:1px solid #f3f4f6">' +
+      '<span style="flex:1;font-weight:600;font-size:.9rem;color:#111827">' + r.displayName + '</span>' +
+      '<span style="font-size:.85rem;color:#6b7280;min-width:55px;text-align:left;font-weight:700">₪' + r.price + '</span>' +
+      '<button onclick="moAdjustQty(\'' + r.productId + '\',\'' + safeVariant + '\',1,' + r.price + ',\'' + safeName + '\')" style="width:34px;height:34px;border:none;background:#15803d;color:white;border-radius:50%;cursor:pointer;font-weight:800;font-size:1.2rem;line-height:1">+</button>' +
     '</div>';
   }
 
