@@ -8237,6 +8237,7 @@ async function openSupplierOrderModal() {
   try {
     var inv = await fetch('/api/shop/inventory').then(function(r){return r.json();});
     _soInvBySupplier = {};
+    window._soInvFull = inv || []; // keep full inventory for category lookups during grouping
     (inv || []).forEach(function(i){
       var s = (i.supplier || '').toLowerCase();
       if (!s) return;
@@ -8248,6 +8249,87 @@ async function openSupplierOrderModal() {
   rebuildSoByPoint();
   document.getElementById('soErr').style.display = 'none';
   document.getElementById('supplierOrderModal').style.display = 'flex';
+}
+
+// ===== Supplier-PDF category grouping =====
+// Logical group order in the supplier output:
+//   1. ירקות     2. פירות     3. ירק (עלים)
+// then any other inventory categories alphabetically (Hebrew).
+// Display-only — does not modify inventory data on disk.
+var _SO_GROUP_ORDER = ['vegetables', 'fruits', 'greens'];
+var _SO_GROUP_LABELS = {
+  vegetables: '🥦 ירקות',
+  fruits:     '🍎 פירות',
+  greens:     '🌿 ירק'
+};
+
+// Heuristic: classify an item from "פירות וירקות" into one of the 3 sub-groups.
+// Order matters — vegetables checked before fruits so "תפוח אדמה" doesn't match "תפוח עץ".
+function _soCategorize(name) {
+  var n = String(name || '').trim();
+  if (/חסה|פטרוזיליה|כוסברה|שמיר|נענע|כרפס|סלק עלים|בצל ירוק|רוקט|מנגולד|עירית|בזיליקום|ירקות בשקית|מהדרין/.test(n)) return 'greens';
+  if (/מלפפון|עגבני|גזר|בצל|פלפל|קישוא|חציל|כרובית|כרוב |תירס|בטטה|דלעת|שום|תפוח אדמה|שרי|לובלו|ארטישוק|קולורבי|ברוקולי|דלורית|לפת/.test(n)) return 'vegetables';
+  if (/אפרסק|נקטרינה|שסק|תות|מלון|אבטיח|אננס|פומלה|תפוז|לימון|מנגו|אבוקדו|בננה|ענבים|אגס|אפרסמון|רימון|גויאבה|חבוש|ליצ.?י|מנדרינה|שזיף|דובדבן|תפוח עץ|פפאיה|קיווי|קלמנטינה/.test(n)) return 'fruits';
+  return null;
+}
+
+// Look up the inventory category for an item name (cached _soInvFull).
+function _soInventoryCategory(name) {
+  var lo = String(name || '').toLowerCase().trim();
+  var arr = window._soInvFull || [];
+  var exact = arr.find(function(i) { return String(i.name || '').toLowerCase().trim() === lo; });
+  if (exact) return exact.category || '';
+  var fuzzy = arr.find(function(i) {
+    var n = String(i.name || '').toLowerCase().trim();
+    return (n && lo) && (n.indexOf(lo) >= 0 || lo.indexOf(n) >= 0);
+  });
+  return fuzzy ? (fuzzy.category || '') : '';
+}
+
+// The display group an item should fall under.
+function _soGroupKey(itemName) {
+  var origCat = _soInventoryCategory(itemName);
+  var isProduce = (origCat || '').indexOf('פירות') >= 0 || (origCat || '').indexOf('ירקות') >= 0;
+  if (isProduce) {
+    var sub = _soCategorize(itemName);
+    return sub || 'vegetables'; // default within produce
+  }
+  return origCat || 'אחר';
+}
+
+function _soGroupLabel(key) {
+  return _SO_GROUP_LABELS[key] || ('📦 ' + key);
+}
+
+// Sort comparator: vegetables → fruits → greens, then other categories alphabetically.
+function _soSortGroupKeys(a, b) {
+  var ai = _SO_GROUP_ORDER.indexOf(a);
+  var bi = _SO_GROUP_ORDER.indexOf(b);
+  if (ai >= 0 && bi >= 0) return ai - bi;
+  if (ai >= 0) return -1;
+  if (bi >= 0) return 1;
+  return String(a).localeCompare(String(b), 'he');
+}
+
+// Take a flat list and return [{key, label, items}], grouped + ordered.
+// Each item must carry .rawName (used for classification) and .displayName (used for rendering).
+function _soGroupItems(items) {
+  var groups = {};
+  items.forEach(function(it) {
+    var k = _soGroupKey(it.rawName || it.name);
+    if (!groups[k]) groups[k] = [];
+    groups[k].push(it);
+  });
+  var keys = Object.keys(groups).sort(_soSortGroupKeys);
+  return keys.map(function(k) {
+    return {
+      key: k,
+      label: _soGroupLabel(k),
+      items: groups[k].slice().sort(function(a, b) {
+        return String(a.displayName || a.name || '').localeCompare(String(b.displayName || b.name || ''), 'he');
+      })
+    };
+  });
 }
 
 // Rebuild the supplier-aggregation map keyed by pickup point.
@@ -8305,18 +8387,27 @@ function renderSoByPoint() {
     return;
   }
   el.innerHTML = pointNames.map(function(pp){
-    var items = Object.values(_soByPoint[pp]).sort(function(a,b){
-      var aLabel = a.name + (a.variant ? ' — ' + a.variant : '');
-      var bLabel = b.name + (b.variant ? ' — ' + b.variant : '');
-      return aLabel.localeCompare(bLabel, 'he');
+    var rawItems = Object.values(_soByPoint[pp]).map(function(it) {
+      return {
+        rawName: it.name,
+        displayName: it.name + (it.variant ? ' — ' + it.variant : ''),
+        qty: it.total
+      };
     });
-    var totalUnits = items.reduce(function(s,i){ return s + i.total; }, 0);
+    var totalUnits = rawItems.reduce(function(s,i){ return s + i.qty; }, 0);
+    var groups = _soGroupItems(rawItems);
     return '<div style="margin-bottom:10px">' +
-      '<div style="background:#14532d;color:white;padding:7px 12px;border-radius:8px 8px 0 0;font-weight:700;font-size:.88rem;display:flex;justify-content:space-between"><span>📍 ' + pp + '</span><span>' + items.length + ' פריטים · ' + totalUnits + ' יח׳</span></div>' +
+      '<div style="background:#14532d;color:white;padding:7px 12px;border-radius:8px 8px 0 0;font-weight:700;font-size:.88rem;display:flex;justify-content:space-between"><span>📍 ' + pp + '</span><span>' + rawItems.length + ' פריטים · ' + totalUnits + ' יח׳</span></div>' +
       '<div style="border:1px solid #d1fae5;border-top:none;border-radius:0 0 8px 8px;padding:6px">' +
-      items.map(function(it){
-        var label = it.name + (it.variant ? ' — ' + it.variant : '');
-        return '<div style="display:flex;justify-content:space-between;padding:5px 8px;border-radius:6px;background:#f9fafb;margin-bottom:2px;font-size:.85rem"><span>' + label + '</span><span style="font-weight:900;color:#14532d">' + it.total + '</span></div>';
+      groups.map(function(g) {
+        var groupTotal = g.items.reduce(function(s,i){ return s + i.qty; }, 0);
+        return '<div style="background:#f0fdf4;border-right:4px solid #15803d;padding:5px 10px;margin:6px 0 4px;font-weight:700;font-size:.83rem;color:#14532d;display:flex;justify-content:space-between;border-radius:0 6px 6px 0">' +
+            '<span>' + g.label + ' <span style="color:#6b7280;font-weight:600">(' + g.items.length + ')</span></span>' +
+            '<span>' + groupTotal + ' יח׳</span>' +
+          '</div>' +
+          g.items.map(function(it){
+            return '<div style="display:flex;justify-content:space-between;padding:5px 8px;border-radius:6px;background:#f9fafb;margin-bottom:2px;font-size:.85rem"><span>' + it.displayName + '</span><span style="font-weight:900;color:#14532d">' + it.qty + '</span></div>';
+          }).join('');
       }).join('') +
       '</div></div>';
   }).join('');
@@ -8364,8 +8455,15 @@ async function doExportSupplierPDF(saveToSupplier) {
       var displayName = it.name + (it.variant ? ' — ' + it.variant : '');
       var unitPrice = invMap[(it.name||'').toLowerCase().trim()] || 0;
       var lineTotal = unitPrice * qty;
-      return { name: displayName, qty: qty, unitPrice: unitPrice, lineTotal: lineTotal };
-    }).sort(function(a,b){ return a.name.localeCompare(b.name, 'he'); });
+      return {
+        rawName: it.name,
+        name: displayName,
+        displayName: displayName,
+        qty: qty,
+        unitPrice: unitPrice,
+        lineTotal: lineTotal
+      };
+    });
 
     var pointUnits = items.reduce(function(s,i){ return s + i.qty; }, 0);
     var pointCost = items.reduce(function(s,i){ return s + i.lineTotal; }, 0);
@@ -8373,19 +8471,28 @@ async function doExportSupplierPDF(saveToSupplier) {
     grandCost += pointCost;
     perPointSavePayload[pp] = { items: items, totalUnits: pointUnits, totalCost: pointCost };
 
-    // Feed the cross-pickup summary matrix
+    // Feed the cross-pickup summary matrix (un-grouped — same as before)
     items.forEach(function(it){
       if (!summaryByItem[it.name]) summaryByItem[it.name] = { label: it.name, byPoint: {}, total: 0 };
       summaryByItem[it.name].byPoint[pp] = (summaryByItem[it.name].byPoint[pp] || 0) + it.qty;
       summaryByItem[it.name].total += it.qty;
     });
 
-    var rows = items.map(function(it, i){
-      return '<tr>' +
-        '<td class="num">' + (i+1) + '</td>' +
-        '<td class="name">' + escHtml(it.name) + '</td>' +
-        '<td class="qty">' + it.qty + '</td>' +
-      '</tr>';
+    // Group by logical category (vegetables → fruits → greens → others)
+    var groups = _soGroupItems(items);
+    var rowCounter = 0;
+    var rowsHtml = groups.map(function(g) {
+      var groupTotal = g.items.reduce(function(s,i){ return s + i.qty; }, 0);
+      var headerRow = '<tr class="group-header"><td colspan="3">' + escHtml(g.label) + ' <span class="group-count">(' + g.items.length + ' פריטים · ' + groupTotal + ' יח׳)</span></td></tr>';
+      var groupRows = g.items.map(function(it){
+        rowCounter++;
+        return '<tr>' +
+          '<td class="num">' + rowCounter + '</td>' +
+          '<td class="name">' + escHtml(it.displayName || it.name) + '</td>' +
+          '<td class="qty">' + it.qty + '</td>' +
+        '</tr>';
+      }).join('');
+      return headerRow + groupRows;
     }).join('');
 
     return '<section class="pickup-section' + (idx > 0 ? ' break' : '') + '">' +
@@ -8395,7 +8502,7 @@ async function doExportSupplierPDF(saveToSupplier) {
       '</div>' +
       '<table class="items">' +
         '<thead><tr><th class="num">#</th><th class="name">מוצר</th><th class="qty">כמות</th></tr></thead>' +
-        '<tbody>' + rows + '</tbody>' +
+        '<tbody>' + rowsHtml + '</tbody>' +
         '<tfoot><tr><td colspan="2" class="totlabel">📦 סה״כ נקודה</td><td class="qty"><strong>' + pointUnits + '</strong></td></tr></tfoot>' +
       '</table>' +
     '</section>';
@@ -8494,6 +8601,8 @@ async function doExportSupplierPDF(saveToSupplier) {
     'table.items td.num,table.items td.qty{text-align:center}' +
     'table.items td.name{font-weight:600}' +
     'table.items tr:nth-child(even) td{background:#f9fafb}' +
+    'table.items tr.group-header td{background:#dcfce7;color:#14532d;font-weight:800;font-size:10.5pt;padding:7px 10px;border-top:2px solid #15803d;border-bottom:1px solid #15803d;text-align:right}' +
+    'table.items tr.group-header td .group-count{color:#6b7280;font-weight:600;font-size:9.5pt;margin-right:6px}' +
     'table.items tfoot td{background:#f0fdf4;font-weight:900;border-top:2px solid #14532d}' +
     'table.items td.totlabel{padding:8px 10px}' +
     '.summary-section{padding:8mm 14mm 12mm;page-break-before:always}' +
