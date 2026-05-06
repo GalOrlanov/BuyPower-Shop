@@ -3513,7 +3513,7 @@ async function openManualOrderModal() {
     modal.id = 'manualOrderModal';
     modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center;font-family:inherit';
     modal.innerHTML = `
-      <div style="background:white;border-radius:18px;padding:0;width:min(580px,96vw);max-height:92vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+      <div style="background:white;border-radius:18px;padding:0;width:min(740px,96vw);max-height:92vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)">
         <div style="background:#f97316;color:white;padding:16px 20px;border-radius:18px 18px 0 0;display:flex;align-items:center;justify-content:space-between">
           <span style="font-size:1.1rem;font-weight:700">➕ הזמנה ידנית</span>
           <button onclick="closeManualOrderModal()" style="background:none;border:none;color:white;font-size:1.4rem;cursor:pointer;line-height:1">✕</button>
@@ -3552,14 +3552,16 @@ async function openManualOrderModal() {
             </select>
           </div>
 
-          <!-- Items -->
-          <div style="border:2px solid #fdba74;border-radius:10px;padding:12px;background:#fff7ed">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-              <span style="font-weight:800;color:#9a3412;font-size:.92rem">🛒 פריטים בהזמנה</span>
-              <button onclick="moOpenProductPicker()" style="background:#15803d;color:white;border:none;padding:5px 12px;border-radius:6px;font-size:.82rem;font-weight:700;cursor:pointer;font-family:inherit">+ הוסף מוצר</button>
+          <!-- Catalog (all products inline with +/- qty) -->
+          <div style="border:2px solid #fdba74;border-radius:10px;padding:10px;background:#fff7ed">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+              <span style="font-weight:800;color:#9a3412;font-size:.92rem">🛒 בחר פריטים להזמנה</span>
+              <span id="moCartSummary" style="font-size:.78rem;color:#9a3412;font-weight:700">0 פריטים נבחרו</span>
             </div>
-            <div id="moItems" style="display:flex;flex-direction:column;gap:6px"></div>
-            <div id="moItemsEmpty" style="text-align:center;color:#9ca3af;font-size:.82rem;padding:10px">לא נוספו פריטים עדיין</div>
+            <input type="text" id="moCatSearch" oninput="moRenderCatalog()" placeholder="🔍 חפש מוצר... (מוצרים שכבר נבחרו עולים למעלה)" autocomplete="off" style="width:100%;padding:9px 10px;border:1.5px solid #fed7aa;border-radius:8px;font-family:inherit;font-size:.9rem;margin-bottom:8px">
+            <div id="moCatalog" style="max-height:50vh;overflow-y:auto;background:white;border:1px solid #fed7aa;border-radius:8px;padding:6px">
+              <div style="text-align:center;color:#9ca3af;padding:20px">טוען מוצרים...</div>
+            </div>
           </div>
 
           <!-- Payment method -->
@@ -3611,7 +3613,13 @@ async function openManualOrderModal() {
   window._moExistingUser = null;
   window._moAllUsers = null;        // refresh on each open so newly-registered users show up
   window._moAllProducts = null;     // refresh products too
-  moRenderItems();
+  // Pre-load product catalog so the user can browse straight away
+  try {
+    window._moAllProducts = await fetch(API + '/products').then(r => r.json());
+  } catch(e) { window._moAllProducts = []; }
+  if (document.getElementById('moCatSearch')) document.getElementById('moCatSearch').value = '';
+  moRenderCatalog();
+  moUpdateTotal();
   // Load pickup points
   try {
     const pts = await fetch(API + '/pickup-points').then(r => r.json());
@@ -3676,41 +3684,178 @@ async function moLookupCustomer() {
   }, 350);
 }
 
-function moRenderItems() {
-  const wrap = document.getElementById('moItems');
-  const empty = document.getElementById('moItemsEmpty');
-  const items = window._moItems || [];
-  if (!items.length) { wrap.innerHTML = ''; empty.style.display = 'block'; document.getElementById('moTotal').textContent = '₪0'; return; }
-  empty.style.display = 'none';
-  wrap.innerHTML = items.map((it, i) =>
-    '<div style="display:flex;align-items:center;gap:8px;background:white;padding:8px 10px;border:1px solid #fed7aa;border-radius:6px">' +
-      '<span style="flex:1;font-weight:600;font-size:.88rem">' + (it.name || '') + (it.variant ? ' — ' + it.variant : '') + '</span>' +
-      '<button onclick="moChangeQty(' + i + ',-1)" style="width:26px;height:26px;border:1px solid #d1d5db;background:white;border-radius:50%;cursor:pointer">−</button>' +
-      '<span style="min-width:24px;text-align:center;font-weight:700">' + it.qty + '</span>' +
-      '<button onclick="moChangeQty(' + i + ',1)" style="width:26px;height:26px;border:1px solid #d1d5db;background:white;border-radius:50%;cursor:pointer">+</button>' +
-      '<input type="number" value="' + it.price + '" step="0.5" oninput="moChangePrice(' + i + ',this.value)" style="width:62px;padding:4px 6px;border:1px solid #d1d5db;border-radius:4px;text-align:center;font-size:.85rem">' +
-      '<span style="font-size:.78rem;color:#6b7280">₪</span>' +
-      '<span style="min-width:60px;text-align:left;font-weight:800;color:#15803d">₪' + (it.qty * it.price).toFixed(2).replace(/\.00$/,'') + '</span>' +
-      '<button onclick="moRemoveItem(' + i + ')" style="background:#fee2e2;color:#dc2626;border:none;width:24px;height:24px;border-radius:4px;cursor:pointer;font-weight:700">✕</button>' +
-    '</div>'
-  ).join('');
-  const total = items.reduce((s, i) => s + (i.qty * i.price), 0);
-  document.getElementById('moTotal').textContent = '₪' + total.toFixed(2).replace(/\.00$/, '');
+// === New inline catalog UX: all products visible, +/- qty per row ===
+// Each product (or variant) is one row in the catalog. Items the admin
+// touched have qty > 0 and float to the top. _moItems stays the source of
+// truth so saveManualOrder doesn't change.
+
+function _moRowKey(productId, variantName) {
+  return variantName ? (productId + '__' + variantName) : productId;
 }
 
-function moChangeQty(idx, delta) {
-  const it = window._moItems[idx]; if (!it) return;
-  it.qty = Math.max(1, Math.min(99, it.qty + delta));
-  moRenderItems();
+function _moExpandProductRows(products) {
+  const rows = [];
+  products.forEach(p => {
+    if (Array.isArray(p.variants) && p.variants.length) {
+      p.variants.forEach(v => {
+        const modifier = Number(v.price_modifier) || 0;
+        rows.push({
+          key: _moRowKey(p._id, v.name),
+          productId: p._id,
+          name: p.name,
+          variant: v.name,
+          displayName: p.name + ' — ' + v.name,
+          category: p.category || 'אחר',
+          price: (Number(p.shopPrice) || 0) + modifier
+        });
+      });
+    } else {
+      rows.push({
+        key: _moRowKey(p._id, null),
+        productId: p._id,
+        name: p.name,
+        variant: '',
+        displayName: p.name,
+        category: p.category || 'אחר',
+        price: Number(p.shopPrice) || 0
+      });
+    }
+  });
+  return rows;
 }
-function moChangePrice(idx, val) {
-  const it = window._moItems[idx]; if (!it) return;
-  it.price = parseFloat(val) || 0;
-  moRenderItems();
+
+function _moFindItem(productId, variantName) {
+  const items = window._moItems || [];
+  for (let i = 0; i < items.length; i++) {
+    if (items[i].productId === productId && (items[i].variant || '') === (variantName || '')) return i;
+  }
+  return -1;
 }
-function moRemoveItem(idx) {
-  window._moItems.splice(idx, 1);
-  moRenderItems();
+
+function moAdjustQty(productId, variantName, delta, defaultPrice, defaultName) {
+  if (!window._moItems) window._moItems = [];
+  const idx = _moFindItem(productId, variantName);
+  if (idx >= 0) {
+    const it = window._moItems[idx];
+    const next = Math.max(0, (it.qty || 0) + delta);
+    if (next === 0) window._moItems.splice(idx, 1);
+    else it.qty = Math.min(99, next);
+  } else if (delta > 0) {
+    window._moItems.push({
+      productId: productId,
+      _id: productId,
+      name: defaultName,
+      variant: variantName || '',
+      qty: 1,
+      price: Number(defaultPrice) || 0
+    });
+  }
+  moRenderCatalog();
+  moUpdateTotal();
+}
+
+function moSetQtyDirect(productId, variantName, qty, defaultPrice, defaultName) {
+  if (!window._moItems) window._moItems = [];
+  const cleanQty = Math.max(0, Math.min(99, parseInt(qty) || 0));
+  const idx = _moFindItem(productId, variantName);
+  if (cleanQty === 0) {
+    if (idx >= 0) window._moItems.splice(idx, 1);
+  } else if (idx >= 0) {
+    window._moItems[idx].qty = cleanQty;
+  } else {
+    window._moItems.push({
+      productId: productId,
+      _id: productId,
+      name: defaultName,
+      variant: variantName || '',
+      qty: cleanQty,
+      price: Number(defaultPrice) || 0
+    });
+  }
+  // Don't re-render the whole catalog while typing — just refresh totals + summary
+  moUpdateTotal();
+}
+
+function moSetPrice(productId, variantName, price) {
+  const idx = _moFindItem(productId, variantName);
+  if (idx < 0) return;
+  window._moItems[idx].price = parseFloat(price) || 0;
+  moUpdateTotal();
+}
+
+function moUpdateTotal() {
+  const items = window._moItems || [];
+  const total = items.reduce((s, i) => s + (Number(i.qty) || 0) * (Number(i.price) || 0), 0);
+  const totalEl = document.getElementById('moTotal');
+  if (totalEl) totalEl.textContent = '₪' + total.toFixed(2).replace(/\.00$/, '');
+  const sumEl = document.getElementById('moCartSummary');
+  if (sumEl) {
+    const distinct = items.length;
+    const totalUnits = items.reduce((s, i) => s + (Number(i.qty) || 0), 0);
+    sumEl.textContent = distinct ? (distinct + ' פריטים · ' + totalUnits + ' יח׳ · ₪' + total.toFixed(2).replace(/\.00$/, '')) : '0 פריטים נבחרו';
+  }
+}
+
+function moRenderCatalog() {
+  const el = document.getElementById('moCatalog');
+  if (!el) return;
+  const products = window._moAllProducts || [];
+  const allRows = _moExpandProductRows(products);
+  const q = (document.getElementById('moCatSearch') ? document.getElementById('moCatSearch').value : '').toLowerCase().trim();
+  const filtered = q ? allRows.filter(r => r.displayName.toLowerCase().includes(q) || (r.category || '').toLowerCase().includes(q)) : allRows;
+  if (!filtered.length) {
+    el.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:20px">אין מוצרים שתואמים לחיפוש</div>';
+    moUpdateTotal();
+    return;
+  }
+  // Selected rows first (any qty > 0), then by category alphabetical
+  const selected = [];
+  const byCat = {};
+  filtered.forEach(r => {
+    const idx = _moFindItem(r.productId, r.variant);
+    const qty = idx >= 0 ? window._moItems[idx].qty : 0;
+    r.qty = qty;
+    r.priceCurrent = idx >= 0 ? window._moItems[idx].price : r.price;
+    if (qty > 0) selected.push(r);
+    else (byCat[r.category] = byCat[r.category] || []).push(r);
+  });
+  // Sort selected by display name
+  selected.sort((a, b) => (a.displayName || '').localeCompare(b.displayName || '', 'he'));
+  // Sort within each category alphabetical Hebrew
+  Object.keys(byCat).forEach(c => byCat[c].sort((a, b) => (a.displayName || '').localeCompare(b.displayName || '', 'he')));
+  const cats = Object.keys(byCat).sort((a, b) => a.localeCompare(b, 'he'));
+
+  function rowHtml(r) {
+    const has = r.qty > 0;
+    const lineTotal = (r.qty * r.priceCurrent) || 0;
+    const safeName = String(r.displayName).replace(/'/g, "\\'");
+    return '<div style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;margin-bottom:3px;background:' + (has ? '#dcfce7' : 'white') + ';border:1px solid ' + (has ? '#86efac' : '#f3f4f6') + '">' +
+      '<span style="flex:1;font-weight:' + (has ? '800' : '600') + ';font-size:.86rem;color:#111827">' + r.displayName + '</span>' +
+      '<button onclick="moAdjustQty(\'' + r.productId + '\',\'' + (r.variant || '').replace(/'/g, "\\'") + '\',-1,' + r.price + ',\'' + safeName + '\')" ' +
+        (has ? '' : 'disabled style="opacity:.3"') + ' style="width:26px;height:26px;border:1px solid #d1d5db;background:white;border-radius:50%;cursor:pointer;font-weight:700">−</button>' +
+      '<input type="number" min="0" max="99" value="' + r.qty + '" onchange="moSetQtyDirect(\'' + r.productId + '\',\'' + (r.variant || '').replace(/'/g, "\\'") + '\',this.value,' + r.price + ',\'' + safeName + '\');moRenderCatalog()" style="width:46px;padding:3px;border:1px solid #d1d5db;border-radius:4px;text-align:center;font-size:.85rem;font-weight:700">' +
+      '<button onclick="moAdjustQty(\'' + r.productId + '\',\'' + (r.variant || '').replace(/'/g, "\\'") + '\',1,' + r.price + ',\'' + safeName + '\')" style="width:26px;height:26px;border:1px solid #15803d;background:#15803d;color:white;border-radius:50%;cursor:pointer;font-weight:700">+</button>' +
+      '<span style="font-size:.78rem;color:#6b7280;min-width:60px;text-align:left">' +
+        (has
+          ? '<input type="number" value="' + r.priceCurrent + '" step="0.5" onchange="moSetPrice(\'' + r.productId + '\',\'' + (r.variant || '').replace(/'/g, "\\'") + '\',this.value)" style="width:54px;padding:2px 4px;border:1px solid #d1d5db;border-radius:3px;text-align:center;font-size:.78rem">₪'
+          : '₪' + r.price)
+      + '</span>' +
+      (has ? '<span style="min-width:54px;text-align:left;font-weight:800;color:#15803d">₪' + lineTotal.toFixed(2).replace(/\.00$/, '') + '</span>' : '<span style="min-width:54px"></span>') +
+    '</div>';
+  }
+
+  let html = '';
+  if (selected.length) {
+    html += '<div style="background:#15803d;color:white;padding:5px 10px;border-radius:6px 6px 0 0;font-weight:700;font-size:.82rem;margin-bottom:4px;position:sticky;top:0;z-index:1">✓ נבחרו (' + selected.length + ')</div>';
+    html += selected.map(rowHtml).join('');
+    html += '<div style="height:8px"></div>';
+  }
+  cats.forEach(c => {
+    html += '<div style="background:#fff7ed;color:#9a3412;padding:5px 10px;border-radius:6px;font-weight:700;font-size:.8rem;margin:6px 0 4px">' + c + ' <span style="opacity:.6;font-weight:400;font-size:.74rem">(' + byCat[c].length + ')</span></div>';
+    html += byCat[c].map(rowHtml).join('');
+  });
+  el.innerHTML = html;
+  moUpdateTotal();
 }
 
 async function moOpenProductPicker() {
@@ -3859,7 +4004,9 @@ function moAddItem(productId, variantName) {
     price: p.shopPrice || 0,
   });
   document.getElementById('moProductPicker').style.display = 'none';
-  moRenderItems();
+  // Refresh inline catalog if it's open (new UX), and also keep total in sync.
+  if (typeof moRenderCatalog === 'function') moRenderCatalog();
+  moUpdateTotal();
 }
 
 async function saveManualOrder() {
