@@ -8268,7 +8268,12 @@ function rebuildSoByPoint() {
   }
 
   // Aggregate
+  // CRITICAL: skip cancelled / duplicate / merged orders. Without this filter
+  // a cancelled order's items continue to appear in the supplier order even
+  // after the admin marks it cancelled.
+  var SKIP_STATUSES_SUPPLIER = ['cancelled', 'cancelled_duplicate', 'merged_into_paid', 'pending_payment'];
   (_orders || []).forEach(function(o) {
+    if (SKIP_STATUSES_SUPPLIER.indexOf(o.status) >= 0) return;
     var pp = o.pickupLocation || '(לא צוינה נקודה)';
     if (pickupChoice !== '__all__' && pp !== pickupChoice) return;
     (o.items || []).forEach(function(item) {
