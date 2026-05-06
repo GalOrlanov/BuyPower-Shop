@@ -3634,6 +3634,7 @@ async function openManualOrderModal() {
   if (document.getElementById('moCatSearch')) document.getElementById('moCatSearch').value = '';
   window._moActiveCategory = null; // reset category filter every time the modal opens
   window._moActiveTab = 'catalog';
+  window._moEditing = null;        // start clean — no item under edit
   moSetTab('catalog');
   moUpdateTotal();
   // Load pickup points
@@ -3827,22 +3828,31 @@ function moSetPrice(productId, variantName, price) {
 
 function moUpdateTotal() {
   const items = window._moItems || [];
-  const total = items.reduce((s, i) => s + (Number(i.qty) || 0) * (Number(i.price) || 0), 0);
+  let total = items.reduce((s, i) => s + (Number(i.qty) || 0) * (Number(i.price) || 0), 0);
+  let distinct = items.length;
+  let totalUnits = items.reduce((s, i) => s + (Number(i.qty) || 0), 0);
+  // Live count includes the editing slot too — until committed it isn't in
+  // _moItems, but we still want the summary to reflect what's about to be saved.
+  if (window._moEditing && window._moEditing.qty > 0) {
+    total += (Number(window._moEditing.price) || 0) * window._moEditing.qty;
+    distinct += 1;
+    totalUnits += window._moEditing.qty;
+  }
   const totalEl = document.getElementById('moTotal');
   if (totalEl) totalEl.textContent = '₪' + total.toFixed(2).replace(/\.00$/, '');
   const sumEl = document.getElementById('moCartSummary');
   if (sumEl) {
-    const distinct = items.length;
-    const totalUnits = items.reduce((s, i) => s + (Number(i.qty) || 0), 0);
     sumEl.textContent = distinct ? ('🛍️ ' + distinct + ' פריטים · ' + totalUnits + ' יח׳ · ₪' + total.toFixed(2).replace(/\.00$/, '')) : '🛍️ עדיין לא נבחרו פריטים';
   }
   const tabCount = document.getElementById('moOrderTabCount');
-  if (tabCount) tabCount.textContent = '(' + items.length + ')';
-  // If the order pane is open, refresh it too so qty edits there are visible immediately.
+  if (tabCount) tabCount.textContent = '(' + distinct + ')';
   if (window._moActiveTab === 'order') moRenderMyOrder();
 }
 
 function moSetTab(tab) {
+  // Switching tabs is also a commit point — whatever was being edited
+  // gets pushed into the cart so it's visible in "המוצרים שבחרתי".
+  if (tab === 'order') _moCommitEditing();
   window._moActiveTab = tab;
   const cat = document.getElementById('moPaneCatalog');
   const ord = document.getElementById('moPaneOrder');
@@ -3927,6 +3937,67 @@ function moRenderMyOrder() {
 // Active category filter for the manual-order catalog. null = all.
 window._moActiveCategory = window._moActiveCategory || null;
 
+// Currently-editing product (the one that's "up top" with − qty + controls).
+// null when no product is being edited.
+window._moEditing = window._moEditing || null;
+
+// Commit the editing slot into _moItems (moves it to "המוצרים שבחרתי").
+// Called when the admin starts editing a different product, switches tabs,
+// or saves the order. qty=0 just clears the slot without adding anything.
+function _moCommitEditing() {
+  const e = window._moEditing;
+  if (!e) return;
+  window._moEditing = null;
+  if (!e.qty || e.qty <= 0) return;
+  if (!window._moItems) window._moItems = [];
+  const idx = _moFindItem(e.productId, e.variant);
+  if (idx >= 0) {
+    window._moItems[idx].qty = e.qty;
+    window._moItems[idx].price = e.price;
+  } else {
+    window._moItems.push({
+      productId: e.productId,
+      _id: e.productId,
+      name: e.name,
+      variant: e.variant || '',
+      qty: e.qty,
+      price: e.price
+    });
+  }
+}
+
+// Click on a catalog row → commit whatever was being edited and start a new edit.
+function moStartEditing(productId, variantName, displayName, price, parentName) {
+  _moCommitEditing();
+  // If this product is already in the cart, pre-fill its qty so the admin can adjust.
+  const existingIdx = _moFindItem(productId, variantName);
+  const startQty = existingIdx >= 0 ? window._moItems[existingIdx].qty : 1;
+  const startPrice = existingIdx >= 0 ? window._moItems[existingIdx].price : (Number(price) || 0);
+  // Pull from cart so that committing later updates the same row instead of duplicating.
+  if (existingIdx >= 0) window._moItems.splice(existingIdx, 1);
+  window._moEditing = {
+    productId: productId,
+    variant: variantName || '',
+    name: parentName || displayName,
+    displayName: displayName,
+    qty: startQty,
+    price: startPrice
+  };
+  moRenderCatalog();
+  moUpdateTotal();
+}
+
+// −/+ on the currently-editing card.
+function moEditingChangeQty(delta) {
+  if (!window._moEditing) return;
+  window._moEditing.qty = Math.max(0, Math.min(99, (window._moEditing.qty || 0) + delta));
+  if (window._moEditing.qty === 0) {
+    window._moEditing = null;
+  }
+  moRenderCatalog();
+  moUpdateTotal();
+}
+
 function moSetCategory(cat) {
   window._moActiveCategory = cat || null;
   moRenderCatalog();
@@ -3970,48 +4041,56 @@ function moRenderCatalog() {
   const q = (document.getElementById('moCatSearch') ? document.getElementById('moCatSearch').value : '').toLowerCase().trim();
   const activeCat = window._moActiveCategory;
 
-  // Selected items ALWAYS show at the top — never affected by category/search filter.
-  // Otherwise picking a category would hide items the admin already chose from a
-  // different category, which is the bug the user just reported.
-  const selected = [];
-  (window._moItems || []).forEach(it => {
-    const match = allRows.find(r => r.productId === it.productId && (r.variant || '') === (it.variant || ''));
-    if (match) {
-      selected.push(Object.assign({}, match, { qty: it.qty, priceCurrent: it.price }));
-    } else {
-      // Item references a product that's no longer in the catalog (e.g. inactive).
-      // Surface it so the admin can still see / remove it.
-      selected.push({
-        key: _moRowKey(it.productId, it.variant),
-        productId: it.productId,
-        name: it.name || '',
-        variant: it.variant || '',
-        displayName: (it.name || '') + (it.variant ? ' — ' + it.variant : ''),
-        category: 'אחר',
-        price: Number(it.price) || 0,
-        qty: it.qty,
-        priceCurrent: it.price
-      });
-    }
-  });
-  selected.sort((a, b) => (a.displayName || '').localeCompare(b.displayName || '', 'he'));
-  const selectedKeys = new Set(selected.map(r => r.key));
+  // Catalog excludes:
+  //   - items already in _moItems (they live only in the "selected" tab)
+  //   - the item currently being edited (shown in its own panel at the top)
+  const selectedKeys = new Set();
+  (window._moItems || []).forEach(it => selectedKeys.add(_moRowKey(it.productId, it.variant)));
+  if (window._moEditing) selectedKeys.add(_moRowKey(window._moEditing.productId, window._moEditing.variant));
 
-  // Catalog list — filter by search + active category, then exclude items already in selected.
   let filtered = q ? allRows.filter(r => r.displayName.toLowerCase().includes(q) || (r.category || '').toLowerCase().includes(q)) : allRows;
   if (activeCat) filtered = filtered.filter(r => r.category === activeCat);
   filtered = filtered.filter(r => !selectedKeys.has(r.key));
 
   const byCat = {};
   filtered.forEach(r => {
-    r.qty = 0;
-    r.priceCurrent = r.price;
     (byCat[r.category] = byCat[r.category] || []).push(r);
   });
   Object.keys(byCat).forEach(c => byCat[c].sort((a, b) => (a.displayName || '').localeCompare(b.displayName || '', 'he')));
   const cats = Object.keys(byCat).sort((a, b) => a.localeCompare(b, 'he'));
 
-  if (!filtered.length) {
+  // Editing card at the top — sticky-feel panel with − qty + and a price/total.
+  let editingHtml = '';
+  if (window._moEditing) {
+    const e = window._moEditing;
+    const lineTotal = (Number(e.price) || 0) * (e.qty || 0);
+    editingHtml =
+      '<div style="background:linear-gradient(135deg,#fef9c3,#fde68a);border:2px solid #f59e0b;border-radius:10px;padding:12px;margin-bottom:10px;position:sticky;top:0;z-index:2;box-shadow:0 2px 10px rgba(245,158,11,.2)">' +
+        '<div style="font-size:.74rem;color:#92400e;font-weight:800;margin-bottom:6px;letter-spacing:.5px">✏️ בחר כמות (לחיצה על מוצר אחר תוסיף את זה לעגלה)</div>' +
+        '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">' +
+          '<span style="flex:1;min-width:180px;font-weight:800;font-size:1rem;color:#111827">' + e.displayName + '</span>' +
+          '<button onclick="moEditingChangeQty(-1)" style="width:36px;height:36px;border:none;background:white;color:#92400e;border:2px solid #f59e0b;border-radius:50%;cursor:pointer;font-weight:800;font-size:1.2rem;line-height:1">−</button>' +
+          '<span style="min-width:38px;text-align:center;font-weight:900;font-size:1.2rem;color:#7c2d12">' + e.qty + '</span>' +
+          '<button onclick="moEditingChangeQty(1)"  style="width:36px;height:36px;border:none;background:#f59e0b;color:white;border-radius:50%;cursor:pointer;font-weight:800;font-size:1.2rem;line-height:1">+</button>' +
+          '<span style="min-width:120px;text-align:left;color:#7c2d12;font-weight:800">₪' + (Number(e.price) || 0) + ' × ' + e.qty + ' = <span style="color:#15803d">₪' + lineTotal.toFixed(2).replace(/\.00$/, '') + '</span></span>' +
+          '<button onclick="_moCommitEditing();moRenderCatalog();moUpdateTotal()" style="padding:7px 14px;background:#15803d;color:white;border:none;border-radius:8px;font-weight:800;cursor:pointer;font-size:.85rem">✓ הוסף לעגלה</button>' +
+        '</div>' +
+      '</div>';
+  }
+
+  // Catalog row → single click anywhere on the row starts editing it.
+  function rowHtml(r) {
+    const safeName = String(r.displayName).replace(/'/g, "\\'");
+    const safeVariant = String(r.variant || '').replace(/'/g, "\\'");
+    const safeParent = String(r.name || r.displayName).replace(/'/g, "\\'");
+    return '<div onclick="moStartEditing(\'' + r.productId + '\',\'' + safeVariant + '\',\'' + safeName + '\',' + r.price + ',\'' + safeParent + '\')" style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;margin-bottom:3px;background:white;border:1px solid #f3f4f6;cursor:pointer;transition:background .1s" onmouseover="this.style.background=\'#fff7ed\'" onmouseout="this.style.background=\'white\'">' +
+      '<span style="flex:1;font-weight:600;font-size:.9rem;color:#111827">' + r.displayName + '</span>' +
+      '<span style="font-size:.85rem;color:#6b7280;min-width:55px;text-align:left;font-weight:700">₪' + r.price + '</span>' +
+      '<span style="color:#15803d;font-weight:800;font-size:1.1rem">+</span>' +
+    '</div>';
+  }
+
+  if (!editingHtml && !filtered.length) {
     const emptyMsg = window._moItems && window._moItems.length
       ? 'כל המוצרים שתואמים נבחרו כבר. עבור ל-"המוצרים שבחרתי" לראות אותם.'
       : 'אין מוצרים שתואמים לחיפוש';
@@ -4020,22 +4099,7 @@ function moRenderCatalog() {
     return;
   }
 
-  // Catalog rows are always for un-selected products. Single big "+" button —
-  // one tap adds the item to "המוצרים שבחרתי" with qty=1. Quantity is then
-  // adjusted there with − / +. No typing anywhere in the catalog.
-  function rowHtml(r) {
-    const safeName = String(r.displayName).replace(/'/g, "\\'");
-    const safeVariant = String(r.variant || '').replace(/'/g, "\\'");
-    return '<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;margin-bottom:4px;background:white;border:1px solid #f3f4f6">' +
-      '<span style="flex:1;font-weight:600;font-size:.9rem;color:#111827">' + r.displayName + '</span>' +
-      '<span style="font-size:.85rem;color:#6b7280;min-width:55px;text-align:left;font-weight:700">₪' + r.price + '</span>' +
-      '<button onclick="moAdjustQty(\'' + r.productId + '\',\'' + safeVariant + '\',1,' + r.price + ',\'' + safeName + '\')" style="width:34px;height:34px;border:none;background:#15803d;color:white;border-radius:50%;cursor:pointer;font-weight:800;font-size:1.2rem;line-height:1">+</button>' +
-    '</div>';
-  }
-
-  // Catalog now shows ONLY products that aren't already selected. Selected items
-  // live exclusively in the "המוצרים שבחרתי" tab — no duplication on screen.
-  let html = '';
+  let html = editingHtml;
   cats.forEach(c => {
     html += '<div style="background:#fff7ed;color:#9a3412;padding:5px 10px;border-radius:6px;font-weight:700;font-size:.8rem;margin:6px 0 4px">' + c + ' <span style="opacity:.6;font-weight:400;font-size:.74rem">(' + byCat[c].length + ')</span></div>';
     html += byCat[c].map(rowHtml).join('');
@@ -4196,6 +4260,8 @@ function moAddItem(productId, variantName) {
 }
 
 async function saveManualOrder() {
+  // Final commit — anything still in the editing slot must land in the order.
+  if (typeof _moCommitEditing === 'function') _moCommitEditing();
   const phone = document.getElementById('moPhone').value.replace(/\D/g, '');
   const name = document.getElementById('moName').value.trim();
   const pickup = document.getElementById('moPickup').value;
