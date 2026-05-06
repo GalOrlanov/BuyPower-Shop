@@ -908,7 +908,7 @@ router.get('/admin/sales-analytics', verifyShopToken, async (req, res) => {
     if (req.query.pickupPoint) filter.pickupLocation = req.query.pickupPoint;
 
     const [orders, inventory, shopProducts] = await Promise.all([
-      db.collection('shop_orders').find(filter).toArray(),
+      db.collection('shop_orders').find(filter, { projection: { 'items.imageUrl': 0 } }).toArray(),
       db.collection('shop_inventory').find({}).toArray(),
       db.collection('shop_products').find({}, { projection: { name: 1 } }).toArray()
     ]);
@@ -1179,7 +1179,7 @@ router.get('/admin/grow-orders', verifyShopToken, async (req, res) => {
     if (req.query.pickupPoint) filter.pickupLocation = req.query.pickupPoint;
 
     const [orders, inventory] = await Promise.all([
-      db.collection('shop_orders').find(filter).sort({ createdAt: -1 }).toArray(),
+      db.collection('shop_orders').find(filter, { projection: { 'items.imageUrl': 0 } }).sort({ createdAt: -1 }).toArray(),
       db.collection('shop_inventory').find({}, { projection: { name: 1, shopProductId: 1, vatType: 1, category: 1 } }).toArray()
     ]);
 
@@ -1894,8 +1894,11 @@ router.get('/orders', async (req, res) => {
     const since = req.query.since ? new Date(req.query.since) : defaultMonday;
     const filter = { [dateField]: { $gte: since }, status: { $nin: ['pending_payment', 'cancelled_duplicate', 'merged_into_paid'] } };
     if (req.query.until) filter[dateField].$lte = new Date(req.query.until);
+    // Exclude items.imageUrl — many products carry base64 data URIs there,
+    // which inflate each order to 100KB+. The image lives on the product
+    // itself; the order doesn't need a copy.
     const orders = await db.collection('shop_orders')
-      .find(filter)
+      .find(filter, { projection: { 'items.imageUrl': 0 } })
       .sort({ [dateField]: -1 })
       .toArray();
     res.json(orders);
@@ -2672,7 +2675,9 @@ router.post('/payment/create', async (req, res) => {
           };
           if (pid) { item.id = pid; item.productId = pid; }
           if (i.variant) item.variant = i.variant;
-          if (i.imageUrl) item.imageUrl = i.imageUrl;
+          // Skip imageUrl on the order line — base64 data URIs would bloat the
+          // doc to 100KB+. Image lives on the product anyway.
+          if (i.imageUrl && !String(i.imageUrl).startsWith('data:')) item.imageUrl = i.imageUrl;
           if (i.unit) item.unit = i.unit;
           return item;
         });
