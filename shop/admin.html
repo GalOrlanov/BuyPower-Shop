@@ -3739,6 +3739,7 @@ function _moExpandProductRows(products) {
   // Only active products — same filter the customer-facing shop applies (index.html).
   products = (products || []).filter(p => p && p.isActive !== false && p.isActive !== null);
   products.forEach(p => {
+    const deals = Array.isArray(p.quantityDeals) ? p.quantityDeals : [];
     if (Array.isArray(p.variants) && p.variants.length) {
       p.variants.forEach(v => {
         const modifier = Number(v.price_modifier) || 0;
@@ -3749,7 +3750,8 @@ function _moExpandProductRows(products) {
           variant: v.name,
           displayName: p.name + ' — ' + v.name,
           category: p.category || 'אחר',
-          price: (Number(p.shopPrice) || 0) + modifier
+          price: (Number(p.shopPrice) || 0) + modifier,
+          quantityDeals: deals
         });
       });
     } else {
@@ -3760,11 +3762,42 @@ function _moExpandProductRows(products) {
         variant: '',
         displayName: p.name,
         category: p.category || 'אחר',
-        price: Number(p.shopPrice) || 0
+        price: Number(p.shopPrice) || 0,
+        quantityDeals: deals
       });
     }
   });
   return rows;
+}
+
+// === Quantity-deal pricing — mirrors calcItemTotal in shop/cart.html ===
+// Given a quantity and the product's quantityDeals, return the EFFECTIVE per-
+// unit price (so multiplying by qty yields the same gross the customer would
+// pay in the shop). Without deals, returns base price unchanged.
+function _moEffectivePrice(qty, basePrice, deals) {
+  qty = Math.max(0, parseInt(qty) || 0);
+  basePrice = Number(basePrice) || 0;
+  if (!qty) return basePrice;
+  if (!deals || !deals.length) return basePrice;
+  const sorted = deals.slice().sort((a, b) => (b.qty || 0) - (a.qty || 0));
+  let total = 0, rem = qty;
+  for (const d of sorted) {
+    const dq = Number(d.qty) || 0;
+    const dp = Number(d.price) || 0;
+    if (dq > 0 && dq <= rem) {
+      const sets = Math.floor(rem / dq);
+      total += sets * dp;
+      rem -= sets * dq;
+    }
+  }
+  total += rem * basePrice;
+  return total / qty;
+}
+
+function _moDealsLabel(deals) {
+  if (!deals || !deals.length) return '';
+  const sorted = deals.slice().sort((a, b) => (a.qty || 0) - (b.qty || 0));
+  return sorted.map(d => d.qty + ' ב-₪' + d.price).join(' · ');
 }
 
 function _moFindItem(productId, variantName) {
@@ -3777,12 +3810,23 @@ function _moFindItem(productId, variantName) {
 
 function moAdjustQty(productId, variantName, delta, defaultPrice, defaultName) {
   if (!window._moItems) window._moItems = [];
+  // Look up deals so effective price stays correct after qty change
+  const products = window._moAllProducts || [];
+  const allRows = _moExpandProductRows(products);
+  const row = allRows.find(r => r.productId === productId && (r.variant || '') === (variantName || ''));
+  const deals = row ? (row.quantityDeals || []) : [];
+  const baseP = row ? row.price : (Number(defaultPrice) || 0);
+
   const idx = _moFindItem(productId, variantName);
   if (idx >= 0) {
     const it = window._moItems[idx];
     const next = Math.max(0, (it.qty || 0) + delta);
-    if (next === 0) window._moItems.splice(idx, 1);
-    else it.qty = Math.min(99, next);
+    if (next === 0) {
+      window._moItems.splice(idx, 1);
+    } else {
+      it.qty = Math.min(99, next);
+      it.price = _moEffectivePrice(it.qty, baseP, deals);
+    }
   } else if (delta > 0) {
     window._moItems.push({
       productId: productId,
@@ -3790,7 +3834,7 @@ function moAdjustQty(productId, variantName, delta, defaultPrice, defaultName) {
       name: defaultName,
       variant: variantName || '',
       qty: 1,
-      price: Number(defaultPrice) || 0
+      price: _moEffectivePrice(1, baseP, deals)
     });
   }
   moRenderCatalog();
@@ -3967,13 +4011,18 @@ function _moCommitEditing() {
 }
 
 // Click on a catalog row → commit whatever was being edited and start a new edit.
-function moStartEditing(productId, variantName, displayName, price, parentName) {
+// `basePrice` is the un-discounted unit price; quantity deals are looked up
+// from the row data so totals always match the shop.
+function moStartEditing(productId, variantName, displayName, basePrice, parentName) {
   _moCommitEditing();
-  // If this product is already in the cart, pre-fill its qty so the admin can adjust.
+  // Pull deals from the row data the click originated from
+  const products = window._moAllProducts || [];
+  const allRows = _moExpandProductRows(products);
+  const row = allRows.find(r => r.productId === productId && (r.variant || '') === (variantName || ''));
+  const deals = row ? (row.quantityDeals || []) : [];
+
   const existingIdx = _moFindItem(productId, variantName);
   const startQty = existingIdx >= 0 ? window._moItems[existingIdx].qty : 1;
-  const startPrice = existingIdx >= 0 ? window._moItems[existingIdx].price : (Number(price) || 0);
-  // Pull from cart so that committing later updates the same row instead of duplicating.
   if (existingIdx >= 0) window._moItems.splice(existingIdx, 1);
   window._moEditing = {
     productId: productId,
@@ -3981,7 +4030,9 @@ function moStartEditing(productId, variantName, displayName, price, parentName) 
     name: parentName || displayName,
     displayName: displayName,
     qty: startQty,
-    price: startPrice
+    basePrice: Number(basePrice) || 0,
+    deals: deals,
+    price: _moEffectivePrice(startQty, basePrice, deals)
   };
   moRenderCatalog();
   moUpdateTotal();
@@ -3990,9 +4041,13 @@ function moStartEditing(productId, variantName, displayName, price, parentName) 
 // −/+ on the currently-editing card.
 function moEditingChangeQty(delta) {
   if (!window._moEditing) return;
-  window._moEditing.qty = Math.max(0, Math.min(99, (window._moEditing.qty || 0) + delta));
-  if (window._moEditing.qty === 0) {
+  const e = window._moEditing;
+  e.qty = Math.max(0, Math.min(99, (e.qty || 0) + delta));
+  if (e.qty === 0) {
     window._moEditing = null;
+  } else {
+    // Re-calc effective per-unit price for the new qty
+    e.price = _moEffectivePrice(e.qty, e.basePrice, e.deals);
   }
   moRenderCatalog();
   moUpdateTotal();
@@ -4063,16 +4118,21 @@ function moRenderCatalog() {
   let editingHtml = '';
   if (window._moEditing) {
     const e = window._moEditing;
-    const lineTotal = (Number(e.price) || 0) * (e.qty || 0);
+    const eff = _moEffectivePrice(e.qty || 0, e.basePrice, e.deals);
+    const lineTotal = eff * (e.qty || 0);
+    const dealsBadge = (e.deals && e.deals.length)
+      ? '<div style="font-size:.72rem;color:#92400e;margin-top:4px;font-weight:600">🏷️ מבצעי כמות: ' + _moDealsLabel(e.deals) + '</div>'
+      : '';
+    function fmtN(n) { return (Math.round(n * 100) / 100).toString(); }
     editingHtml =
       '<div style="background:linear-gradient(135deg,#fef9c3,#fde68a);border:2px solid #f59e0b;border-radius:10px;padding:12px;margin-bottom:10px;position:sticky;top:0;z-index:2;box-shadow:0 2px 10px rgba(245,158,11,.2)">' +
         '<div style="font-size:.74rem;color:#92400e;font-weight:800;margin-bottom:6px;letter-spacing:.5px">✏️ בחר כמות (לחיצה על מוצר אחר תוסיף את זה לעגלה)</div>' +
         '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">' +
-          '<span style="flex:1;min-width:180px;font-weight:800;font-size:1rem;color:#111827">' + e.displayName + '</span>' +
+          '<div style="flex:1;min-width:180px"><div style="font-weight:800;font-size:1rem;color:#111827">' + e.displayName + '</div>' + dealsBadge + '</div>' +
           '<button onclick="moEditingChangeQty(-1)" style="width:36px;height:36px;border:none;background:white;color:#92400e;border:2px solid #f59e0b;border-radius:50%;cursor:pointer;font-weight:800;font-size:1.2rem;line-height:1">−</button>' +
           '<span style="min-width:38px;text-align:center;font-weight:900;font-size:1.2rem;color:#7c2d12">' + e.qty + '</span>' +
           '<button onclick="moEditingChangeQty(1)"  style="width:36px;height:36px;border:none;background:#f59e0b;color:white;border-radius:50%;cursor:pointer;font-weight:800;font-size:1.2rem;line-height:1">+</button>' +
-          '<span style="min-width:120px;text-align:left;color:#7c2d12;font-weight:800">₪' + (Number(e.price) || 0) + ' × ' + e.qty + ' = <span style="color:#15803d">₪' + lineTotal.toFixed(2).replace(/\.00$/, '') + '</span></span>' +
+          '<span style="min-width:120px;text-align:left;color:#7c2d12;font-weight:800">₪' + fmtN(eff) + ' × ' + e.qty + ' = <span style="color:#15803d">₪' + fmtN(lineTotal) + '</span></span>' +
           '<button onclick="_moCommitEditing();moRenderCatalog();moUpdateTotal()" style="padding:7px 14px;background:#15803d;color:white;border:none;border-radius:8px;font-weight:800;cursor:pointer;font-size:.85rem">✓ הוסף לעגלה</button>' +
         '</div>' +
       '</div>';
@@ -4083,8 +4143,11 @@ function moRenderCatalog() {
     const safeName = String(r.displayName).replace(/'/g, "\\'");
     const safeVariant = String(r.variant || '').replace(/'/g, "\\'");
     const safeParent = String(r.name || r.displayName).replace(/'/g, "\\'");
+    const dealsHint = (r.quantityDeals && r.quantityDeals.length)
+      ? '<div style="font-size:.7rem;color:#15803d;font-weight:700;margin-top:2px">🏷️ ' + _moDealsLabel(r.quantityDeals) + '</div>'
+      : '';
     return '<div onclick="moStartEditing(\'' + r.productId + '\',\'' + safeVariant + '\',\'' + safeName + '\',' + r.price + ',\'' + safeParent + '\')" style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;margin-bottom:3px;background:white;border:1px solid #f3f4f6;cursor:pointer;transition:background .1s" onmouseover="this.style.background=\'#fff7ed\'" onmouseout="this.style.background=\'white\'">' +
-      '<span style="flex:1;font-weight:600;font-size:.9rem;color:#111827">' + r.displayName + '</span>' +
+      '<div style="flex:1"><div style="font-weight:600;font-size:.9rem;color:#111827">' + r.displayName + '</div>' + dealsHint + '</div>' +
       '<span style="font-size:.85rem;color:#6b7280;min-width:55px;text-align:left;font-weight:700">₪' + r.price + '</span>' +
       '<span style="color:#15803d;font-weight:800;font-size:1.1rem">+</span>' +
     '</div>';
