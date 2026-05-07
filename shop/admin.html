@@ -571,6 +571,10 @@ input:checked + .slider::before { transform: translateX(20px); }
             <tfoot id="summaryTfoot"></tfoot>
           </table>
         </div>
+        <!-- Always-visible totals bar below the table — duplicates the
+             tfoot row in a more prominent box so the admin sees the
+             bottom-line numbers no matter where they scroll. -->
+        <div id="summaryTotalsBar" style="display:none;margin-top:14px;padding:14px 18px;background:linear-gradient(135deg,#fef3c7,#fde68a);border:2.5px solid #f59e0b;border-radius:12px;font-weight:800;color:#14532d"></div>
       </div>
     </div>
 
@@ -2336,6 +2340,8 @@ function renderSummary() {
   if (!sourceOrders || !sourceOrders.length) {
     tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:24px">אין הזמנות בטווח שנבחר</td></tr>';
     if (tfootEarly) tfootEarly.innerHTML = '';
+    const _bar0 = document.getElementById('summaryTotalsBar');
+    if (_bar0) _bar0.style.display = 'none';
     return;
   }
   // Populate pickup-point dropdown from points actually present in the orders
@@ -2495,6 +2501,8 @@ function renderSummary() {
     tbody.innerHTML = '<tr><td colspan="' + activeCols.length + '" style="text-align:center;color:#9ca3af;padding:24px">אין תוצאות לפילטרים שנבחרו</td></tr>';
     const tf = document.getElementById('summaryTfoot');
     if (tf) tf.innerHTML = '';
+    const _bar1 = document.getElementById('summaryTotalsBar');
+    if (_bar1) _bar1.style.display = 'none';
     return;
   }
   function fmt(n) { var v = Math.round(Number(n) * 100) / 100; return v.toFixed(2).replace(/\.00$/, ''); }
@@ -2578,6 +2586,27 @@ function renderSummary() {
           activeCols.map(c => footCell(c.id)).join('') +
         '</tr>'
       : '';
+  }
+
+  // Big, always-visible totals bar below the table — same numbers as the
+  // tfoot, but in a styled card the admin can't miss when scrolling. The
+  // tfoot is great for the printout; this bar is great for the screen.
+  const totalsBar = document.getElementById('summaryTotalsBar');
+  if (totalsBar) {
+    if (rows.length) {
+      const totalProfitColor = totalProfit >= 0 ? '#15803d' : '#dc2626';
+      totalsBar.style.display = 'block';
+      totalsBar.innerHTML =
+        '<div style="display:flex;flex-wrap:wrap;gap:18px;align-items:center;justify-content:space-between">' +
+          '<span style="font-size:1.05rem">📊 סה״כ (' + rows.length + ' מוצרים)</span>' +
+          '<span>📦 <strong style="font-size:1.1rem">' + totalUnits + '</strong> יחידות</span>' +
+          '<span>🏷️ עלות <strong style="font-size:1.1rem;color:#92400e">₪' + (Math.round(totalCost*100)/100).toFixed(2).replace(/\.00$/,'') + '</strong></span>' +
+          '<span>💰 הכנסות <strong style="font-size:1.1rem;color:#14532d">₪' + (Math.round(totalRevenue*100)/100).toFixed(2).replace(/\.00$/,'') + '</strong></span>' +
+          '<span>📈 הפרש <strong style="font-size:1.15rem;color:' + totalProfitColor + '">₪' + (Math.round(totalProfit*100)/100).toFixed(2).replace(/\.00$/,'') + '</strong></span>' +
+        '</div>';
+    } else {
+      totalsBar.style.display = 'none';
+    }
   }
 }
 
