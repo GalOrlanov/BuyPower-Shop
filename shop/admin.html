@@ -541,8 +541,11 @@ input:checked + .slider::before { transform: translateX(20px); }
         </div>
       </div>
 
-      <!-- Manual adjustments list (collapsible) -->
-      <div id="summaryAdjList" style="display:none;background:#fffbeb;border:1.5px solid #fde68a;border-radius:12px;padding:10px 14px;margin-top:10px"></div>
+      <!-- Manual adjustments list — hidden. Edits now appear directly on the
+           product row (qty/cost/revenue/profit columns). The element is kept
+           in the DOM only so legacy code that calls renderSummaryAdjList()
+           doesn't blow up; it's never displayed. -->
+      <div id="summaryAdjList" style="display:none"></div>
       <!-- Summary column picker (small popover-style modal) -->
       <div id="summaryColPicker" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center">
         <div style="background:white;border-radius:14px;width:min(380px,92vw);overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3)">
@@ -2150,8 +2153,9 @@ async function loadSummaryRange() {
     if (statusEl) {
       const labelFrom = from ? new Date(from).toLocaleDateString('he-IL') : 'הכל';
       const labelTo = to ? new Date(to).toLocaleDateString('he-IL') : 'הכל';
-      const adjCount = (window._summaryAdjustments || []).length;
-      statusEl.textContent = '✓ ' + (window._summaryOrders.length || 0) + ' הזמנות' + (adjCount ? ' · ' + adjCount + ' חישובים ידניים' : '') + ' · ' + labelFrom + ' – ' + labelTo;
+      // Manual adjustments are merged into the product rows — no longer
+      // surfaced as a separate count here.
+      statusEl.textContent = '✓ ' + (window._summaryOrders.length || 0) + ' הזמנות · ' + labelFrom + ' – ' + labelTo;
     }
     renderSummary();
     renderSummaryAdjList();
@@ -2251,28 +2255,14 @@ async function deleteSummaryAdjustment(id) {
   } catch(e) { alert('שגיאה במחיקה: ' + e.message); }
 }
 
+// Manual adjustments are merged directly into each product row in
+// renderSummary() (lines that read window._summaryAdjustments). We no longer
+// render the separate yellow list — the calculation belongs on the product
+// row itself, no duplication. This function is kept as a no-op so any legacy
+// callsite (loadSummaryRange, etc.) doesn't break.
 function renderSummaryAdjList() {
   const el = document.getElementById('summaryAdjList');
-  const list = window._summaryAdjustments || [];
-  if (!el) return;
-  if (!list.length) { el.style.display = 'none'; return; }
-  el.style.display = 'block';
-  function fmt(n) { return (Math.round(Number(n) * 100) / 100).toString(); }
-  el.innerHTML =
-    '<div style="font-weight:800;color:#92400e;margin-bottom:6px">📝 חישובים ידניים בטווח (' + list.length + ')</div>' +
-    '<div style="display:flex;flex-direction:column;gap:4px">' +
-    list.map(a => {
-      const dt = a.date ? new Date(a.date).toLocaleDateString('he-IL') : '';
-      const total = (Number(a.qty) || 0) * (Number(a.price) || 0);
-      return '<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:white;border:1px solid #fde68a;border-radius:6px;font-size:.85rem">' +
-        '<span style="font-weight:700;flex:1">' + a.name + '</span>' +
-        '<span style="color:#6b7280;font-size:.78rem">' + dt + '</span>' +
-        '<span style="color:#374151">' + a.qty + ' יח׳ × ₪' + fmt(a.price) + ' = <strong style="color:#14532d">₪' + fmt(total) + '</strong></span>' +
-        (a.note ? '<span style="color:#9a3412;font-size:.76rem">— ' + a.note + '</span>' : '') +
-        '<button onclick="deleteSummaryAdjustment(\'' + a._id + '\')" style="background:#fee2e2;color:#dc2626;border:none;width:24px;height:24px;border-radius:5px;cursor:pointer;font-weight:700">✕</button>' +
-      '</div>';
-    }).join('') +
-    '</div>';
+  if (el) { el.style.display = 'none'; el.innerHTML = ''; }
 }
 
 // Summary column definitions. id, label, default-on. The "name" column is
