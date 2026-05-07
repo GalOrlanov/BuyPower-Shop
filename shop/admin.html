@@ -9718,15 +9718,23 @@ async function doExportSupplierPDF(saveToSupplier) {
     // Group by logical category (vegetables → fruits → greens → others)
     var groups = _soGroupItems(items);
     var rowCounter = 0;
+    function fmtCost(n) {
+      var v = Math.round(Number(n) * 100) / 100;
+      return v.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1');
+    }
     var rowsHtml = groups.map(function(g) {
-      var groupTotal = g.items.reduce(function(s,i){ return s + i.qty; }, 0);
-      var headerRow = '<tr class="group-header"><td colspan="3">' + escHtml(g.label) + ' <span class="group-count">(' + g.items.length + ' פריטים · ' + groupTotal + ' יח׳)</span></td></tr>';
+      var groupQty  = g.items.reduce(function(s,i){ return s + i.qty; }, 0);
+      var groupCost = g.items.reduce(function(s,i){ return s + (i.lineTotal || 0); }, 0);
+      var headerRow = '<tr class="group-header"><td colspan="5">' + escHtml(g.label) +
+        ' <span class="group-count">(' + g.items.length + ' פריטים · ' + groupQty + ' יח׳ · ₪' + fmtCost(groupCost) + ')</span></td></tr>';
       var groupRows = g.items.map(function(it){
         rowCounter++;
         return '<tr>' +
           '<td class="num">' + rowCounter + '</td>' +
           '<td class="name">' + escHtml(it.displayName || it.name) + '</td>' +
           '<td class="qty">' + it.qty + '</td>' +
+          '<td class="cost">₪' + fmtCost(it.unitPrice) + '</td>' +
+          '<td class="cost">₪' + fmtCost(it.lineTotal) + '</td>' +
         '</tr>';
       }).join('');
       return headerRow + groupRows;
@@ -9735,14 +9743,14 @@ async function doExportSupplierPDF(saveToSupplier) {
     return '<section class="pickup-section' + (idx > 0 ? ' break' : '') + '">' +
       '<div class="pp-header">' +
         '<div class="pp-title">📍 ' + escHtml(pp) + '</div>' +
-        '<div class="pp-stats">' + items.length + ' פריטים · ' + pointUnits + ' יח׳</div>' +
+        '<div class="pp-stats">' + items.length + ' פריטים · ' + pointUnits + ' יח׳ · ₪' + fmtCost(pointCost) + '</div>' +
       '</div>' +
       '<table class="items">' +
-        '<thead><tr><th class="num">#</th><th class="name">מוצר</th><th class="qty">כמות</th></tr></thead>' +
+        '<thead><tr><th class="num">#</th><th class="name">מוצר</th><th class="qty">כמות</th><th class="cost">עלות יח׳</th><th class="cost">סה"כ עלות</th></tr></thead>' +
         '<tbody>' + rowsHtml + '</tbody>' +
       '</table>' +
-      // Total lives outside the <table> so the browser does not repeat it on every printed page.
-      '<div class="pp-total"><span class="pp-total-label">📦 סה״כ נקודה</span><strong class="pp-total-value">' + pointUnits + '</strong></div>' +
+      // Totals live outside the <table> so the browser does not repeat them on every printed page.
+      '<div class="pp-total"><span class="pp-total-label">📦 סה״כ נקודה</span><strong class="pp-total-value">' + pointUnits + ' יח׳ · ₪' + fmtCost(pointCost) + '</strong></div>' +
     '</section>';
   }).join('');
 
@@ -9836,9 +9844,10 @@ async function doExportSupplierPDF(saveToSupplier) {
     '.pp-stats{font-size:10pt;color:#6b7280}' +
     'table.items{width:100%;border-collapse:collapse;font-size:11pt}' +
     'table.items th{background:#14532d;color:white;padding:7px 10px;text-align:right;font-size:10.5pt}' +
-    'table.items th.num,table.items th.qty{text-align:center}' +
+    'table.items th.num,table.items th.qty,table.items th.cost{text-align:center}' +
     'table.items td{padding:6px 10px;border-bottom:1px solid #e5e7eb}' +
-    'table.items td.num,table.items td.qty{text-align:center}' +
+    'table.items td.num,table.items td.qty,table.items td.cost{text-align:center}' +
+    'table.items td.cost{font-variant-numeric:tabular-nums;font-weight:700;color:#14532d}' +
     'table.items td.name{font-weight:600}' +
     'table.items tr:nth-child(even) td{background:#f9fafb}' +
     'table.items tr.group-header td{background:#dcfce7;color:#14532d;font-weight:800;font-size:10.5pt;padding:7px 10px;border-top:2px solid #15803d;border-bottom:1px solid #15803d;text-align:right}' +
