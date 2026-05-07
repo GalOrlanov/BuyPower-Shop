@@ -464,6 +464,12 @@ input:checked + .slider::before { transform: translateX(20px); }
 
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:6px">
           <div style="flex:1;min-width:160px">
+            <label style="font-size:.82rem;color:#374151;font-weight:600;display:block;margin-bottom:4px">📍 נקודת איסוף</label>
+            <select id="summaryPickupFilter" onchange="renderSummary()" style="width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.9rem">
+              <option value="">כל הנקודות</option>
+            </select>
+          </div>
+          <div style="flex:1;min-width:160px">
             <label style="font-size:.82rem;color:#374151;font-weight:600;display:block;margin-bottom:4px">🏭 ספק</label>
             <select id="summarySupplierFilter" onchange="renderSummary()" style="width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.9rem">
               <option value="">כל הספקים</option>
@@ -480,7 +486,7 @@ input:checked + .slider::before { transform: translateX(20px); }
             <input id="summaryProductFilter" type="text" oninput="renderSummary()" placeholder="חיפוש לפי שם מוצר..."
               style="width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.9rem">
           </div>
-          <button onclick="document.getElementById('summarySupplierFilter').value='';document.getElementById('summaryCategoryFilter').value='';document.getElementById('summaryProductFilter').value='';renderSummary()" style="padding:8px 16px;background:#f3f4f6;color:#374151;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.85rem;cursor:pointer">נקה</button>
+          <button onclick="document.getElementById('summaryPickupFilter').value='';document.getElementById('summarySupplierFilter').value='';document.getElementById('summaryCategoryFilter').value='';document.getElementById('summaryProductFilter').value='';renderSummary()" style="padding:8px 16px;background:#f3f4f6;color:#374151;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.85rem;cursor:pointer">נקה</button>
           <button onclick="openSummaryColPicker()" style="padding:8px 16px;background:#fef3c7;color:#92400e;border:1.5px solid #fde68a;border-radius:8px;font-family:inherit;font-size:.85rem;font-weight:700;cursor:pointer">🎯 עמודות</button>
           <button onclick="openSummaryNewAdjustment()" style="padding:8px 16px;background:#15803d;color:white;border:none;border-radius:8px;font-family:inherit;font-size:.85rem;font-weight:700;cursor:pointer">➕ חישוב חדש</button>
           <button id="summaryEditBtn" onclick="toggleSummaryEditMode()" style="padding:8px 16px;background:#dbeafe;color:#1e40af;border:1.5px solid #93c5fd;border-radius:8px;font-family:inherit;font-size:.85rem;font-weight:700;cursor:pointer">✏️ מצב עריכה</button>
@@ -2336,9 +2342,19 @@ function renderSummary() {
   if (!tbody) return;
   const sourceOrders = (window._summaryOrders && window._summaryOrders.length) ? window._summaryOrders : _orders;
   if (!sourceOrders || !sourceOrders.length) { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:24px">אין הזמנות בטווח שנבחר</td></tr>'; return; }
-  // Apply global pickup filter + skip cancelled/duplicate orders so they don't inflate totals
+  // Populate pickup-point dropdown from points actually present in the orders
+  // (so the list is self-contained and useful even on stale pickup configs).
+  const ppSel = document.getElementById('summaryPickupFilter');
+  if (ppSel) {
+    const knownPickups = Array.from(new Set(sourceOrders.map(function(o){ return (o.pickupLocation || '').trim(); }).filter(Boolean))).sort(function(a,b){ return a.localeCompare(b, 'he'); });
+    const cur = ppSel.value;
+    ppSel.innerHTML = '<option value="">כל הנקודות</option>' +
+      knownPickups.map(function(p){ return '<option value="' + p.replace(/"/g, '&quot;') + '"' + (p === cur ? ' selected' : '') + '>' + p + '</option>'; }).join('');
+  }
+  // Pickup precedence: explicit summary dropdown wins, falls back to the
+  // global header pickup filter.
   const SKIP_STATUSES_S = ['cancelled', 'cancelled_duplicate', 'merged_into_paid'];
-  const _gp = getActivePickup();
+  const _gp = (ppSel && ppSel.value) ? ppSel.value : getActivePickup();
   const _scopedOrders = (_gp ? sourceOrders.filter(function(o){ return (o.pickupLocation || '') === _gp; }) : sourceOrders)
                          .filter(function(o){ return !SKIP_STATUSES_S.includes(o.status); });
 
