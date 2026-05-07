@@ -443,18 +443,24 @@ input:checked + .slider::before { transform: translateX(20px); }
       <div class="card" style="margin-bottom:12px">
         <div class="card-title">📊 סיכום הזמנות השבוע לפי מוצר</div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:6px">
-          <div style="flex:1;min-width:170px">
+          <div style="flex:1;min-width:160px">
+            <label style="font-size:.82rem;color:#374151;font-weight:600;display:block;margin-bottom:4px">🏭 ספק</label>
+            <select id="summarySupplierFilter" onchange="renderSummary()" style="width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.9rem">
+              <option value="">כל הספקים</option>
+            </select>
+          </div>
+          <div style="flex:1;min-width:160px">
             <label style="font-size:.82rem;color:#374151;font-weight:600;display:block;margin-bottom:4px">קטגוריה</label>
             <select id="summaryCategoryFilter" onchange="renderSummary()" style="width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.9rem">
               <option value="">כל הקטגוריות</option>
             </select>
           </div>
-          <div style="flex:2;min-width:200px">
+          <div style="flex:2;min-width:180px">
             <label style="font-size:.82rem;color:#374151;font-weight:600;display:block;margin-bottom:4px">חיפוש מוצר</label>
             <input id="summaryProductFilter" type="text" oninput="renderSummary()" placeholder="חיפוש לפי שם מוצר..."
               style="width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.9rem">
           </div>
-          <button onclick="document.getElementById('summaryCategoryFilter').value='';document.getElementById('summaryProductFilter').value='';renderSummary()" style="padding:8px 16px;background:#f3f4f6;color:#374151;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.85rem;cursor:pointer">נקה</button>
+          <button onclick="document.getElementById('summarySupplierFilter').value='';document.getElementById('summaryCategoryFilter').value='';document.getElementById('summaryProductFilter').value='';renderSummary()" style="padding:8px 16px;background:#f3f4f6;color:#374151;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.85rem;cursor:pointer">נקה</button>
           <button onclick="exportSummaryPDF()" style="padding:8px 16px;background:#dc2626;color:white;border:none;border-radius:8px;font-family:inherit;font-size:.85rem;font-weight:700;cursor:pointer">📄 הורד PDF</button>
         </div>
         <div id="summaryStats" style="margin-top:10px;font-size:.85rem;color:#6b7280"></div>
@@ -463,10 +469,19 @@ input:checked + .slider::before { transform: translateX(20px); }
         <div style="overflow-x:auto">
           <table id="summaryTable">
             <thead>
-              <tr><th>מוצר</th><th>קטגוריה</th><th>כמות כוללת</th><th>וריאנטים</th><th>הכנסות</th></tr>
+              <tr>
+                <th>מוצר</th>
+                <th>קטגוריה</th>
+                <th>כמות כוללת</th>
+                <th>מחיר קנייה</th>
+                <th>מחיר מכירה</th>
+                <th>עלות כוללת</th>
+                <th>הכנסות</th>
+                <th>סה"כ הפרש</th>
+              </tr>
             </thead>
             <tbody id="summaryTbody">
-              <tr><td colspan="5" style="text-align:center;color:#9ca3af;padding:24px">טוען...</td></tr>
+              <tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:24px">טוען...</td></tr>
             </tbody>
           </table>
         </div>
@@ -1984,29 +1999,51 @@ function renderSummary() {
   const _scopedOrders = (_gp ? _orders.filter(function(o){ return (o.pickupLocation || '') === _gp; }) : _orders)
                          .filter(function(o){ return !SKIP_STATUSES_S.includes(o.status); });
 
-  // Build a name→category map from cached products (if available) so we can
-  // tag every aggregated row with a category and filter by it.
-  const nameToCat = {};
+  // Build a name→{category, supplier, purchasePrice, sellingPrice} map from
+  // cached products + inventory so we can tag every aggregated row.
+  const nameInfo = {};
   (window._allProductsForSummary || []).forEach(function(p){
-    if (p.name) nameToCat[p.name.trim()] = p.category || 'אחר';
+    if (p.name) nameInfo[p.name.trim()] = { category: p.category || 'אחר', supplier: '', purchasePrice: 0, sellingPrice: Number(p.shopPrice) || 0 };
   });
-  function catFor(itemName) {
+  (window._allInventoryForSummary || []).forEach(function(inv){
+    if (!inv.name) return;
+    const k = inv.name.trim();
+    if (!nameInfo[k]) nameInfo[k] = { category: inv.category || 'אחר', supplier: '', purchasePrice: 0, sellingPrice: 0 };
+    nameInfo[k].purchasePrice = Number(inv.purchasePrice) || 0;
+    if (!nameInfo[k].sellingPrice) nameInfo[k].sellingPrice = Number(inv.sellingPrice) || 0;
+    if (!nameInfo[k].category || nameInfo[k].category === 'אחר') nameInfo[k].category = inv.category || nameInfo[k].category;
+    nameInfo[k].supplier = inv.supplier || '';
+  });
+  function infoFor(itemName) {
     var n = (itemName || '').trim();
-    if (nameToCat[n]) return nameToCat[n];
-    // Fuzzy: longest matching product name
+    if (nameInfo[n]) return nameInfo[n];
     var best = '';
-    Object.keys(nameToCat).forEach(function(pn) {
+    Object.keys(nameInfo).forEach(function(pn) {
       if (n.startsWith(pn) && pn.length > best.length) best = pn;
     });
-    return best ? nameToCat[best] : 'אחר';
+    return best ? nameInfo[best] : { category: 'אחר', supplier: '', purchasePrice: 0, sellingPrice: 0 };
   }
 
-  // Aggregate
+  // Aggregate per product+variant. Variants share the parent's purchase price
+  // (we don't track per-variant cost), so cost is computed from the parent.
   const summary = {};
   _scopedOrders.forEach(function(order) {
     (order.items || []).forEach(function(item) {
+      const info = infoFor(item.name);
       const key = item.variant ? item.name + '|' + item.variant : item.name;
-      if (!summary[key]) summary[key] = { name: item.name, variant: item.variant || null, qty: 0, unit: item.unit || '', total: 0, category: catFor(item.name) };
+      if (!summary[key]) {
+        summary[key] = {
+          name: item.name,
+          variant: item.variant || null,
+          qty: 0,
+          unit: item.unit || '',
+          total: 0,             // revenue (gross)
+          category: info.category,
+          supplier: info.supplier,
+          purchasePrice: info.purchasePrice,
+          sellingPrice: info.sellingPrice
+        };
+      }
       summary[key].qty += (item.qty || 1);
       summary[key].total += ((item.price || 0) * (item.qty || 1));
     });
@@ -2021,47 +2058,69 @@ function renderSummary() {
     catSel.innerHTML = '<option value="">כל הקטגוריות</option>' +
       knownCats.map(function(c){ return '<option value="' + c + '"' + (c === cur ? ' selected' : '') + '>' + c + '</option>'; }).join('');
   }
+  // Populate supplier dropdown (suppliers that appear at least once)
+  const supSel = document.getElementById('summarySupplierFilter');
+  if (supSel) {
+    const knownSuppliers = Array.from(new Set(rows.map(function(r){ return r.supplier; }).filter(Boolean))).sort(function(a,b){ return a.localeCompare(b, 'he'); });
+    const cur = supSel.value;
+    supSel.innerHTML = '<option value="">כל הספקים</option>' +
+      knownSuppliers.map(function(s){ return '<option value="' + s.replace(/"/g,'&quot;') + '"' + (s === cur ? ' selected' : '') + '>' + s + '</option>'; }).join('');
+  }
 
   // Apply user filters
   const catFilter = (catSel && catSel.value) || '';
+  const supplierFilter = (supSel && supSel.value) || '';
   const nameQuery = (document.getElementById('summaryProductFilter')?.value || '').toLowerCase().trim();
   if (catFilter) rows = rows.filter(function(r){ return r.category === catFilter; });
+  if (supplierFilter) rows = rows.filter(function(r){ return (r.supplier || '') === supplierFilter; });
   if (nameQuery) rows = rows.filter(function(r){
     const label = (r.name + ' ' + (r.variant || '')).toLowerCase();
     return label.includes(nameQuery);
   });
 
-  // Stats summary line
+  // Stats — units, revenue, and now also total cost + total profit (revenue − cost)
   const totalUnits = rows.reduce(function(s,r){ return s + r.qty; }, 0);
   const totalRevenue = rows.reduce(function(s,r){ return s + r.total; }, 0);
+  const totalCost = rows.reduce(function(s,r){ return s + (r.qty * (Number(r.purchasePrice) || 0)); }, 0);
+  const totalProfit = totalRevenue - totalCost;
   const statsEl = document.getElementById('summaryStats');
-  if (statsEl) statsEl.textContent = '✦ ' + rows.length + ' מוצרים · ' + totalUnits + ' יחידות · ₪' + totalRevenue.toFixed(2).replace(/\.00$/,'');
+  if (statsEl) statsEl.textContent = '✦ ' + rows.length + ' מוצרים · ' + totalUnits + ' יחידות · הכנסות ₪' + totalRevenue.toFixed(2).replace(/\.00$/,'') + ' · עלות ₪' + totalCost.toFixed(2).replace(/\.00$/,'') + ' · הפרש ₪' + totalProfit.toFixed(2).replace(/\.00$/,'');
 
-  // Stash for the PDF export button
   window._summaryFilteredRows = rows;
-  window._summaryFilteredStats = { count: rows.length, units: totalUnits, revenue: totalRevenue, category: catFilter, search: nameQuery, pickupPoint: _gp };
+  window._summaryFilteredStats = { count: rows.length, units: totalUnits, revenue: totalRevenue, cost: totalCost, profit: totalProfit, category: catFilter, supplier: supplierFilter, search: nameQuery, pickupPoint: _gp };
 
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#9ca3af;padding:24px">אין תוצאות לפילטרים שנבחרו</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:24px">אין תוצאות לפילטרים שנבחרו</td></tr>';
     return;
   }
+  function fmt(n) { var v = Math.round(Number(n) * 100) / 100; return v.toFixed(2).replace(/\.00$/, ''); }
   tbody.innerHTML = rows.map(function(item) {
+    const lineCost = item.qty * (Number(item.purchasePrice) || 0);
+    const profit = item.total - lineCost;
+    const profitColor = profit >= 0 ? '#15803d' : '#dc2626';
     return '<tr>' +
       '<td><strong>' + item.name + '</strong>' + (item.variant ? ' <span style="font-size:.8rem;color:#6b7280">(' + item.variant + ')</span>' : '') + '</td>' +
       '<td style="font-size:.85rem;color:#374151">' + (item.category || '') + '</td>' +
-      '<td style="text-align:center;font-weight:700;font-size:1.1rem;color:#15803d">' + item.qty + '</td>' +
-      '<td style="font-size:0.82rem;color:#6b7280">' + (item.unit || '—') + '</td>' +
-      '<td style="font-size:0.88rem;font-weight:700;color:#14532d">₪' + item.total.toFixed(2) + '</td>' +
+      '<td style="text-align:center;font-weight:700;font-size:1.05rem;color:#15803d">' + item.qty + '</td>' +
+      '<td style="text-align:center;font-size:.86rem;color:#92400e">₪' + fmt(item.purchasePrice) + '</td>' +
+      '<td style="text-align:center;font-size:.86rem;color:#1e40af">₪' + fmt(item.sellingPrice) + '</td>' +
+      '<td style="text-align:center;font-size:.86rem;color:#92400e;font-weight:700">₪' + fmt(lineCost) + '</td>' +
+      '<td style="text-align:center;font-size:.88rem;font-weight:700;color:#14532d">₪' + fmt(item.total) + '</td>' +
+      '<td style="text-align:center;font-size:.9rem;font-weight:800;color:' + profitColor + '">₪' + fmt(profit) + '</td>' +
       '</tr>';
   }).join('');
 }
 
-// Pre-load products so renderSummary can map names → categories without
-// adding a fetch on every render.
+// Pre-load products + inventory so renderSummary can show category, purchase
+// price and selling price without an extra fetch on every render.
 (async function _preloadProductsForSummary() {
   try {
     const r = await fetch('/api/shop/products');
     if (r.ok) window._allProductsForSummary = await r.json();
+  } catch(e) {}
+  try {
+    const r = await fetch('/api/shop/inventory');
+    if (r.ok) window._allInventoryForSummary = await r.json();
   } catch(e) {}
 })();
 
