@@ -306,6 +306,46 @@
       </div>
     </div>
 
+    <!-- CMS — editable copy on the public raffle page -->
+    <div class="card">
+      <div class="card-title">📝 מלל בדף הציבורי</div>
+      <div style="font-size:.82rem;color:#6b7280;margin-bottom:14px">כל הטקסטים שמופיעים ללקוחות בדף ההגרלה. השתמש ב-<code style="background:#fef3c7;padding:1px 6px;border-radius:4px">{minReceipt}</code> כדי שהמספר יתעדכן אוטומטית, ו-<code style="background:#fef3c7;padding:1px 6px;border-radius:4px">{ticket}</code> בהודעת ההצלחה.</div>
+
+      <div class="settings-grid" style="grid-template-columns:1fr">
+        <div>
+          <label>כותרת הדף</label>
+          <input type="text" id="cmsPageTitle" placeholder="🎟️ הגרלה שבועית">
+        </div>
+        <div>
+          <label>כותרת משנה</label>
+          <input type="text" id="cmsPageSubtitle" placeholder="בכל יום שישי ב-08:00 — אחד מהקונים זוכה!">
+        </div>
+        <div>
+          <label>כותרת אזור ההרשמה</label>
+          <input type="text" id="cmsRegisterHeading" placeholder="🧾 הירשם להגרלה">
+        </div>
+        <div>
+          <label>הסבר אזור ההרשמה</label>
+          <textarea id="cmsRegisterInstructions" rows="2" style="width:100%;padding:10px 12px;border:2px solid #e5e7eb;border-radius:10px;font-family:inherit;font-size:.95rem;direction:rtl;resize:vertical;line-height:1.4"></textarea>
+        </div>
+        <div>
+          <label>תבנית שיתוף וואטסאפ</label>
+          <textarea id="cmsShareTemplate" rows="3" style="width:100%;padding:10px 12px;border:2px solid #e5e7eb;border-radius:10px;font-family:inherit;font-size:.95rem;direction:rtl;resize:vertical;line-height:1.4"></textarea>
+        </div>
+        <div>
+          <label>הודעת הצלחה (אחרי הרשמה)</label>
+          <input type="text" id="cmsSuccessMessage" placeholder="תודה! מספר ההגרלה שלך הוא #{ticket}">
+        </div>
+        <div>
+          <label>הודעה כשההגרלה סגורה</label>
+          <input type="text" id="cmsClosedMessage" placeholder="ההגרלה השבוע סגורה. בהצלחה בשבוע הבא!">
+        </div>
+      </div>
+      <div class="settings-actions" style="margin-top:14px">
+        <button class="btn btn-green" onclick="saveSettings()">💾 שמור את כל המלל</button>
+      </div>
+    </div>
+
     <!-- Stats -->
     <div class="card">
       <div class="card-title">📊 השבוע הנוכחי</div>
@@ -582,22 +622,40 @@ async function loadSettings() {
     document.getElementById('minAmount').value = s.minReceiptAmount || 200;
     document.getElementById('prize').value = s.prizeDescription || '';
     document.getElementById('enabled').checked = s.enabled !== false;
+    // CMS-editable copy (defaults handled by the API when missing)
+    function setVal(id, v) { const el = document.getElementById(id); if (el) el.value = v != null ? v : ''; }
+    setVal('cmsPageTitle',            s.pageTitle);
+    setVal('cmsPageSubtitle',         s.pageSubtitle);
+    setVal('cmsRegisterHeading',      s.registerHeading);
+    setVal('cmsRegisterInstructions', s.registerInstructions);
+    setVal('cmsShareTemplate',        s.shareTemplate);
+    setVal('cmsSuccessMessage',       s.successMessage);
+    setVal('cmsClosedMessage',        s.closedMessage);
   } catch(e) {}
 }
 
 async function saveSettings() {
   try {
+    function getVal(id) { const el = document.getElementById(id); return el ? (el.value || '') : ''; }
     const body = {
       minReceiptAmount: parseFloat(document.getElementById('minAmount').value) || 200,
       prizeDescription: document.getElementById('prize').value.trim(),
-      enabled: document.getElementById('enabled').checked
+      enabled: document.getElementById('enabled').checked,
+      // CMS text fields (sent only if the input exists, so no breakage if HTML is older)
+      pageTitle:            getVal('cmsPageTitle'),
+      pageSubtitle:         getVal('cmsPageSubtitle'),
+      registerHeading:      getVal('cmsRegisterHeading'),
+      registerInstructions: getVal('cmsRegisterInstructions'),
+      shareTemplate:        getVal('cmsShareTemplate'),
+      successMessage:       getVal('cmsSuccessMessage'),
+      closedMessage:        getVal('cmsClosedMessage')
     };
     const r = await fetch('/api/raffle/admin/settings', {
       method: 'PUT', headers: authHeaders(), body: JSON.stringify(body)
     });
     const d = await r.json();
     if (d.error) { alert('❌ ' + d.error); return; }
-    alert('✅ הגדרות נשמרו');
+    alert('✅ נשמר. סכום מינימום: ₪' + (d.settings && d.settings.minReceiptAmount));
   } catch(e) { alert('שגיאת רשת'); }
 }
 
