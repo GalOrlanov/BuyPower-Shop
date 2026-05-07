@@ -87,7 +87,16 @@ async function getSettings(db) {
     drawDayOfWeek: 5,
     drawHour: 8,
     enabled: true,
-    prizeDescription: 'פרס השבוע 🎁'
+    prizeDescription: 'פרס השבוע 🎁',
+    // CMS-editable text fields. {minReceipt} placeholder is replaced on the
+    // client with the actual numeric value so the texts stay in sync.
+    pageTitle: '🎟️ הגרלה שבועית',
+    pageSubtitle: 'בכל יום שישי ב-08:00 — אחד מהקונים הזוכה!',
+    registerHeading: '🧾 הירשם להגרלה',
+    registerInstructions: 'קנית מעל ₪{minReceipt}? העלה תמונת קבלה וקבל מספר הגרלה ייחודי!',
+    shareTemplate: '🎁 כל מי שקונה מעל ₪{minReceipt} יכול להיכנס להגרלה השבועית!\n\n🛒 קנו עכשיו: https://shop.buypower.co.il',
+    successMessage: 'תודה! מספר ההגרלה שלך הוא #{ticket}',
+    closedMessage: 'ההגרלה השבוע סגורה. בהצלחה בשבוע הבא!'
   };
   const doc = await db.collection('shop_settings').findOne({ key: 'raffleSettings' });
   return doc ? { ...defaults, ...doc } : defaults;
@@ -125,6 +134,14 @@ router.get('/status', async (req, res) => {
       enabled: settings.enabled !== false,
       minReceiptAmount: settings.minReceiptAmount,
       prizeDescription: settings.prizeDescription,
+      // CMS-editable copy
+      pageTitle: settings.pageTitle,
+      pageSubtitle: settings.pageSubtitle,
+      registerHeading: settings.registerHeading,
+      registerInstructions: settings.registerInstructions,
+      shareTemplate: settings.shareTemplate,
+      successMessage: settings.successMessage,
+      closedMessage: settings.closedMessage,
       nextDrawAt: activeWeek.weekEndDate,
       currentWeekStart: activeWeek.weekStartDate,
       approvedCount,
@@ -297,23 +314,33 @@ router.get('/admin/settings', verifyAdmin, async (req, res) => {
 });
 
 // PUT /api/raffle/admin/settings
+// Accepts both the legacy fields (minReceiptAmount/enabled/prizeDescription)
+// and the new CMS-editable copy fields. Each text field is optional — only
+// supplied fields are written, so partial updates are safe.
 router.put('/admin/settings', verifyAdmin, async (req, res) => {
   try {
     const db = await getDb();
     const update = {
       key: 'raffleSettings',
-      minReceiptAmount: parseFloat(req.body.minReceiptAmount) || 200,
-      enabled: req.body.enabled !== false,
-      prizeDescription: (req.body.prizeDescription || '').trim() || 'פרס השבוע 🎁',
       drawDayOfWeek: 5,
       drawHour: 8
     };
+    if (req.body.minReceiptAmount !== undefined) update.minReceiptAmount = parseFloat(req.body.minReceiptAmount) || 200;
+    if (req.body.enabled !== undefined)          update.enabled = req.body.enabled !== false;
+    if (req.body.prizeDescription !== undefined) update.prizeDescription = (req.body.prizeDescription || '').trim() || 'פרס השבוע 🎁';
+    // CMS text fields — accept whatever the admin sends, store as-is (trimmed).
+    const textFields = ['pageTitle', 'pageSubtitle', 'registerHeading', 'registerInstructions', 'shareTemplate', 'successMessage', 'closedMessage'];
+    textFields.forEach(f => {
+      if (typeof req.body[f] === 'string') update[f] = req.body[f].trim();
+    });
     await db.collection('shop_settings').updateOne(
       { key: 'raffleSettings' },
       { $set: update },
       { upsert: true }
     );
-    res.json({ ok: true, settings: update });
+    // Return the merged settings so the admin sees what's now stored
+    const doc = await db.collection('shop_settings').findOne({ key: 'raffleSettings' });
+    res.json({ ok: true, settings: doc });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
