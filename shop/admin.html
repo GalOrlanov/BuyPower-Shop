@@ -568,6 +568,7 @@ input:checked + .slider::before { transform: translateX(20px); }
             <tbody id="summaryTbody">
               <tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:24px">טוען...</td></tr>
             </tbody>
+            <tfoot id="summaryTfoot"></tfoot>
           </table>
         </div>
       </div>
@@ -2329,9 +2330,14 @@ function renderSummary() {
   // Use the summary-specific date-filtered orders if available, otherwise fall
   // back to the global _orders that the orders tab loaded.
   const tbody = document.getElementById('summaryTbody');
+  const tfootEarly = document.getElementById('summaryTfoot');
   if (!tbody) return;
   const sourceOrders = (window._summaryOrders && window._summaryOrders.length) ? window._summaryOrders : _orders;
-  if (!sourceOrders || !sourceOrders.length) { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:24px">אין הזמנות בטווח שנבחר</td></tr>'; return; }
+  if (!sourceOrders || !sourceOrders.length) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:24px">אין הזמנות בטווח שנבחר</td></tr>';
+    if (tfootEarly) tfootEarly.innerHTML = '';
+    return;
+  }
   // Populate pickup-point dropdown from points actually present in the orders
   // (so the list is self-contained and useful even on stale pickup configs).
   const ppSel = document.getElementById('summaryPickupFilter');
@@ -2487,6 +2493,8 @@ function renderSummary() {
 
   if (!rows.length) {
     tbody.innerHTML = '<tr><td colspan="' + activeCols.length + '" style="text-align:center;color:#9ca3af;padding:24px">אין תוצאות לפילטרים שנבחרו</td></tr>';
+    const tf = document.getElementById('summaryTfoot');
+    if (tf) tf.innerHTML = '';
     return;
   }
   function fmt(n) { var v = Math.round(Number(n) * 100) / 100; return v.toFixed(2).replace(/\.00$/, ''); }
@@ -2544,6 +2552,33 @@ function renderSummary() {
     const profitColor = profit >= 0 ? '#15803d' : '#dc2626';
     return '<tr>' + activeCols.map(c => cellFor(c.id, item, lineCost, profit, profitColor, lineRevenue)).join('') + '</tr>';
   }).join('');
+
+  // Totals row at the bottom. Per-unit price columns (purchase / selling) are
+  // shown as a weighted average — summing them would be meaningless.
+  const tfootEl = document.getElementById('summaryTfoot');
+  if (tfootEl) {
+    const totalProfitColor = totalProfit >= 0 ? '#15803d' : '#dc2626';
+    const avgBuy  = totalUnits > 0 ? (totalCost    / totalUnits) : 0;
+    const avgSell = totalUnits > 0 ? (totalRevenue / totalUnits) : 0;
+    function footCell(colId) {
+      switch (colId) {
+        case 'name':          return '<td style="font-weight:900;color:#14532d">סה״כ (' + rows.length + ' שורות)</td>';
+        case 'category':      return '<td></td>';
+        case 'qty':           return '<td style="text-align:center;font-weight:900;font-size:1.05rem;color:#14532d">' + totalUnits + '</td>';
+        case 'purchasePrice': return '<td style="text-align:center;font-size:.78rem;color:#92400e" title="ממוצע משוקלל">~₪' + fmt(avgBuy) + '</td>';
+        case 'sellingPrice':  return '<td style="text-align:center;font-size:.78rem;color:#1e40af" title="ממוצע משוקלל">~₪' + fmt(avgSell) + '</td>';
+        case 'cost':          return '<td style="text-align:center;font-weight:900;color:#92400e">₪' + fmt(totalCost) + '</td>';
+        case 'revenue':       return '<td style="text-align:center;font-weight:900;color:#14532d">₪' + fmt(totalRevenue) + '</td>';
+        case 'profit':        return '<td style="text-align:center;font-weight:900;color:' + totalProfitColor + '">₪' + fmt(totalProfit) + '</td>';
+      }
+      return '<td></td>';
+    }
+    tfootEl.innerHTML = rows.length
+      ? '<tr style="background:#fef3c7;border-top:3px solid #fbbf24">' +
+          activeCols.map(c => footCell(c.id)).join('') +
+        '</tr>'
+      : '';
+  }
 }
 
 // === Edit-mode toggle & inventory persistence from the summary ===
@@ -2762,6 +2797,31 @@ function exportSummaryPDF() {
     return '<tr><td class="num">' + (i+1) + '</td>' + activeCols.map(c => pdfCell(c.id, r, lineCost, profit, profitColor, lineRevenue)).join('') + '</tr>';
   }).join('');
 
+  // Totals row in the printout (matches the on-screen tfoot).
+  const _totalUnits   = rows.reduce((s,r) => s + (Number(r.qty) || 0), 0);
+  const _totalCost    = rows.reduce((s,r) => s + (Number(r.qty) || 0) * (Number(r.purchasePrice) || 0), 0);
+  const _totalRevenue = rows.reduce((s,r) => s + (Number(r.qty) || 0) * (Number(r.sellingPrice) || 0), 0);
+  const _totalProfit  = _totalRevenue - _totalCost;
+  const _totalColor   = _totalProfit >= 0 ? '#14532d' : '#dc2626';
+  const _avgBuy  = _totalUnits > 0 ? (_totalCost    / _totalUnits) : 0;
+  const _avgSell = _totalUnits > 0 ? (_totalRevenue / _totalUnits) : 0;
+  function pdfFootCell(colId) {
+    switch (colId) {
+      case 'name':          return '<td style="font-weight:900;color:#14532d">סה״כ (' + rows.length + ' שורות)</td>';
+      case 'category':      return '<td></td>';
+      case 'qty':           return '<td class="qty" style="font-weight:900">' + _totalUnits + '</td>';
+      case 'purchasePrice': return '<td class="num" style="font-size:8.5pt;color:#92400e">~₪' + fmt(_avgBuy) + '</td>';
+      case 'sellingPrice':  return '<td class="num" style="font-size:8.5pt;color:#1e40af">~₪' + fmt(_avgSell) + '</td>';
+      case 'cost':          return '<td class="num cost" style="font-weight:900">₪' + fmt(_totalCost) + '</td>';
+      case 'revenue':       return '<td class="rev" style="font-weight:900">₪' + fmt(_totalRevenue) + '</td>';
+      case 'profit':        return '<td class="num" style="font-weight:900;color:' + _totalColor + '">₪' + fmt(_totalProfit) + '</td>';
+    }
+    return '<td></td>';
+  }
+  const tfootHtml = '<tr style="background:#fef3c7;border-top:3px solid #fbbf24"><td></td>' +
+    activeCols.map(c => pdfFootCell(c.id)).join('') +
+  '</tr>';
+
   // Header
   const ths = '<th class="num">#</th>' + activeCols.map(c => {
     const cls = (c.id === 'name')                                      ? 'name'
@@ -2814,6 +2874,7 @@ function exportSummaryPDF() {
       '<table>' +
         '<thead><tr>' + ths + '</tr></thead>' +
         '<tbody>' + trs + '</tbody>' +
+        '<tfoot>' + tfootHtml + '</tfoot>' +
       '</table>' +
     '</div>' +
     '<script>window.addEventListener("load",function(){setTimeout(function(){window.print();},500)});</' + 'script>' +
