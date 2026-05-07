@@ -483,6 +483,7 @@ input:checked + .slider::before { transform: translateX(20px); }
           <button onclick="document.getElementById('summarySupplierFilter').value='';document.getElementById('summaryCategoryFilter').value='';document.getElementById('summaryProductFilter').value='';renderSummary()" style="padding:8px 16px;background:#f3f4f6;color:#374151;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.85rem;cursor:pointer">נקה</button>
           <button onclick="openSummaryColPicker()" style="padding:8px 16px;background:#fef3c7;color:#92400e;border:1.5px solid #fde68a;border-radius:8px;font-family:inherit;font-size:.85rem;font-weight:700;cursor:pointer">🎯 עמודות</button>
           <button onclick="openSummaryNewAdjustment()" style="padding:8px 16px;background:#15803d;color:white;border:none;border-radius:8px;font-family:inherit;font-size:.85rem;font-weight:700;cursor:pointer">➕ חישוב חדש</button>
+          <button id="summaryEditBtn" onclick="toggleSummaryEditMode()" style="padding:8px 16px;background:#dbeafe;color:#1e40af;border:1.5px solid #93c5fd;border-radius:8px;font-family:inherit;font-size:.85rem;font-weight:700;cursor:pointer">✏️ מצב עריכה</button>
           <button onclick="exportSummaryPDF()" style="padding:8px 16px;background:#dc2626;color:white;border:none;border-radius:8px;font-family:inherit;font-size:.85rem;font-weight:700;cursor:pointer">📄 הורד PDF</button>
         </div>
         <div id="summaryStats" style="margin-top:10px;font-size:.85rem;color:#6b7280"></div>
@@ -2335,16 +2336,17 @@ function renderSummary() {
   const _scopedOrders = (_gp ? sourceOrders.filter(function(o){ return (o.pickupLocation || '') === _gp; }) : sourceOrders)
                          .filter(function(o){ return !SKIP_STATUSES_S.includes(o.status); });
 
-  // Build a name→{category, supplier, purchasePrice, sellingPrice} map from
-  // cached products + inventory so we can tag every aggregated row.
+  // Build a name→{inventoryId, category, supplier, purchasePrice, sellingPrice}
+  // map from cached products + inventory so we can tag every aggregated row.
   const nameInfo = {};
   (window._allProductsForSummary || []).forEach(function(p){
-    if (p.name) nameInfo[p.name.trim()] = { category: p.category || 'אחר', supplier: '', purchasePrice: 0, sellingPrice: Number(p.shopPrice) || 0 };
+    if (p.name) nameInfo[p.name.trim()] = { inventoryId: null, category: p.category || 'אחר', supplier: '', purchasePrice: 0, sellingPrice: Number(p.shopPrice) || 0 };
   });
   (window._allInventoryForSummary || []).forEach(function(inv){
     if (!inv.name) return;
     const k = inv.name.trim();
-    if (!nameInfo[k]) nameInfo[k] = { category: inv.category || 'אחר', supplier: '', purchasePrice: 0, sellingPrice: 0 };
+    if (!nameInfo[k]) nameInfo[k] = { inventoryId: inv._id, category: inv.category || 'אחר', supplier: '', purchasePrice: 0, sellingPrice: 0 };
+    nameInfo[k].inventoryId = inv._id;
     nameInfo[k].purchasePrice = Number(inv.purchasePrice) || 0;
     if (!nameInfo[k].sellingPrice) nameInfo[k].sellingPrice = Number(inv.sellingPrice) || 0;
     if (!nameInfo[k].category || nameInfo[k].category === 'אחר') nameInfo[k].category = inv.category || nameInfo[k].category;
@@ -2357,7 +2359,7 @@ function renderSummary() {
     Object.keys(nameInfo).forEach(function(pn) {
       if (n.startsWith(pn) && pn.length > best.length) best = pn;
     });
-    return best ? nameInfo[best] : { category: 'אחר', supplier: '', purchasePrice: 0, sellingPrice: 0 };
+    return best ? nameInfo[best] : { inventoryId: null, category: 'אחר', supplier: '', purchasePrice: 0, sellingPrice: 0 };
   }
 
   // Aggregate per product+variant. Variants share the parent's purchase price
@@ -2378,6 +2380,7 @@ function renderSummary() {
           supplier: info.supplier,
           purchasePrice: info.purchasePrice,
           sellingPrice: info.sellingPrice,
+          inventoryId: info.inventoryId || null,
           isManual: false,
           adjQty: 0
         };
@@ -2470,13 +2473,27 @@ function renderSummary() {
     return;
   }
   function fmt(n) { var v = Math.round(Number(n) * 100) / 100; return v.toFixed(2).replace(/\.00$/, ''); }
+  const editMode = !!window._summaryEditMode;
+  function editableCell(item, field, color, options) {
+    const id = item.inventoryId || '';
+    const value = item[field];
+    if (!editMode || !id) {
+      return '<td style="text-align:center;font-size:.86rem;color:' + color + '">₪' + fmt(value) + '</td>';
+    }
+    return '<td style="text-align:center;font-size:.86rem;color:' + color + ';padding:2px">' +
+      '<span style="display:inline-flex;align-items:center;gap:2px">₪' +
+      '<input type="number" min="0" step="any" value="' + (Number(value) || 0) + '" data-inv="' + id + '" data-field="' + field + '" ' +
+        'onchange="saveInventoryFieldFromSummary(this)" ' +
+        'style="width:70px;padding:3px 6px;border:1.5px solid #93c5fd;border-radius:6px;text-align:center;font-size:.86rem;font-family:inherit;background:#eff6ff;color:' + color + '">' +
+      '</span></td>';
+  }
   function cellFor(colId, item, lineCost, profit, profitColor) {
     switch (colId) {
       case 'name':          return '<td><strong>' + item.name + '</strong>' + (item.variant ? ' <span style="font-size:.8rem;color:#6b7280">(' + item.variant + ')</span>' : '') + ((item.isManual || item.adjQty > 0) ? ' <span style="font-size:.7rem;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:8px;margin-right:4px" title="כולל חישוב ידני">📝 ידני</span>' : '') + '</td>';
       case 'category':      return '<td style="font-size:.85rem;color:#374151">' + (item.category || '') + '</td>';
       case 'qty':           return '<td style="text-align:center;font-weight:700;font-size:1.05rem;color:#15803d">' + item.qty + '</td>';
-      case 'purchasePrice': return '<td style="text-align:center;font-size:.86rem;color:#92400e">₪' + fmt(item.purchasePrice) + '</td>';
-      case 'sellingPrice':  return '<td style="text-align:center;font-size:.86rem;color:#1e40af">₪' + fmt(item.sellingPrice) + '</td>';
+      case 'purchasePrice': return editableCell(item, 'purchasePrice', '#92400e');
+      case 'sellingPrice':  return editableCell(item, 'sellingPrice', '#1e40af');
       case 'cost':          return '<td style="text-align:center;font-size:.86rem;color:#92400e;font-weight:700">₪' + fmt(lineCost) + '</td>';
       case 'revenue':       return '<td style="text-align:center;font-size:.88rem;font-weight:700;color:#14532d">₪' + fmt(item.total) + '</td>';
       case 'profit':        return '<td style="text-align:center;font-size:.9rem;font-weight:800;color:' + profitColor + '">₪' + fmt(profit) + '</td>';
@@ -2489,6 +2506,64 @@ function renderSummary() {
     const profitColor = profit >= 0 ? '#15803d' : '#dc2626';
     return '<tr>' + activeCols.map(c => cellFor(c.id, item, lineCost, profit, profitColor)).join('') + '</tr>';
   }).join('');
+}
+
+// === Edit-mode toggle & inventory persistence from the summary ===
+window._summaryEditMode = window._summaryEditMode || false;
+
+function toggleSummaryEditMode() {
+  window._summaryEditMode = !window._summaryEditMode;
+  const btn = document.getElementById('summaryEditBtn');
+  if (btn) {
+    if (window._summaryEditMode) {
+      btn.textContent = '✓ סיים עריכה';
+      btn.style.background = '#15803d';
+      btn.style.color = 'white';
+      btn.style.borderColor = '#15803d';
+    } else {
+      btn.textContent = '✏️ מצב עריכה';
+      btn.style.background = '#dbeafe';
+      btn.style.color = '#1e40af';
+      btn.style.borderColor = '#93c5fd';
+    }
+  }
+  renderSummary();
+}
+
+async function saveInventoryFieldFromSummary(input) {
+  const id = input.getAttribute('data-inv');
+  const field = input.getAttribute('data-field');
+  const val = parseFloat(input.value) || 0;
+  if (!id || !field) return;
+  // Optimistic: highlight while saving
+  const original = input.style.background;
+  input.style.background = '#fef3c7';
+  input.disabled = true;
+  try {
+    const headers = (typeof authHeaders === 'function') ? authHeaders() : { 'Content-Type': 'application/json' };
+    if (!headers['Content-Type']) headers['Content-Type'] = 'application/json';
+    const r = await fetch(API + '/inventory/' + id, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ [field]: val })
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    // Update the cached inventory in place so re-renders use the new value
+    (window._allInventoryForSummary || []).forEach(inv => {
+      if (String(inv._id) === String(id)) inv[field] = val;
+    });
+    input.style.background = '#dcfce7';
+    setTimeout(() => {
+      input.style.background = '#eff6ff';
+      input.disabled = false;
+      // Re-render so cost / profit cells reflect the new price
+      renderSummary();
+    }, 350);
+  } catch (e) {
+    input.style.background = '#fee2e2';
+    input.disabled = false;
+    alert('שגיאה בשמירה: ' + e.message);
+  }
 }
 
 // Pre-load products + inventory so renderSummary can show category, purchase
