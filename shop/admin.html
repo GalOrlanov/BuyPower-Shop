@@ -2505,7 +2505,10 @@ function renderSummary() {
     }
     const safeName = String(item.name || '').replace(/"/g, '&quot;');
     return '<td style="text-align:center;padding:2px">' +
-      '<input type="number" min="0" step="1" value="' + (Number(item.qty) || 0) + '" ' +
+      // step="any" so fractional qty (e.g. kg) is accepted; no min so the
+      // admin can dial a product down to 0 or even enter a negative as a
+      // correction. Browser-side number validation no longer blocks them.
+      '<input type="number" step="any" value="' + (Number(item.qty) || 0) + '" ' +
         'data-name="' + safeName + '" data-current="' + (Number(item.qty) || 0) + '" data-price="' + (Number(item.sellingPrice) || 0) + '" ' +
         'data-cost="' + (Number(item.purchasePrice) || 0) + '" data-cat="' + String(item.category || '').replace(/"/g, '&quot;') + '" ' +
         'onchange="saveQtyEditFromSummary(this)" ' +
@@ -2564,13 +2567,29 @@ async function saveQtyEditFromSummary(input) {
   const newQty = parseFloat(input.value) || 0;
   const current = parseFloat(input.getAttribute('data-current')) || 0;
   const diff = newQty - current;
-  if (diff === 0) return;
-  const name = input.getAttribute('data-name') || '';
+  // Trim names defensively — the order item names sometimes carry trailing
+  // whitespace, which would otherwise cause our existing-adjustment lookup
+  // (strict ===) to miss and pile up a new row each time.
+  const name = String(input.getAttribute('data-name') || '').trim();
   const price = parseFloat(input.getAttribute('data-price')) || 0;
   const cost = parseFloat(input.getAttribute('data-cost')) || 0;
   const category = input.getAttribute('data-cat') || '';
-  if (!name) return;
-  input.disabled = true;
+  console.log('[summary-qty] edit', { name, current, newQty, diff, price, cost });
+  if (!name) {
+    console.warn('[summary-qty] aborted: empty data-name');
+    input.style.background = '#fee2e2';
+    return;
+  }
+  if (diff === 0) {
+    // No real change — just bounce back to neutral so the user sees the field
+    // is still alive and didn't reject the input.
+    input.style.background = '#eff6ff';
+    return;
+  }
+  // Visual feedback only — DO NOT disable. A disabled input that survives a
+  // failed re-render leaves the user unable to edit at all, which is the
+  // bug we're trying to fix.
+  const prevBg = input.style.background;
   input.style.background = '#fef3c7';
   try {
     const headers = (typeof authHeaders === 'function') ? authHeaders() : {};
@@ -2578,10 +2597,12 @@ async function saveQtyEditFromSummary(input) {
     // Find a previous summary-edit adjustment for the same product so we can
     // merge instead of inserting another row each time the admin tweaks.
     const existing = (window._summaryAdjustments || []).find(a =>
-      a.name === name && String(a.note || '').indexOf(_MO_QTY_EDIT_NOTE_PREFIX) === 0
+      String(a.name || '').trim() === name &&
+      String(a.note || '').indexOf(_MO_QTY_EDIT_NOTE_PREFIX) === 0
     );
     if (existing) {
       const merged = (Number(existing.qty) || 0) + diff;
+      console.log('[summary-qty] merge → existing adj', existing._id, 'merged qty=', merged);
       if (merged === 0) {
         const r = await fetch(API + '/admin/summary-adjustments/' + existing._id, { method: 'DELETE', headers });
         if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -2603,6 +2624,7 @@ async function saveQtyEditFromSummary(input) {
     } else {
       const fromInput = document.getElementById('summaryFromDate');
       const dateForAdj = (fromInput && fromInput.value) ? fromInput.value : _ymd(new Date());
+      console.log('[summary-qty] create new adj qty=', diff, 'date=', dateForAdj);
       const r = await fetch(API + '/admin/summary-adjustments', {
         method: 'POST', headers,
         body: JSON.stringify({
@@ -2620,10 +2642,13 @@ async function saveQtyEditFromSummary(input) {
       }
     }
     input.style.background = '#dcfce7';
+    // Update data-current in place so a follow-up keystroke (before the
+    // re-render lands) computes the diff against the correct baseline.
+    input.setAttribute('data-current', String(newQty));
     setTimeout(() => { loadSummaryRange(); }, 200);
   } catch (e) {
+    console.error('[summary-qty] save failed', e);
     input.style.background = '#fee2e2';
-    input.disabled = false;
     alert('שגיאה בשמירה: ' + e.message);
   }
 }
@@ -2632,11 +2657,15 @@ async function saveInventoryFieldFromSummary(input) {
   const id = input.getAttribute('data-inv');
   const field = input.getAttribute('data-field');
   const val = parseFloat(input.value) || 0;
-  if (!id || !field) return;
-  // Optimistic: highlight while saving
-  const original = input.style.background;
+  console.log('[summary-inv] edit', { id, field, val });
+  if (!id || !field) {
+    console.warn('[summary-inv] aborted: missing data-inv/field');
+    input.style.background = '#fee2e2';
+    return;
+  }
+  // Visual feedback only — never disable. A disabled input that survives a
+  // failed re-render leaves the user stuck.
   input.style.background = '#fef3c7';
-  input.disabled = true;
   try {
     const headers = (typeof authHeaders === 'function') ? authHeaders() : { 'Content-Type': 'application/json' };
     if (!headers['Content-Type']) headers['Content-Type'] = 'application/json';
@@ -2645,7 +2674,10 @@ async function saveInventoryFieldFromSummary(input) {
       headers,
       body: JSON.stringify({ [field]: val })
     });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      throw new Error(j.error || ('HTTP ' + r.status));
+    }
     // Update the cached inventory in place so re-renders use the new value
     (window._allInventoryForSummary || []).forEach(inv => {
       if (String(inv._id) === String(id)) inv[field] = val;
@@ -2653,13 +2685,12 @@ async function saveInventoryFieldFromSummary(input) {
     input.style.background = '#dcfce7';
     setTimeout(() => {
       input.style.background = '#eff6ff';
-      input.disabled = false;
       // Re-render so cost / profit cells reflect the new price
       renderSummary();
     }, 350);
   } catch (e) {
+    console.error('[summary-inv] save failed', e);
     input.style.background = '#fee2e2';
-    input.disabled = false;
     alert('שגיאה בשמירה: ' + e.message);
   }
 }
