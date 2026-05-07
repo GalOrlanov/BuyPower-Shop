@@ -482,10 +482,60 @@ input:checked + .slider::before { transform: translateX(20px); }
           </div>
           <button onclick="document.getElementById('summarySupplierFilter').value='';document.getElementById('summaryCategoryFilter').value='';document.getElementById('summaryProductFilter').value='';renderSummary()" style="padding:8px 16px;background:#f3f4f6;color:#374151;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.85rem;cursor:pointer">נקה</button>
           <button onclick="openSummaryColPicker()" style="padding:8px 16px;background:#fef3c7;color:#92400e;border:1.5px solid #fde68a;border-radius:8px;font-family:inherit;font-size:.85rem;font-weight:700;cursor:pointer">🎯 עמודות</button>
+          <button onclick="openSummaryNewAdjustment()" style="padding:8px 16px;background:#15803d;color:white;border:none;border-radius:8px;font-family:inherit;font-size:.85rem;font-weight:700;cursor:pointer">➕ חישוב חדש</button>
           <button onclick="exportSummaryPDF()" style="padding:8px 16px;background:#dc2626;color:white;border:none;border-radius:8px;font-family:inherit;font-size:.85rem;font-weight:700;cursor:pointer">📄 הורד PDF</button>
         </div>
         <div id="summaryStats" style="margin-top:10px;font-size:.85rem;color:#6b7280"></div>
       </div>
+
+      <!-- Manual adjustment ("חישוב חדש") modal -->
+      <div id="summaryAdjModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center">
+        <div style="background:white;border-radius:16px;width:min(520px,92vw);overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+          <div style="background:#15803d;color:white;padding:14px 18px;display:flex;justify-content:space-between;align-items:center">
+            <span style="font-weight:800;font-size:1.05rem">➕ חישוב חדש — הוספת פריט ידני</span>
+            <button onclick="document.getElementById('summaryAdjModal').style.display='none'" style="background:none;border:none;color:white;font-size:1.4rem;cursor:pointer">✕</button>
+          </div>
+          <div style="padding:16px 18px;display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div style="grid-column:1/-1">
+              <label style="font-size:.82rem;color:#374151;font-weight:700;display:block;margin-bottom:4px">שם המוצר *</label>
+              <input id="adjName" type="text" placeholder="למשל: עגבניה שרי - שוק שישי" style="width:100%;padding:9px 12px;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.92rem">
+            </div>
+            <div>
+              <label style="font-size:.82rem;color:#374151;font-weight:700;display:block;margin-bottom:4px">קטגוריה</label>
+              <input id="adjCategory" type="text" placeholder="פירות וירקות / חד פעמי / ..." style="width:100%;padding:9px 12px;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.92rem">
+            </div>
+            <div>
+              <label style="font-size:.82rem;color:#374151;font-weight:700;display:block;margin-bottom:4px">תאריך</label>
+              <input id="adjDate" type="date" style="width:100%;padding:9px 12px;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.92rem">
+            </div>
+            <div>
+              <label style="font-size:.82rem;color:#374151;font-weight:700;display:block;margin-bottom:4px">כמות *</label>
+              <input id="adjQty" type="number" min="0" step="any" style="width:100%;padding:9px 12px;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.92rem">
+            </div>
+            <div>
+              <label style="font-size:.82rem;color:#374151;font-weight:700;display:block;margin-bottom:4px">מחיר קנייה ליח׳</label>
+              <input id="adjCost" type="number" min="0" step="any" placeholder="₪" style="width:100%;padding:9px 12px;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.92rem">
+            </div>
+            <div>
+              <label style="font-size:.82rem;color:#374151;font-weight:700;display:block;margin-bottom:4px">מחיר מכירה ליח׳</label>
+              <input id="adjPrice" type="number" min="0" step="any" placeholder="₪" style="width:100%;padding:9px 12px;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.92rem">
+            </div>
+            <div style="grid-column:1/-1">
+              <label style="font-size:.82rem;color:#374151;font-weight:700;display:block;margin-bottom:4px">הערה (אופציונלי)</label>
+              <input id="adjNote" type="text" placeholder="למשל: שוק יום שישי, מכירה ידנית..." style="width:100%;padding:9px 12px;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.92rem">
+            </div>
+            <div id="adjLivePreview" style="grid-column:1/-1;background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;padding:8px 12px;font-size:.86rem;color:#14532d;font-weight:700;text-align:center">סה"כ עלות: ₪0 · הכנסות: ₪0 · הפרש: ₪0</div>
+            <div id="adjErr" style="grid-column:1/-1;color:#dc2626;font-size:.85rem;display:none"></div>
+          </div>
+          <div style="display:flex;gap:8px;padding:12px 18px;border-top:1px solid #e5e7eb">
+            <button onclick="saveSummaryAdjustment()" style="flex:1;padding:11px;background:#15803d;color:white;border:none;border-radius:10px;cursor:pointer;font-weight:800;font-family:inherit">💾 שמור</button>
+            <button onclick="document.getElementById('summaryAdjModal').style.display='none'" style="padding:11px 18px;background:#f3f4f6;color:#374151;border:none;border-radius:10px;cursor:pointer;font-weight:700;font-family:inherit">ביטול</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Manual adjustments list (collapsible) -->
+      <div id="summaryAdjList" style="display:none;background:#fffbeb;border:1.5px solid #fde68a;border-radius:12px;padding:10px 14px;margin-top:10px"></div>
       <!-- Summary column picker (small popover-style modal) -->
       <div id="summaryColPicker" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center">
         <div style="background:white;border-radius:14px;width:min(380px,92vw);overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3)">
@@ -2074,21 +2124,140 @@ async function loadSummaryRange() {
     if (from) params.push('since=' + encodeURIComponent(from));
     if (to)   params.push('until=' + encodeURIComponent(to + 'T23:59:59'));
     if (params.length) url += '?' + params.join('&');
-    const token = localStorage.getItem('shopAdminToken') || localStorage.getItem('shopToken') || '';
-    const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
-    const r = await fetch(url, { headers });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    window._summaryOrders = await r.json();
+    const headers = (typeof authHeaders === 'function') ? authHeaders() : { 'Content-Type': 'application/json' };
+    const [ordersRes, adjRes] = await Promise.all([
+      fetch(url, { headers }),
+      _loadSummaryAdjustments(from, to, headers)
+    ]);
+    if (!ordersRes.ok) throw new Error('HTTP ' + ordersRes.status);
+    window._summaryOrders = await ordersRes.json();
+    window._summaryAdjustments = adjRes;
     if (statusEl) {
       const labelFrom = from ? new Date(from).toLocaleDateString('he-IL') : 'הכל';
       const labelTo = to ? new Date(to).toLocaleDateString('he-IL') : 'הכל';
-      statusEl.textContent = '✓ ' + (window._summaryOrders.length || 0) + ' הזמנות · ' + labelFrom + ' – ' + labelTo;
+      const adjCount = (window._summaryAdjustments || []).length;
+      statusEl.textContent = '✓ ' + (window._summaryOrders.length || 0) + ' הזמנות' + (adjCount ? ' · ' + adjCount + ' חישובים ידניים' : '') + ' · ' + labelFrom + ' – ' + labelTo;
     }
     renderSummary();
+    renderSummaryAdjList();
   } catch(e) {
     if (statusEl) statusEl.textContent = '⚠ שגיאה בטעינה';
     console.error('loadSummaryRange:', e);
   }
+}
+
+async function _loadSummaryAdjustments(from, to, headers) {
+  let url = API + '/admin/summary-adjustments';
+  const params = [];
+  if (from) params.push('from=' + encodeURIComponent(from));
+  if (to)   params.push('to=' + encodeURIComponent(to));
+  if (params.length) url += '?' + params.join('&');
+  try {
+    const r = await fetch(url, { headers: headers || {} });
+    if (!r.ok) return [];
+    return await r.json();
+  } catch(e) { return []; }
+}
+
+// ===== "Add manual entry" modal =====
+function openSummaryNewAdjustment() {
+  // Pre-fill date with today and reset other fields
+  const today = new Date();
+  document.getElementById('adjName').value = '';
+  document.getElementById('adjCategory').value = '';
+  document.getElementById('adjDate').value = _ymd(today);
+  document.getElementById('adjQty').value = '';
+  document.getElementById('adjCost').value = '';
+  document.getElementById('adjPrice').value = '';
+  document.getElementById('adjNote').value = '';
+  document.getElementById('adjErr').style.display = 'none';
+  _adjUpdatePreview();
+  // Bind live preview once
+  ['adjQty', 'adjCost', 'adjPrice'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el && !el._adjBound) {
+      el.addEventListener('input', _adjUpdatePreview);
+      el._adjBound = true;
+    }
+  });
+  document.getElementById('summaryAdjModal').style.display = 'flex';
+  setTimeout(() => document.getElementById('adjName').focus(), 50);
+}
+
+function _adjUpdatePreview() {
+  const qty = parseFloat(document.getElementById('adjQty').value) || 0;
+  const cost = parseFloat(document.getElementById('adjCost').value) || 0;
+  const price = parseFloat(document.getElementById('adjPrice').value) || 0;
+  const totalCost = qty * cost;
+  const revenue = qty * price;
+  const profit = revenue - totalCost;
+  const fmt = n => (Math.round(n * 100) / 100).toString();
+  document.getElementById('adjLivePreview').innerHTML =
+    'סה"כ עלות: <strong>₪' + fmt(totalCost) + '</strong> · ' +
+    'הכנסות: <strong>₪' + fmt(revenue) + '</strong> · ' +
+    'הפרש: <strong style="color:' + (profit >= 0 ? '#15803d' : '#dc2626') + '">₪' + fmt(profit) + '</strong>';
+}
+
+async function saveSummaryAdjustment() {
+  const errEl = document.getElementById('adjErr');
+  errEl.style.display = 'none';
+  const body = {
+    name: document.getElementById('adjName').value,
+    category: document.getElementById('adjCategory').value,
+    date: document.getElementById('adjDate').value,
+    qty: parseFloat(document.getElementById('adjQty').value) || 0,
+    purchasePrice: parseFloat(document.getElementById('adjCost').value) || 0,
+    price: parseFloat(document.getElementById('adjPrice').value) || 0,
+    note: document.getElementById('adjNote').value
+  };
+  if (!body.name.trim()) { errEl.textContent = 'חובה להזין שם מוצר'; errEl.style.display = 'block'; return; }
+  if (!body.qty)         { errEl.textContent = 'חובה להזין כמות'; errEl.style.display = 'block'; return; }
+  try {
+    const headers = (typeof authHeaders === 'function') ? authHeaders() : { 'Content-Type': 'application/json' };
+    if (!headers['Content-Type']) headers['Content-Type'] = 'application/json';
+    const r = await fetch(API + '/admin/summary-adjustments', { method: 'POST', headers, body: JSON.stringify(body) });
+    const d = await r.json();
+    if (!r.ok) { errEl.textContent = d.error || 'שגיאה בשמירה'; errEl.style.display = 'block'; return; }
+    document.getElementById('summaryAdjModal').style.display = 'none';
+    await loadSummaryRange();
+  } catch(e) {
+    errEl.textContent = 'שגיאת רשת: ' + e.message;
+    errEl.style.display = 'block';
+  }
+}
+
+async function deleteSummaryAdjustment(id) {
+  if (!confirm('למחוק את החישוב הידני הזה?')) return;
+  try {
+    const headers = (typeof authHeaders === 'function') ? authHeaders() : {};
+    const r = await fetch(API + '/admin/summary-adjustments/' + id, { method: 'DELETE', headers });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    await loadSummaryRange();
+  } catch(e) { alert('שגיאה במחיקה: ' + e.message); }
+}
+
+function renderSummaryAdjList() {
+  const el = document.getElementById('summaryAdjList');
+  const list = window._summaryAdjustments || [];
+  if (!el) return;
+  if (!list.length) { el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  function fmt(n) { return (Math.round(Number(n) * 100) / 100).toString(); }
+  el.innerHTML =
+    '<div style="font-weight:800;color:#92400e;margin-bottom:6px">📝 חישובים ידניים בטווח (' + list.length + ')</div>' +
+    '<div style="display:flex;flex-direction:column;gap:4px">' +
+    list.map(a => {
+      const dt = a.date ? new Date(a.date).toLocaleDateString('he-IL') : '';
+      const total = (Number(a.qty) || 0) * (Number(a.price) || 0);
+      return '<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:white;border:1px solid #fde68a;border-radius:6px;font-size:.85rem">' +
+        '<span style="font-weight:700;flex:1">' + a.name + '</span>' +
+        '<span style="color:#6b7280;font-size:.78rem">' + dt + '</span>' +
+        '<span style="color:#374151">' + a.qty + ' יח׳ × ₪' + fmt(a.price) + ' = <strong style="color:#14532d">₪' + fmt(total) + '</strong></span>' +
+        (a.note ? '<span style="color:#9a3412;font-size:.76rem">— ' + a.note + '</span>' : '') +
+        '<button onclick="deleteSummaryAdjustment(\'' + a._id + '\')" style="background:#fee2e2;color:#dc2626;border:none;width:24px;height:24px;border-radius:5px;cursor:pointer;font-weight:700">✕</button>' +
+      '</div>';
+    }).join('') +
+    '</div>';
 }
 
 // Summary column definitions. id, label, default-on. The "name" column is
@@ -2206,12 +2375,40 @@ function renderSummary() {
           category: info.category,
           supplier: info.supplier,
           purchasePrice: info.purchasePrice,
-          sellingPrice: info.sellingPrice
+          sellingPrice: info.sellingPrice,
+          isManual: false,
+          adjQty: 0
         };
       }
       summary[key].qty += (item.qty || 1);
       summary[key].total += ((item.price || 0) * (item.qty || 1));
     });
+  });
+  // Merge manual adjustments. If a product already exists, the adjustment
+  // stacks onto its qty / total; otherwise we create a new row marked manual.
+  (window._summaryAdjustments || []).forEach(function(a) {
+    const key = a.name;
+    if (!summary[key]) {
+      const info = infoFor(a.name);
+      summary[key] = {
+        name: a.name,
+        variant: null,
+        qty: 0,
+        unit: '',
+        total: 0,
+        category: a.category || info.category,
+        supplier: info.supplier,
+        purchasePrice: a.purchasePrice != null ? a.purchasePrice : info.purchasePrice,
+        sellingPrice: a.price != null ? a.price : info.sellingPrice,
+        isManual: true,
+        adjQty: 0
+      };
+    } else if (a.purchasePrice != null && a.purchasePrice > 0 && !summary[key].purchasePrice) {
+      summary[key].purchasePrice = a.purchasePrice;
+    }
+    summary[key].qty += (Number(a.qty) || 0);
+    summary[key].total += (Number(a.qty) || 0) * (Number(a.price) || 0);
+    summary[key].adjQty += (Number(a.qty) || 0);
   });
   let rows = Object.values(summary).sort(function(a,b){ return a.name.localeCompare(b.name, 'he'); });
 
@@ -2273,7 +2470,7 @@ function renderSummary() {
   function fmt(n) { var v = Math.round(Number(n) * 100) / 100; return v.toFixed(2).replace(/\.00$/, ''); }
   function cellFor(colId, item, lineCost, profit, profitColor) {
     switch (colId) {
-      case 'name':          return '<td><strong>' + item.name + '</strong>' + (item.variant ? ' <span style="font-size:.8rem;color:#6b7280">(' + item.variant + ')</span>' : '') + '</td>';
+      case 'name':          return '<td><strong>' + item.name + '</strong>' + (item.variant ? ' <span style="font-size:.8rem;color:#6b7280">(' + item.variant + ')</span>' : '') + ((item.isManual || item.adjQty > 0) ? ' <span style="font-size:.7rem;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:8px;margin-right:4px" title="כולל חישוב ידני">📝 ידני</span>' : '') + '</td>';
       case 'category':      return '<td style="font-size:.85rem;color:#374151">' + (item.category || '') + '</td>';
       case 'qty':           return '<td style="text-align:center;font-weight:700;font-size:1.05rem;color:#15803d">' + item.qty + '</td>';
       case 'purchasePrice': return '<td style="text-align:center;font-size:.86rem;color:#92400e">₪' + fmt(item.purchasePrice) + '</td>';

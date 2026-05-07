@@ -768,6 +768,67 @@ router.delete('/admin/orders/:id/credits', verifyShopToken, async (req, res) => 
 // Used for sending WhatsApp / SMS / pre-loading phone contacts. Aggregates
 // from shop_orders (one row per phone), enriched with shop_users info if
 // the customer is registered.
+// ============================================================================
+// SUMMARY ADJUSTMENTS — admin-only manual qty/revenue entries that merge into
+// the "📊 סיכום" tab. Used for offline / market-day sales the system didn't
+// record as orders. Stored in shop_summary_adjustments; never modifies
+// shop_orders.
+// ============================================================================
+router.get('/admin/summary-adjustments', verifyShopToken, async (req, res) => {
+  try {
+    const db = await getDb();
+    const filter = {};
+    if (req.query.from || req.query.to) {
+      filter.date = {};
+      if (req.query.from) filter.date.$gte = new Date(req.query.from);
+      if (req.query.to)   filter.date.$lte = new Date(req.query.to + 'T23:59:59');
+    }
+    const rows = await db.collection('shop_summary_adjustments')
+      .find(filter)
+      .sort({ date: -1, createdAt: -1 })
+      .toArray();
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/admin/summary-adjustments', verifyShopToken, async (req, res) => {
+  try {
+    const db = await getDb();
+    const { name, category, qty, price, purchasePrice, date, note } = req.body || {};
+    const cleanName = String(name || '').trim();
+    const cleanQty  = Number(qty) || 0;
+    const cleanPrice = Number(price) || 0;
+    const cleanCost  = Number(purchasePrice) || 0;
+    const cleanCat   = String(category || '').trim();
+    if (!cleanName) return res.status(400).json({ error: 'שם מוצר נדרש' });
+    if (!cleanQty)  return res.status(400).json({ error: 'כמות חייבת להיות חיובית' });
+    const doc = {
+      name: cleanName,
+      category: cleanCat,
+      qty: cleanQty,
+      price: cleanPrice,             // unit selling price
+      purchasePrice: cleanCost,      // unit purchase cost
+      total: cleanQty * cleanPrice,  // gross revenue
+      cost: cleanQty * cleanCost,    // total cost
+      date: date ? new Date(date) : new Date(),
+      note: String(note || '').trim(),
+      createdAt: new Date(),
+      createdBy: (req.shopUser && req.shopUser.userId) ? String(req.shopUser.userId) : null
+    };
+    const r = await db.collection('shop_summary_adjustments').insertOne(doc);
+    res.json({ ok: true, _id: r.insertedId, ...doc });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/admin/summary-adjustments/:id', verifyShopToken, async (req, res) => {
+  try {
+    const db = await getDb();
+    const { ObjectId } = require('mongodb');
+    await db.collection('shop_summary_adjustments').deleteOne({ _id: new ObjectId(req.params.id) });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get('/admin/contacts', verifyShopToken, async (req, res) => {
   try {
     const db = await getDb();
