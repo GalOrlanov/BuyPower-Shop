@@ -2415,6 +2415,12 @@ function renderSummary() {
   });
   // Merge manual adjustments. If a product already exists, the adjustment
   // stacks onto its qty / total; otherwise we create a new row marked manual.
+  // Important: inventory prices (info.purchasePrice / info.sellingPrice) win
+  // over the adjustment's snapshot prices whenever the inventory has a real
+  // value AND the row carries an inventoryId. Without this, editing the
+  // selling-price input on a manual row PUT'd inventory but the row kept
+  // re-rendering with the adjustment's stale snapshot — nothing ever
+  // appeared to change.
   (window._summaryAdjustments || []).forEach(function(a) {
     const key = a.name;
     if (!summary[key]) {
@@ -2427,8 +2433,15 @@ function renderSummary() {
         total: 0,
         category: a.category || info.category,
         supplier: info.supplier,
-        purchasePrice: a.purchasePrice != null ? a.purchasePrice : info.purchasePrice,
-        sellingPrice: a.price != null ? a.price : info.sellingPrice,
+        // Inventory price (live) > adjustment price (historical snapshot).
+        // Fall back to the snapshot only if inventory has no real number.
+        purchasePrice: (info.purchasePrice && Number(info.purchasePrice) > 0)
+                         ? info.purchasePrice
+                         : (a.purchasePrice != null ? a.purchasePrice : 0),
+        sellingPrice: (info.sellingPrice && Number(info.sellingPrice) > 0)
+                         ? info.sellingPrice
+                         : (a.price != null ? a.price : 0),
+        inventoryId: info.inventoryId || null,
         isManual: true,
         adjQty: 0
       };
