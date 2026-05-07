@@ -308,7 +308,7 @@ input:checked + .slider::before { transform: translateX(20px); }
       <button class="tab-btn active" onclick="showTab('orders')">📦 הזמנות</button>
       <button class="tab-btn" onclick="showTab('pickup');setPickupThisWeek();if(_orders&&_orders.length){renderPickup();}else{loadOrders();}">🚚 סיכום הזמנות</button>
       <button class="tab-btn" id="pickupTrackingTabBtn" onclick="showTab('pickupTracking');loadPickupTracking()">📍 מעקב איסוף</button>
-      <button class="tab-btn" onclick="showTab('summary');renderSummary&&renderSummary()">📊 סיכום</button>
+      <button class="tab-btn" onclick="showTab('summary');initSummaryRangeIfEmpty();renderSummary&&renderSummary()">📊 סיכום</button>
       <button class="tab-btn" onclick="showTab('settings')">⚙️ הגדרות</button>
       <button class="tab-btn" onclick="showTab('users'); loadUsers(); try{loadCrm()}catch(e){}">👥 משתמשים</button>
       <button class="tab-btn" onclick="showTab('payment');setPayDateRange('month')">💳 תשלום Grow</button>
@@ -441,7 +441,27 @@ input:checked + .slider::before { transform: translateX(20px); }
     <!-- SUMMARY TAB -->
     <div id="tab-summary" class="tab-panel">
       <div class="card" style="margin-bottom:12px">
-        <div class="card-title">📊 סיכום הזמנות השבוע לפי מוצר</div>
+        <div class="card-title">📊 סיכום הזמנות לפי מוצר</div>
+
+        <!-- Date range row -->
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:8px;padding:10px 12px;background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:10px;margin-bottom:10px">
+          <div>
+            <label style="font-size:.78rem;color:#6b7280;font-weight:700;display:block;margin-bottom:3px">מתאריך</label>
+            <input type="date" id="summaryFromDate" onchange="loadSummaryRange()" style="padding:7px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.86rem">
+          </div>
+          <div>
+            <label style="font-size:.78rem;color:#6b7280;font-weight:700;display:block;margin-bottom:3px">עד תאריך</label>
+            <input type="date" id="summaryToDate" onchange="loadSummaryRange()" style="padding:7px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.86rem">
+          </div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap">
+            <button onclick="setSummaryRangeQuick('week')"   style="padding:7px 12px;background:white;color:#374151;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.82rem;font-weight:700;cursor:pointer">השבוע</button>
+            <button onclick="setSummaryRangeQuick('lastweek')" style="padding:7px 12px;background:white;color:#374151;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.82rem;font-weight:700;cursor:pointer">שבוע שעבר</button>
+            <button onclick="setSummaryRangeQuick('month')"  style="padding:7px 12px;background:white;color:#374151;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.82rem;font-weight:700;cursor:pointer">חודש</button>
+            <button onclick="setSummaryRangeQuick('all')"    style="padding:7px 12px;background:white;color:#374151;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.82rem;font-weight:700;cursor:pointer">הכל</button>
+          </div>
+          <span id="summaryRangeStatus" style="font-size:.78rem;color:#6b7280;margin-right:auto"></span>
+        </div>
+
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:6px">
           <div style="flex:1;min-width:160px">
             <label style="font-size:.82rem;color:#374151;font-weight:600;display:block;margin-bottom:4px">🏭 ספק</label>
@@ -1993,6 +2013,84 @@ async function loadAll() {
   } catch(e) { console.error('imageUrlsList:', e); }
 }
 
+// === Summary date-range state ===
+// Independent of the orders-tab date filter so changing the summary range
+// doesn't disturb the orders view.
+window._summaryOrders = null;        // null until first fetch — falls back to _orders
+window._summaryRangeLabel = '';
+
+function _ymd(d) {
+  const x = new Date(d);
+  const m = String(x.getMonth() + 1).padStart(2, '0');
+  const day = String(x.getDate()).padStart(2, '0');
+  return x.getFullYear() + '-' + m + '-' + day;
+}
+
+// Default the summary date range to this week the first time the tab opens
+// (so the user sees something immediately without picking dates manually).
+function initSummaryRangeIfEmpty() {
+  const fEl = document.getElementById('summaryFromDate');
+  const tEl = document.getElementById('summaryToDate');
+  if (!fEl || !tEl) return;
+  if (!fEl.value && !tEl.value) {
+    setSummaryRangeQuick('week');
+  }
+}
+
+function setSummaryRangeQuick(preset) {
+  const today = new Date();
+  let from, to;
+  if (preset === 'week') {
+    // Sunday → Saturday
+    const sun = new Date(today); sun.setHours(0,0,0,0); sun.setDate(today.getDate() - today.getDay());
+    const sat = new Date(sun); sat.setDate(sun.getDate() + 6);
+    from = sun; to = sat;
+  } else if (preset === 'lastweek') {
+    const sun = new Date(today); sun.setHours(0,0,0,0); sun.setDate(today.getDate() - today.getDay() - 7);
+    const sat = new Date(sun); sat.setDate(sun.getDate() + 6);
+    from = sun; to = sat;
+  } else if (preset === 'month') {
+    from = new Date(today.getFullYear(), today.getMonth(), 1);
+    to = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  } else if (preset === 'all') {
+    document.getElementById('summaryFromDate').value = '';
+    document.getElementById('summaryToDate').value = '';
+    loadSummaryRange();
+    return;
+  }
+  document.getElementById('summaryFromDate').value = _ymd(from);
+  document.getElementById('summaryToDate').value = _ymd(to);
+  loadSummaryRange();
+}
+
+async function loadSummaryRange() {
+  const from = document.getElementById('summaryFromDate').value;
+  const to   = document.getElementById('summaryToDate').value;
+  const statusEl = document.getElementById('summaryRangeStatus');
+  if (statusEl) statusEl.textContent = '⏳ טוען...';
+  try {
+    let url = API + '/orders';
+    const params = [];
+    if (from) params.push('since=' + encodeURIComponent(from));
+    if (to)   params.push('until=' + encodeURIComponent(to + 'T23:59:59'));
+    if (params.length) url += '?' + params.join('&');
+    const token = localStorage.getItem('shopAdminToken') || localStorage.getItem('shopToken') || '';
+    const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+    const r = await fetch(url, { headers });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    window._summaryOrders = await r.json();
+    if (statusEl) {
+      const labelFrom = from ? new Date(from).toLocaleDateString('he-IL') : 'הכל';
+      const labelTo = to ? new Date(to).toLocaleDateString('he-IL') : 'הכל';
+      statusEl.textContent = '✓ ' + (window._summaryOrders.length || 0) + ' הזמנות · ' + labelFrom + ' – ' + labelTo;
+    }
+    renderSummary();
+  } catch(e) {
+    if (statusEl) statusEl.textContent = '⚠ שגיאה בטעינה';
+    console.error('loadSummaryRange:', e);
+  }
+}
+
 // Summary column definitions. id, label, default-on. The "name" column is
 // always-on (it's the row identifier).
 const SUMMARY_COLUMNS = [
@@ -2054,14 +2152,16 @@ function summaryColsDefaults() {
 }
 
 function renderSummary() {
-  // Derives from _orders — same data source as pickup summary
+  // Use the summary-specific date-filtered orders if available, otherwise fall
+  // back to the global _orders that the orders tab loaded.
   const tbody = document.getElementById('summaryTbody');
   if (!tbody) return;
-  if (!_orders || !_orders.length) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#9ca3af;padding:24px">אין הזמנות</td></tr>'; return; }
+  const sourceOrders = (window._summaryOrders && window._summaryOrders.length) ? window._summaryOrders : _orders;
+  if (!sourceOrders || !sourceOrders.length) { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:24px">אין הזמנות בטווח שנבחר</td></tr>'; return; }
   // Apply global pickup filter + skip cancelled/duplicate orders so they don't inflate totals
   const SKIP_STATUSES_S = ['cancelled', 'cancelled_duplicate', 'merged_into_paid'];
   const _gp = getActivePickup();
-  const _scopedOrders = (_gp ? _orders.filter(function(o){ return (o.pickupLocation || '') === _gp; }) : _orders)
+  const _scopedOrders = (_gp ? sourceOrders.filter(function(o){ return (o.pickupLocation || '') === _gp; }) : sourceOrders)
                          .filter(function(o){ return !SKIP_STATUSES_S.includes(o.status); });
 
   // Build a name→{category, supplier, purchasePrice, sellingPrice} map from
