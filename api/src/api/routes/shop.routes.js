@@ -801,7 +801,9 @@ router.post('/admin/summary-adjustments', verifyShopToken, async (req, res) => {
     const cleanCost  = Number(purchasePrice) || 0;
     const cleanCat   = String(category || '').trim();
     if (!cleanName) return res.status(400).json({ error: 'שם מוצר נדרש' });
-    if (!cleanQty)  return res.status(400).json({ error: 'כמות חייבת להיות חיובית' });
+    if (cleanQty === 0) return res.status(400).json({ error: 'כמות לא יכולה להיות 0' });
+    // Negative quantities are allowed — they represent corrections / returns
+    // that bring a product's running total back down.
     const doc = {
       name: cleanName,
       category: cleanCat,

@@ -2128,13 +2128,19 @@ async function loadSummaryRange() {
     if (to)   params.push('until=' + encodeURIComponent(to + 'T23:59:59'));
     if (params.length) url += '?' + params.join('&');
     const headers = (typeof authHeaders === 'function') ? authHeaders() : { 'Content-Type': 'application/json' };
-    const [ordersRes, adjRes] = await Promise.all([
+    // Always refresh products + inventory caches before rendering — the
+    // category and supplier dropdowns depend on them.
+    const [ordersRes, adjRes, prodRes, invRes] = await Promise.all([
       fetch(url, { headers }),
-      _loadSummaryAdjustments(from, to, headers)
+      _loadSummaryAdjustments(from, to, headers),
+      fetch('/api/shop/products').catch(() => null),
+      fetch('/api/shop/inventory').catch(() => null)
     ]);
     if (!ordersRes.ok) throw new Error('HTTP ' + ordersRes.status);
     window._summaryOrders = await ordersRes.json();
     window._summaryAdjustments = adjRes;
+    if (prodRes && prodRes.ok) window._allProductsForSummary = await prodRes.json();
+    if (invRes && invRes.ok)   window._allInventoryForSummary = await invRes.json();
     if (statusEl) {
       const labelFrom = from ? new Date(from).toLocaleDateString('he-IL') : 'הכל';
       const labelTo = to ? new Date(to).toLocaleDateString('he-IL') : 'הכל';
@@ -2487,11 +2493,24 @@ function renderSummary() {
         'style="width:70px;padding:3px 6px;border:1.5px solid #93c5fd;border-radius:6px;text-align:center;font-size:.86rem;font-family:inherit;background:#eff6ff;color:' + color + '">' +
       '</span></td>';
   }
+  function qtyCell(item) {
+    if (!editMode) {
+      return '<td style="text-align:center;font-weight:700;font-size:1.05rem;color:#15803d">' + item.qty + '</td>';
+    }
+    const safeName = String(item.name || '').replace(/"/g, '&quot;');
+    return '<td style="text-align:center;padding:2px">' +
+      '<input type="number" min="0" step="1" value="' + (Number(item.qty) || 0) + '" ' +
+        'data-name="' + safeName + '" data-current="' + (Number(item.qty) || 0) + '" data-price="' + (Number(item.sellingPrice) || 0) + '" ' +
+        'data-cost="' + (Number(item.purchasePrice) || 0) + '" data-cat="' + String(item.category || '').replace(/"/g, '&quot;') + '" ' +
+        'onchange="saveQtyEditFromSummary(this)" ' +
+        'style="width:64px;padding:3px 6px;border:1.5px solid #93c5fd;border-radius:6px;text-align:center;font-size:1rem;font-weight:800;font-family:inherit;background:#eff6ff;color:#15803d">' +
+    '</td>';
+  }
   function cellFor(colId, item, lineCost, profit, profitColor) {
     switch (colId) {
       case 'name':          return '<td><strong>' + item.name + '</strong>' + (item.variant ? ' <span style="font-size:.8rem;color:#6b7280">(' + item.variant + ')</span>' : '') + ((item.isManual || item.adjQty > 0) ? ' <span style="font-size:.7rem;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:8px;margin-right:4px" title="כולל חישוב ידני">📝 ידני</span>' : '') + '</td>';
       case 'category':      return '<td style="font-size:.85rem;color:#374151">' + (item.category || '') + '</td>';
-      case 'qty':           return '<td style="text-align:center;font-weight:700;font-size:1.05rem;color:#15803d">' + item.qty + '</td>';
+      case 'qty':           return qtyCell(item);
       case 'purchasePrice': return editableCell(item, 'purchasePrice', '#92400e');
       case 'sellingPrice':  return editableCell(item, 'sellingPrice', '#1e40af');
       case 'cost':          return '<td style="text-align:center;font-size:.86rem;color:#92400e;font-weight:700">₪' + fmt(lineCost) + '</td>';
@@ -2528,6 +2547,51 @@ function toggleSummaryEditMode() {
     }
   }
   renderSummary();
+}
+
+// Edit qty in summary edit-mode → records the difference as a manual
+// adjustment (so order history stays untouched). Diff > 0 adds; diff < 0
+// subtracts via a negative-qty adjustment.
+async function saveQtyEditFromSummary(input) {
+  const newQty = parseFloat(input.value) || 0;
+  const current = parseFloat(input.getAttribute('data-current')) || 0;
+  const diff = newQty - current;
+  if (diff === 0) return;
+  const name = input.getAttribute('data-name') || '';
+  const price = parseFloat(input.getAttribute('data-price')) || 0;
+  const cost = parseFloat(input.getAttribute('data-cost')) || 0;
+  const category = input.getAttribute('data-cat') || '';
+  if (!name) return;
+  input.disabled = true;
+  input.style.background = '#fef3c7';
+  try {
+    const headers = (typeof authHeaders === 'function') ? authHeaders() : {};
+    if (!headers['Content-Type']) headers['Content-Type'] = 'application/json';
+    // Use the current summary's date range; fall back to today.
+    const fromInput = document.getElementById('summaryFromDate');
+    const dateForAdj = (fromInput && fromInput.value) ? fromInput.value : _ymd(new Date());
+    const r = await fetch(API + '/admin/summary-adjustments', {
+      method: 'POST', headers,
+      body: JSON.stringify({
+        name, category,
+        qty: diff,
+        price: price,
+        purchasePrice: cost,
+        date: dateForAdj,
+        note: 'עריכה ידנית מהסיכום (' + (diff > 0 ? '+' : '') + diff + ')'
+      })
+    });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      throw new Error(j.error || ('HTTP ' + r.status));
+    }
+    input.style.background = '#dcfce7';
+    setTimeout(() => { loadSummaryRange(); }, 200);
+  } catch (e) {
+    input.style.background = '#fee2e2';
+    input.disabled = false;
+    alert('שגיאה בשמירה: ' + e.message);
+  }
 }
 
 async function saveInventoryFieldFromSummary(input) {
