@@ -2457,9 +2457,14 @@ function renderSummary() {
     return label.includes(nameQuery);
   });
 
-  // Stats — units, revenue, and now also total cost + total profit (revenue − cost)
+  // Stats — units, revenue, cost, profit. Revenue here is qty × current
+  // sellingPrice (NOT the historical sum of order line prices). This keeps
+  // the four columns consistent: when the admin zeroes out qty or edits a
+  // price, every dependent column updates with it. Without this, a row with
+  // qty=0 could still show a non-zero revenue carried over from past
+  // orders, which doesn't match what's exported to the supplier.
   const totalUnits = rows.reduce(function(s,r){ return s + r.qty; }, 0);
-  const totalRevenue = rows.reduce(function(s,r){ return s + r.total; }, 0);
+  const totalRevenue = rows.reduce(function(s,r){ return s + (r.qty * (Number(r.sellingPrice) || 0)); }, 0);
   const totalCost = rows.reduce(function(s,r){ return s + (r.qty * (Number(r.purchasePrice) || 0)); }, 0);
   const totalProfit = totalRevenue - totalCost;
   const statsEl = document.getElementById('summaryStats');
@@ -2515,7 +2520,7 @@ function renderSummary() {
         'style="width:64px;padding:3px 6px;border:1.5px solid #93c5fd;border-radius:6px;text-align:center;font-size:1rem;font-weight:800;font-family:inherit;background:#eff6ff;color:#15803d">' +
     '</td>';
   }
-  function cellFor(colId, item, lineCost, profit, profitColor) {
+  function cellFor(colId, item, lineCost, profit, profitColor, lineRevenue) {
     switch (colId) {
       case 'name':          return '<td><strong>' + item.name + '</strong>' + (item.variant ? ' <span style="font-size:.8rem;color:#6b7280">(' + item.variant + ')</span>' : '') + ((item.isManual || item.adjQty > 0) ? ' <span style="font-size:.7rem;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:8px;margin-right:4px" title="כולל חישוב ידני">📝 ידני</span>' : '') + '</td>';
       case 'category':      return '<td style="font-size:.85rem;color:#374151">' + (item.category || '') + '</td>';
@@ -2523,16 +2528,21 @@ function renderSummary() {
       case 'purchasePrice': return editableCell(item, 'purchasePrice', '#92400e');
       case 'sellingPrice':  return editableCell(item, 'sellingPrice', '#1e40af');
       case 'cost':          return '<td style="text-align:center;font-size:.86rem;color:#92400e;font-weight:700">₪' + fmt(lineCost) + '</td>';
-      case 'revenue':       return '<td style="text-align:center;font-size:.88rem;font-weight:700;color:#14532d">₪' + fmt(item.total) + '</td>';
+      case 'revenue':       return '<td style="text-align:center;font-size:.88rem;font-weight:700;color:#14532d">₪' + fmt(lineRevenue) + '</td>';
       case 'profit':        return '<td style="text-align:center;font-size:.9rem;font-weight:800;color:' + profitColor + '">₪' + fmt(profit) + '</td>';
     }
     return '<td></td>';
   }
   tbody.innerHTML = rows.map(function(item) {
+    // Revenue follows qty × sellingPrice (consistent with cost). When qty is
+    // zeroed via an adjustment, revenue zeroes too — instead of leaving the
+    // stale historical line-item sum behind, which used to confuse "set qty
+    // to 0 but הפרש still shows 20".
     const lineCost = item.qty * (Number(item.purchasePrice) || 0);
-    const profit = item.total - lineCost;
+    const lineRevenue = item.qty * (Number(item.sellingPrice) || 0);
+    const profit = lineRevenue - lineCost;
     const profitColor = profit >= 0 ? '#15803d' : '#dc2626';
-    return '<tr>' + activeCols.map(c => cellFor(c.id, item, lineCost, profit, profitColor)).join('') + '</tr>';
+    return '<tr>' + activeCols.map(c => cellFor(c.id, item, lineCost, profit, profitColor, lineRevenue)).join('') + '</tr>';
   }).join('');
 }
 
@@ -2730,7 +2740,7 @@ function exportSummaryPDF() {
   if (stats.search)      filterTags.push('🔍 ' + escHtml(stats.search));
 
   // Build a row HTML per active column id
-  function pdfCell(colId, r, lineCost, profit, profitColor) {
+  function pdfCell(colId, r, lineCost, profit, profitColor, lineRevenue) {
     switch (colId) {
       case 'name':          return '<td class="name">' + escHtml(r.name) + (r.variant ? ' <span style="color:#6b7280">(' + escHtml(r.variant) + ')</span>' : '') + (r.isManual || r.adjQty > 0 ? ' <span style="font-size:8.5pt;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:8px;margin-right:4px">📝 ידני</span>' : '') + '</td>';
       case 'category':      return '<td class="cat">' + escHtml(r.category || '') + '</td>';
@@ -2738,16 +2748,18 @@ function exportSummaryPDF() {
       case 'purchasePrice': return '<td class="num cost">₪' + fmt(r.purchasePrice) + '</td>';
       case 'sellingPrice':  return '<td class="num sell">₪' + fmt(r.sellingPrice) + '</td>';
       case 'cost':          return '<td class="num cost">₪' + fmt(lineCost) + '</td>';
-      case 'revenue':       return '<td class="rev">₪' + fmt(r.total) + '</td>';
+      case 'revenue':       return '<td class="rev">₪' + fmt(lineRevenue) + '</td>';
       case 'profit':        return '<td class="num" style="font-weight:800;color:' + profitColor + '">₪' + fmt(profit) + '</td>';
     }
     return '<td></td>';
   }
   const trs = rows.map((r, i) => {
+    // Mirror the on-screen calc: qty × sellingPrice for revenue.
     const lineCost = (Number(r.qty) || 0) * (Number(r.purchasePrice) || 0);
-    const profit = (Number(r.total) || 0) - lineCost;
+    const lineRevenue = (Number(r.qty) || 0) * (Number(r.sellingPrice) || 0);
+    const profit = lineRevenue - lineCost;
     const profitColor = profit >= 0 ? '#15803d' : '#dc2626';
-    return '<tr><td class="num">' + (i+1) + '</td>' + activeCols.map(c => pdfCell(c.id, r, lineCost, profit, profitColor)).join('') + '</tr>';
+    return '<tr><td class="num">' + (i+1) + '</td>' + activeCols.map(c => pdfCell(c.id, r, lineCost, profit, profitColor, lineRevenue)).join('') + '</tr>';
   }).join('');
 
   // Header
