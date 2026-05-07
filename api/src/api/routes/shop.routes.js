@@ -831,6 +831,38 @@ router.delete('/admin/summary-adjustments/:id', verifyShopToken, async (req, res
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// PUT: partial update of a single adjustment row (used when the admin keeps
+// tweaking qty/price on the same product so we don't pile up new rows).
+router.put('/admin/summary-adjustments/:id', verifyShopToken, async (req, res) => {
+  try {
+    const db = await getDb();
+    const { ObjectId } = require('mongodb');
+    const id = new ObjectId(req.params.id);
+    const update = {};
+    if (req.body.qty !== undefined)            update.qty = Number(req.body.qty) || 0;
+    if (req.body.price !== undefined)          update.price = Number(req.body.price) || 0;
+    if (req.body.purchasePrice !== undefined)  update.purchasePrice = Number(req.body.purchasePrice) || 0;
+    if (typeof req.body.note === 'string')     update.note = req.body.note.trim();
+    if (typeof req.body.name === 'string')     update.name = req.body.name.trim();
+    if (typeof req.body.category === 'string') update.category = req.body.category.trim();
+    if (req.body.date)                          update.date = new Date(req.body.date);
+    // Recompute totals from the resulting numeric fields
+    if (update.qty !== undefined || update.price !== undefined || update.purchasePrice !== undefined) {
+      const existing = await db.collection('shop_summary_adjustments').findOne({ _id: id });
+      if (existing) {
+        const finalQty   = update.qty != null   ? update.qty   : existing.qty;
+        const finalPrice = update.price != null ? update.price : existing.price;
+        const finalCost  = update.purchasePrice != null ? update.purchasePrice : (existing.purchasePrice || 0);
+        update.total = (Number(finalQty) || 0) * (Number(finalPrice) || 0);
+        update.cost  = (Number(finalQty) || 0) * (Number(finalCost) || 0);
+      }
+    }
+    if (!Object.keys(update).length) return res.status(400).json({ error: 'אין מה לעדכן' });
+    await db.collection('shop_summary_adjustments').updateOne({ _id: id }, { $set: update });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get('/admin/contacts', verifyShopToken, async (req, res) => {
   try {
     const db = await getDb();

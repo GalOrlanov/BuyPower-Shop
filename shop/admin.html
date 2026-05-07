@@ -2565,9 +2565,11 @@ function toggleSummaryEditMode() {
   renderSummary();
 }
 
-// Edit qty in summary edit-mode → records the difference as a manual
-// adjustment (so order history stays untouched). Diff > 0 adds; diff < 0
-// subtracts via a negative-qty adjustment.
+// Edit qty in summary edit-mode → upsert a single "summary edit" adjustment
+// per product. Repeated edits update the same row instead of stacking new
+// ones, and if the running total reaches 0 the row is deleted entirely.
+const _MO_QTY_EDIT_NOTE_PREFIX = 'עריכה ידנית מהסיכום';
+
 async function saveQtyEditFromSummary(input) {
   const newQty = parseFloat(input.value) || 0;
   const current = parseFloat(input.getAttribute('data-current')) || 0;
@@ -2583,23 +2585,49 @@ async function saveQtyEditFromSummary(input) {
   try {
     const headers = (typeof authHeaders === 'function') ? authHeaders() : {};
     if (!headers['Content-Type']) headers['Content-Type'] = 'application/json';
-    // Use the current summary's date range; fall back to today.
-    const fromInput = document.getElementById('summaryFromDate');
-    const dateForAdj = (fromInput && fromInput.value) ? fromInput.value : _ymd(new Date());
-    const r = await fetch(API + '/admin/summary-adjustments', {
-      method: 'POST', headers,
-      body: JSON.stringify({
-        name, category,
-        qty: diff,
-        price: price,
-        purchasePrice: cost,
-        date: dateForAdj,
-        note: 'עריכה ידנית מהסיכום (' + (diff > 0 ? '+' : '') + diff + ')'
-      })
-    });
-    if (!r.ok) {
-      const j = await r.json().catch(() => ({}));
-      throw new Error(j.error || ('HTTP ' + r.status));
+    // Find a previous summary-edit adjustment for the same product so we can
+    // merge instead of inserting another row each time the admin tweaks.
+    const existing = (window._summaryAdjustments || []).find(a =>
+      a.name === name && String(a.note || '').indexOf(_MO_QTY_EDIT_NOTE_PREFIX) === 0
+    );
+    if (existing) {
+      const merged = (Number(existing.qty) || 0) + diff;
+      if (merged === 0) {
+        const r = await fetch(API + '/admin/summary-adjustments/' + existing._id, { method: 'DELETE', headers });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+      } else {
+        const r = await fetch(API + '/admin/summary-adjustments/' + existing._id, {
+          method: 'PUT', headers,
+          body: JSON.stringify({
+            qty: merged,
+            price: price,
+            purchasePrice: cost,
+            note: _MO_QTY_EDIT_NOTE_PREFIX + ' (' + (merged > 0 ? '+' : '') + merged + ')'
+          })
+        });
+        if (!r.ok) {
+          const j = await r.json().catch(() => ({}));
+          throw new Error(j.error || ('HTTP ' + r.status));
+        }
+      }
+    } else {
+      const fromInput = document.getElementById('summaryFromDate');
+      const dateForAdj = (fromInput && fromInput.value) ? fromInput.value : _ymd(new Date());
+      const r = await fetch(API + '/admin/summary-adjustments', {
+        method: 'POST', headers,
+        body: JSON.stringify({
+          name, category,
+          qty: diff,
+          price: price,
+          purchasePrice: cost,
+          date: dateForAdj,
+          note: _MO_QTY_EDIT_NOTE_PREFIX + ' (' + (diff > 0 ? '+' : '') + diff + ')'
+        })
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j.error || ('HTTP ' + r.status));
+      }
     }
     input.style.background = '#dcfce7';
     setTimeout(() => { loadSummaryRange(); }, 200);
