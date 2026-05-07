@@ -461,25 +461,30 @@ input:checked + .slider::before { transform: translateX(20px); }
               style="width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.9rem">
           </div>
           <button onclick="document.getElementById('summarySupplierFilter').value='';document.getElementById('summaryCategoryFilter').value='';document.getElementById('summaryProductFilter').value='';renderSummary()" style="padding:8px 16px;background:#f3f4f6;color:#374151;border:1.5px solid #d1d5db;border-radius:8px;font-family:inherit;font-size:.85rem;cursor:pointer">נקה</button>
+          <button onclick="openSummaryColPicker()" style="padding:8px 16px;background:#fef3c7;color:#92400e;border:1.5px solid #fde68a;border-radius:8px;font-family:inherit;font-size:.85rem;font-weight:700;cursor:pointer">🎯 עמודות</button>
           <button onclick="exportSummaryPDF()" style="padding:8px 16px;background:#dc2626;color:white;border:none;border-radius:8px;font-family:inherit;font-size:.85rem;font-weight:700;cursor:pointer">📄 הורד PDF</button>
         </div>
         <div id="summaryStats" style="margin-top:10px;font-size:.85rem;color:#6b7280"></div>
       </div>
+      <!-- Summary column picker (small popover-style modal) -->
+      <div id="summaryColPicker" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center">
+        <div style="background:white;border-radius:14px;width:min(380px,92vw);overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+          <div style="background:#92400e;color:white;padding:12px 16px;display:flex;justify-content:space-between;align-items:center">
+            <span style="font-weight:800">🎯 עמודות להצגה</span>
+            <button onclick="document.getElementById('summaryColPicker').style.display='none'" style="background:none;border:none;color:white;font-size:1.3rem;cursor:pointer">✕</button>
+          </div>
+          <div id="summaryColList" style="padding:14px 16px;max-height:60vh;overflow-y:auto"></div>
+          <div style="display:flex;gap:8px;padding:12px 16px;border-top:1px solid #e5e7eb">
+            <button onclick="summaryColsAll(true)" style="padding:7px 12px;background:#dcfce7;color:#14532d;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-size:.82rem">סמן הכל</button>
+            <button onclick="summaryColsDefaults()" style="padding:7px 12px;background:#dbeafe;color:#1e40af;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-size:.82rem">↺ ברירת מחדל</button>
+            <button onclick="document.getElementById('summaryColPicker').style.display='none';renderSummary()" style="margin-right:auto;padding:8px 16px;background:#15803d;color:white;border:none;border-radius:8px;cursor:pointer;font-weight:800;font-family:inherit">החל ✓</button>
+          </div>
+        </div>
+      </div>
       <div class="card">
         <div style="overflow-x:auto">
           <table id="summaryTable">
-            <thead>
-              <tr>
-                <th>מוצר</th>
-                <th>קטגוריה</th>
-                <th>כמות כוללת</th>
-                <th>מחיר קנייה</th>
-                <th>מחיר מכירה</th>
-                <th>עלות כוללת</th>
-                <th>הכנסות</th>
-                <th>סה"כ הפרש</th>
-              </tr>
-            </thead>
+            <thead id="summaryThead"></thead>
             <tbody id="summaryTbody">
               <tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:24px">טוען...</td></tr>
             </tbody>
@@ -1988,6 +1993,66 @@ async function loadAll() {
   } catch(e) { console.error('imageUrlsList:', e); }
 }
 
+// Summary column definitions. id, label, default-on. The "name" column is
+// always-on (it's the row identifier).
+const SUMMARY_COLUMNS = [
+  { id: 'name',          label: 'מוצר',          def: true,  required: true },
+  { id: 'category',      label: 'קטגוריה',       def: true },
+  { id: 'qty',           label: 'כמות כוללת',    def: true },
+  { id: 'purchasePrice', label: 'מחיר קנייה',    def: true },
+  { id: 'sellingPrice',  label: 'מחיר מכירה',    def: true },
+  { id: 'cost',          label: 'עלות כוללת',    def: true },
+  { id: 'revenue',       label: 'הכנסות',        def: true },
+  { id: 'profit',        label: 'סה"כ הפרש',     def: true }
+];
+function _summaryColsLoad() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('summary.cols') || 'null');
+    if (Array.isArray(saved) && saved.length) return saved.filter(id => SUMMARY_COLUMNS.find(c => c.id === id));
+  } catch(_) {}
+  return SUMMARY_COLUMNS.filter(c => c.def).map(c => c.id);
+}
+function _summaryColsSave(arr) {
+  try { localStorage.setItem('summary.cols', JSON.stringify(arr)); } catch(_) {}
+}
+window._summaryActiveCols = _summaryColsLoad();
+
+function openSummaryColPicker() {
+  const list = document.getElementById('summaryColList');
+  if (!list) return;
+  const sel = new Set(window._summaryActiveCols);
+  list.innerHTML = SUMMARY_COLUMNS.map(c => {
+    const checked = sel.has(c.id);
+    return '<label style="display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:6px;cursor:' + (c.required ? 'default' : 'pointer') + ';' + (checked ? 'background:#fffbeb' : '') + '">' +
+      '<input type="checkbox" ' + (checked ? 'checked' : '') + (c.required ? ' disabled' : '') + ' onchange="summaryColToggle(\'' + c.id + '\')" style="width:17px;height:17px;accent-color:#f59e0b;cursor:' + (c.required ? 'default' : 'pointer') + '">' +
+      '<span style="flex:1;font-weight:600;font-size:.9rem">' + c.label + (c.required ? ' <span style="font-size:.7rem;color:#9ca3af;font-weight:400">(חובה)</span>' : '') + '</span>' +
+    '</label>';
+  }).join('');
+  document.getElementById('summaryColPicker').style.display = 'flex';
+}
+function summaryColToggle(id) {
+  const col = SUMMARY_COLUMNS.find(c => c.id === id);
+  if (col && col.required) return;
+  const cur = window._summaryActiveCols.slice();
+  const idx = cur.indexOf(id);
+  if (idx >= 0) cur.splice(idx, 1); else cur.push(id);
+  // Keep canonical order
+  window._summaryActiveCols = SUMMARY_COLUMNS.filter(c => cur.indexOf(c.id) >= 0 || c.required).map(c => c.id);
+  _summaryColsSave(window._summaryActiveCols);
+  openSummaryColPicker();
+}
+function summaryColsAll(state) {
+  if (state) window._summaryActiveCols = SUMMARY_COLUMNS.map(c => c.id);
+  else window._summaryActiveCols = SUMMARY_COLUMNS.filter(c => c.required).map(c => c.id);
+  _summaryColsSave(window._summaryActiveCols);
+  openSummaryColPicker();
+}
+function summaryColsDefaults() {
+  window._summaryActiveCols = SUMMARY_COLUMNS.filter(c => c.def).map(c => c.id);
+  _summaryColsSave(window._summaryActiveCols);
+  openSummaryColPicker();
+}
+
 function renderSummary() {
   // Derives from _orders — same data source as pickup summary
   const tbody = document.getElementById('summaryTbody');
@@ -2089,25 +2154,41 @@ function renderSummary() {
   window._summaryFilteredRows = rows;
   window._summaryFilteredStats = { count: rows.length, units: totalUnits, revenue: totalRevenue, cost: totalCost, profit: totalProfit, category: catFilter, supplier: supplierFilter, search: nameQuery, pickupPoint: _gp };
 
+  // Build the column list once per render so header + rows stay in sync.
+  const activeIds = (window._summaryActiveCols && window._summaryActiveCols.length)
+    ? window._summaryActiveCols
+    : SUMMARY_COLUMNS.filter(c => c.def).map(c => c.id);
+  const activeCols = SUMMARY_COLUMNS.filter(c => activeIds.indexOf(c.id) >= 0);
+
+  // Render the table header dynamically
+  const theadEl = document.getElementById('summaryThead');
+  if (theadEl) {
+    theadEl.innerHTML = '<tr>' + activeCols.map(c => '<th>' + c.label + '</th>').join('') + '</tr>';
+  }
+
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:24px">אין תוצאות לפילטרים שנבחרו</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="' + activeCols.length + '" style="text-align:center;color:#9ca3af;padding:24px">אין תוצאות לפילטרים שנבחרו</td></tr>';
     return;
   }
   function fmt(n) { var v = Math.round(Number(n) * 100) / 100; return v.toFixed(2).replace(/\.00$/, ''); }
+  function cellFor(colId, item, lineCost, profit, profitColor) {
+    switch (colId) {
+      case 'name':          return '<td><strong>' + item.name + '</strong>' + (item.variant ? ' <span style="font-size:.8rem;color:#6b7280">(' + item.variant + ')</span>' : '') + '</td>';
+      case 'category':      return '<td style="font-size:.85rem;color:#374151">' + (item.category || '') + '</td>';
+      case 'qty':           return '<td style="text-align:center;font-weight:700;font-size:1.05rem;color:#15803d">' + item.qty + '</td>';
+      case 'purchasePrice': return '<td style="text-align:center;font-size:.86rem;color:#92400e">₪' + fmt(item.purchasePrice) + '</td>';
+      case 'sellingPrice':  return '<td style="text-align:center;font-size:.86rem;color:#1e40af">₪' + fmt(item.sellingPrice) + '</td>';
+      case 'cost':          return '<td style="text-align:center;font-size:.86rem;color:#92400e;font-weight:700">₪' + fmt(lineCost) + '</td>';
+      case 'revenue':       return '<td style="text-align:center;font-size:.88rem;font-weight:700;color:#14532d">₪' + fmt(item.total) + '</td>';
+      case 'profit':        return '<td style="text-align:center;font-size:.9rem;font-weight:800;color:' + profitColor + '">₪' + fmt(profit) + '</td>';
+    }
+    return '<td></td>';
+  }
   tbody.innerHTML = rows.map(function(item) {
     const lineCost = item.qty * (Number(item.purchasePrice) || 0);
     const profit = item.total - lineCost;
     const profitColor = profit >= 0 ? '#15803d' : '#dc2626';
-    return '<tr>' +
-      '<td><strong>' + item.name + '</strong>' + (item.variant ? ' <span style="font-size:.8rem;color:#6b7280">(' + item.variant + ')</span>' : '') + '</td>' +
-      '<td style="font-size:.85rem;color:#374151">' + (item.category || '') + '</td>' +
-      '<td style="text-align:center;font-weight:700;font-size:1.05rem;color:#15803d">' + item.qty + '</td>' +
-      '<td style="text-align:center;font-size:.86rem;color:#92400e">₪' + fmt(item.purchasePrice) + '</td>' +
-      '<td style="text-align:center;font-size:.86rem;color:#1e40af">₪' + fmt(item.sellingPrice) + '</td>' +
-      '<td style="text-align:center;font-size:.86rem;color:#92400e;font-weight:700">₪' + fmt(lineCost) + '</td>' +
-      '<td style="text-align:center;font-size:.88rem;font-weight:700;color:#14532d">₪' + fmt(item.total) + '</td>' +
-      '<td style="text-align:center;font-size:.9rem;font-weight:800;color:' + profitColor + '">₪' + fmt(profit) + '</td>' +
-      '</tr>';
+    return '<tr>' + activeCols.map(c => cellFor(c.id, item, lineCost, profit, profitColor)).join('') + '</tr>';
   }).join('');
 }
 
