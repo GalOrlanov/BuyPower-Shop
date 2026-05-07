@@ -1519,9 +1519,18 @@ function showTab(tab, ev) {
 // inline-tab handlers are wired up first.
 (function restoreLastTab() {
   function go() {
+    // URL-based tab override has priority over localStorage:
+    //   ?tab=raffle   or   #tab=raffle
+    // Lets us link straight into a specific admin section.
     let saved = '';
-    try { saved = localStorage.getItem('admin.activeTab') || ''; } catch(_) {}
-    if (!saved || saved === 'orders') return; // orders is the default
+    try {
+      const m = (window.location.search + ' ' + window.location.hash).match(/[?&#]tab=([a-zA-Z]+)/);
+      if (m && m[1]) saved = m[1];
+    } catch(_) {}
+    if (!saved) {
+      try { saved = localStorage.getItem('admin.activeTab') || ''; } catch(_) {}
+    }
+    if (!saved || saved === 'orders') return;
     const panel = document.getElementById('tab-' + saved);
     if (!panel) return;
     // Find the tab button onclick that calls this tab and trigger it so any
