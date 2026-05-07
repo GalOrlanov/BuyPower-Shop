@@ -2032,7 +2032,9 @@ async function doEmailReset() {
 async function loadAll() {
   // Ping /users/me to refresh lastLogin for all users who visit pages
   try { loadOrders(); } catch(e) { console.error('loadOrders:', e); }
-  try { loadSummary(); } catch(e) { console.error('loadSummary:', e); }
+  // Note: legacy loadSummary() removed — the new renderSummary() owns
+  // the #summaryTbody now. Calling loadSummary() here used to clobber
+  // the new 8-column rendering with the old 4-column shape.
   try { loadProducts(); } catch(e) { console.error('loadProducts:', e); }
   try { loadInventoryDropdown(); } catch(e) { console.error('loadInventoryDropdown:', e); }
   // Populate pickup-location filter dropdowns from the canonical /pickup-points list
